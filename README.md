@@ -1,6 +1,4 @@
-# Minarrow
-
-_Benefits without Baggage_.
+# Minarrow - _Apache Arrow Benefits without Baggage for HPC, Native Streaming, and Embedded workloads_
 
 ## Introduction
 
@@ -10,7 +8,7 @@ Minarrow is a from-scratch columnar library built for real-time and systems work
 It keeps the surface small, makes types explicit, compiles fast, and aligns data for predictable SIMD performance.  
 It speaks Arrow when you need to interchange — but the core stays lean.  
 
-## Design Priorities
+## Design Focus
 
 - **Typed, direct access** – No downcasting chains  
 - **Predictable performance** – 64-byte alignment by default  

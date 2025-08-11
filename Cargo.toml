@@ -8,24 +8,14 @@ license = "MIT"
 readme = "README.md"
 repository = "https://github.com/pbower/minarrow"
 keywords = [
-    "minarrow",
     "arrow",
     "apache-arrow",
-    "arrow2",
-    "polars_arrow",
     "polars",
     "data",
-    "fast",
-    "columnar",
     "simd",
-    "zero-copy",
-    "dataframe",
-    "analytics",
-    "real-time",
-    "ffi",
 ]
 categories = ["data-structures", "science", "parsing", "external-ffi-bindings"]
-
+description = "Apache Arrow-compatible, Rust-first columnar data library for high-performance computing, native streaming, and embedded workloads. Minimal dependencies, ultra-low-latency access, automatic 64-byte SIMD alignment, and fast compile times. Great for real-time analytics, HPC pipelines, and systems integration."
 # All of the below external dependencies do not need to be enabled directly
 # See [features] for the relevant feature that enables them.
 [dependencies]
