@@ -10,7 +10,7 @@
 //! library in future. In the absence of that, because we already wrap inner array values in
 //! `Arc`, we increment the reference count to avoid it being cleaned up. The difference is,
 //! in this case, you will need to make sure it gets cleaned up afterwards.
-//! 
+//!
 //! To achieve the FFI, you will first need to make sure your `Array` has an associated `Field`,
 //! or is bundled in a `FieldArray`. This requires you to ensure that the `ArrowType` backing
 //! the field has the correct logical type metadata when you construct it. This is particularly
@@ -21,7 +21,7 @@
 //! ### Examples
 //! There is a roundtrip example under `examples` of using this to send data to `Apache Arrow` in Rust.
 //! It is runnable via `cargo run --example apache-ffi`. We plan to add additional examples to other languages in future.
-//! 
+//!
 //! ### Disclaimer
 // The term `Apache Arrow` is a trademark of the `Apache Software Foundation`,
 // and is used below under fair-use implementation of the public
@@ -32,15 +32,14 @@ use std::sync::Arc;
 use std::{ptr, slice};
 
 use crate::ffi::arrow_dtype::ArrowType;
-#[cfg(feature = "extended_categorical")]
 use crate::ffi::arrow_dtype::CategoricalIndexType;
 use crate::ffi::schema::Schema;
 use crate::{
-    Array, Bitmask, BooleanArray, CategoricalArray, Field, Float, FloatArray,
-    Integer, IntegerArray, MaskedArray, StringArray, TextArray, Vec64, vec64
+    Array, Bitmask, BooleanArray, CategoricalArray, Field, Float, FloatArray, Integer,
+    IntegerArray, MaskedArray, StringArray, TextArray, Vec64, vec64,
 };
 #[cfg(feature = "datetime")]
-use crate::{IntervalUnit, TimeUnit, TemporalArray, DatetimeArray};
+use crate::{DatetimeArray, IntervalUnit, TemporalArray, TimeUnit};
 
 // Provides compatibility with the cross-platform `Apache Arrow` standard
 // via the `C Data Interface` specification:
@@ -66,7 +65,7 @@ pub struct ArrowArray {
     pub children: *mut *mut ArrowArray,
     pub dictionary: *mut ArrowArray,
     pub release: Option<unsafe extern "C" fn(*mut ArrowArray)>,
-    pub private_data: *mut c_void
+    pub private_data: *mut c_void,
 }
 
 /// ArrowSchema as per the Arrow C spec
@@ -81,7 +80,7 @@ pub struct ArrowSchema {
     pub children: *mut *mut ArrowSchema,
     pub dictionary: *mut ArrowSchema,
     pub release: Option<unsafe extern "C" fn(*mut ArrowSchema)>,
-    pub private_data: *mut c_void
+    pub private_data: *mut c_void,
 }
 
 /// Keep buffers and data alive for the C Data Interface.
@@ -97,7 +96,7 @@ struct Holder {
     #[allow(dead_code)]
     format_cstr: CString,
     #[allow(dead_code)]
-    metadata_cstr: Option<CString>
+    metadata_cstr: Option<CString>,
 }
 
 /// Releases memory for ArrowArray by deallocating Holder and zeroing the structure.
@@ -124,22 +123,26 @@ unsafe extern "C" fn release_arrow_schema(s: *mut ArrowSchema) {
 /// Constructs the Arrow C FFI format string for the given ArrowType.
 pub fn fmt_c(dtype: ArrowType) -> CString {
     let bytes: &'static [u8] = match dtype {
-        ArrowType::Null      => b"n",
-        ArrowType::Boolean   => b"b",
+        ArrowType::Null => b"n",
+        ArrowType::Boolean => b"b",
 
-        #[cfg(feature = "extended_numeric_types")] ArrowType::Int8   => b"c",
-        #[cfg(feature = "extended_numeric_types")] ArrowType::UInt8  => b"C",
-        #[cfg(feature = "extended_numeric_types")] ArrowType::Int16  => b"s",
-        #[cfg(feature = "extended_numeric_types")] ArrowType::UInt16 => b"S",
+        #[cfg(feature = "extended_numeric_types")]
+        ArrowType::Int8 => b"c",
+        #[cfg(feature = "extended_numeric_types")]
+        ArrowType::UInt8 => b"C",
+        #[cfg(feature = "extended_numeric_types")]
+        ArrowType::Int16 => b"s",
+        #[cfg(feature = "extended_numeric_types")]
+        ArrowType::UInt16 => b"S",
 
-        ArrowType::Int32  => b"i",
+        ArrowType::Int32 => b"i",
         ArrowType::UInt32 => b"I",
-        ArrowType::Int64  => b"l",
+        ArrowType::Int64 => b"l",
         ArrowType::UInt64 => b"L",
         ArrowType::Float32 => b"f",
         ArrowType::Float64 => b"g",
 
-        ArrowType::String  => b"u",
+        ArrowType::String => b"u",
         #[cfg(feature = "large_string")]
         ArrowType::LargeString => b"U",
 
@@ -151,52 +154,55 @@ pub fn fmt_c(dtype: ArrowType) -> CString {
 
         #[cfg(feature = "datetime")]
         ArrowType::Time32(u) => match u {
-            TimeUnit::Seconds      => b"tts",
+            TimeUnit::Seconds => b"tts",
             TimeUnit::Milliseconds => b"ttm",
             _ => panic!("Time32 supports Seconds or Milliseconds only"),
         },
         #[cfg(feature = "datetime")]
         ArrowType::Time64(u) => match u {
             TimeUnit::Microseconds => b"ttu",
-            TimeUnit::Nanoseconds  => b"ttn",
+            TimeUnit::Nanoseconds => b"ttn",
             _ => panic!("Time64 supports Microseconds or Nanoseconds only"),
         },
 
         #[cfg(feature = "datetime")]
         ArrowType::Duration32(u) => match u {
-            TimeUnit::Seconds      => b"tDs",
+            TimeUnit::Seconds => b"tDs",
             TimeUnit::Milliseconds => b"tDm",
             _ => panic!("Duration32 supports Seconds or Milliseconds only"),
         },
         #[cfg(feature = "datetime")]
         ArrowType::Duration64(u) => match u {
             TimeUnit::Microseconds => b"tDu",
-            TimeUnit::Nanoseconds  => b"tDn",
+            TimeUnit::Nanoseconds => b"tDn",
             _ => panic!("Duration64 supports Microseconds or Nanoseconds only"),
         },
 
         #[cfg(feature = "datetime")]
         ArrowType::Timestamp(u) => match u {
-            TimeUnit::Seconds      => b"tss:",
+            TimeUnit::Seconds => b"tss:",
             TimeUnit::Milliseconds => b"tsm:",
             TimeUnit::Microseconds => b"tsu:",
-            TimeUnit::Nanoseconds  => b"tsn:",
+            TimeUnit::Nanoseconds => b"tsn:",
             TimeUnit::Days => panic!("Timestamp(Days) is invalid in Arrow C format"),
         },
 
         #[cfg(feature = "datetime")]
         ArrowType::Interval(u) => match u {
-            IntervalUnit::YearMonth   => b"tiM",
-            IntervalUnit::DaysTime    => b"tiD",
+            IntervalUnit::YearMonth => b"tiM",
+            IntervalUnit::DaysTime => b"tiD",
             IntervalUnit::MonthDaysNs => b"tin",
         },
 
         // ---- dictionary (categorical) ----
         ArrowType::Dictionary(idx) => match idx {
-            #[cfg(feature = "extended_categorical")] CategoricalIndexType::UInt8  => b"C",
-            #[cfg(feature = "extended_categorical")] CategoricalIndexType::UInt16 => b"S",
+            #[cfg(feature = "extended_categorical")]
+            CategoricalIndexType::UInt8 => b"C",
+            #[cfg(feature = "extended_categorical")]
+            CategoricalIndexType::UInt16 => b"S",
             CategoricalIndexType::UInt32 => b"I",
-            #[cfg(feature = "extended_categorical")] CategoricalIndexType::UInt64 => b"L",
+            #[cfg(feature = "extended_categorical")]
+            CategoricalIndexType::UInt64 => b"L",
         },
     };
 
@@ -277,7 +283,7 @@ pub fn export_to_c(array: Arc<Array>, schema: Schema) -> (*mut ArrowArray, *mut 
         // Validate temporal logical type <-> physical unit before export.
         validate_temporal_field(&*array, field_ty);
     }
-    
+
     match &*array {
         Array::TextArray(TextArray::String32(s)) => {
             export_string_array_to_c(&array, schema, s.len() as i64)
@@ -291,7 +297,7 @@ pub fn export_to_c(array: Arc<Array>, schema: Schema) -> (*mut ArrowArray, *mut 
             schema,
             cat.data.len() as i64,
             &cat.unique_values,
-            32
+            32,
         ),
         #[cfg(feature = "extended_categorical")]
         Array::TextArray(TextArray::Categorical8(cat)) => export_categorical_array_to_c(
@@ -299,7 +305,7 @@ pub fn export_to_c(array: Arc<Array>, schema: Schema) -> (*mut ArrowArray, *mut 
             schema,
             cat.data.len() as i64,
             &cat.unique_values,
-            8
+            8,
         ),
         #[cfg(feature = "extended_categorical")]
         Array::TextArray(TextArray::Categorical16(cat)) => export_categorical_array_to_c(
@@ -307,7 +313,7 @@ pub fn export_to_c(array: Arc<Array>, schema: Schema) -> (*mut ArrowArray, *mut 
             schema,
             cat.data.len() as i64,
             &cat.unique_values,
-            16
+            16,
         ),
         #[cfg(feature = "extended_categorical")]
         Array::TextArray(TextArray::Categorical64(cat)) => export_categorical_array_to_c(
@@ -315,12 +321,14 @@ pub fn export_to_c(array: Arc<Array>, schema: Schema) -> (*mut ArrowArray, *mut 
             schema,
             cat.data.len() as i64,
             &cat.unique_values,
-            64
+            64,
         ),
-        
+
         _ => {
             let (data_ptr, len, _) = array.data_ptr_and_byte_len();
-            let (mask_ptr, _) = array.null_mask_ptr_and_byte_len().unwrap_or((ptr::null(), 0));
+            let (mask_ptr, _) = array
+                .null_mask_ptr_and_byte_len()
+                .unwrap_or((ptr::null(), 0));
             let mut buf_ptrs = vec64![mask_ptr, data_ptr];
             let name_cstr = CString::new(schema.fields[0].name.clone()).unwrap();
             check_alignment(&mut buf_ptrs);
@@ -333,11 +341,13 @@ pub fn export_to_c(array: Arc<Array>, schema: Schema) -> (*mut ArrowArray, *mut 
 fn export_string_array_to_c(
     array: &Arc<Array>,
     schema: Schema,
-    len: i64
+    len: i64,
 ) -> (*mut ArrowArray, *mut ArrowSchema) {
     let (offsets_ptr, _) = array.offsets_ptr_and_len().unwrap();
     let (values_ptr, _, _) = array.data_ptr_and_byte_len();
-    let (null_ptr, _) = array.null_mask_ptr_and_byte_len().unwrap_or((ptr::null(), 0));
+    let (null_ptr, _) = array
+        .null_mask_ptr_and_byte_len()
+        .unwrap_or((ptr::null(), 0));
     // Arrow expects: [null, offsets, values]
     let mut buf_ptrs = vec64![null_ptr, offsets_ptr, values_ptr];
     let name_cstr = CString::new(schema.fields[0].name.clone()).unwrap();
@@ -351,10 +361,12 @@ fn export_categorical_array_to_c(
     schema: Schema,
     codes_len: i64,
     unique_values: &Vec64<String>,
-    index_bits: usize
+    index_bits: usize,
 ) -> (*mut ArrowArray, *mut ArrowSchema) {
     let codes_ptr = array.data_ptr_and_byte_len().0;
-    let null_ptr = array.null_mask_ptr_and_byte_len().map_or(ptr::null(), |(p, _)| p);
+    let null_ptr = array
+        .null_mask_ptr_and_byte_len()
+        .map_or(ptr::null(), |(p, _)| p);
 
     let mut buf_ptrs = vec64![null_ptr, codes_ptr];
     check_alignment(&mut buf_ptrs);
@@ -365,21 +377,31 @@ fn export_categorical_array_to_c(
         let mut total = 0u32;
         offsets.push(0);
         for s in unique_values {
-            total =
-                total.checked_add(s.len() as u32).expect("String data too large for u32 offset");
+            total = total
+                .checked_add(s.len() as u32)
+                .expect("String data too large for u32 offset");
             offsets.push(total);
         }
         offsets
     };
-    let dict_data: Vec64<u8> = unique_values.iter().flat_map(|s| s.as_bytes()).copied().collect();
+    let dict_data: Vec64<u8> = unique_values
+        .iter()
+        .flat_map(|s| s.as_bytes())
+        .copied()
+        .collect();
 
     let dict_array = StringArray {
         offsets: dict_offsets.into(),
         data: dict_data.into(),
-        null_mask: None
+        null_mask: None,
     };
 
-    let dict_schema = Schema::from(vec![Field::new("dictionary", ArrowType::String, false, None)]);
+    let dict_schema = Schema::from(vec![Field::new(
+        "dictionary",
+        ArrowType::String,
+        false,
+        None,
+    )]);
     let dict_array_arc = Arc::new(Array::TextArray(TextArray::String32(Arc::new(dict_array))));
     let (dict_arr_ptr, dict_schema_ptr) = export_to_c(dict_array_arc, dict_schema);
 
@@ -387,14 +409,14 @@ fn export_categorical_array_to_c(
 
     let mut field = schema.fields[0].clone();
     field.dtype = match index_bits {
-        #[cfg(feature = "extended_numeric_types")]
+        #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
         8 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt8),
-        #[cfg(feature = "extended_numeric_types")]
+        #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
         16 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt16),
         32 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt32),
-        #[cfg(feature = "extended_numeric_types")]
+        #[cfg(feature = "extended_categorical")]
         64 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt64),
-        _ => panic!("Invalid index bits for categorical array")
+        _ => panic!("Invalid index bits for categorical array"),
     };
     let format_cstr = fmt_c(field.dtype.clone());
     let format_ptr = format_cstr.as_ptr();
@@ -410,7 +432,10 @@ fn export_categorical_array_to_c(
             .join("\u{0001}");
         Some(CString::new(flat).unwrap())
     };
-    let metadata_ptr = metadata_cstr.as_ref().map(|c| c.as_ptr()).unwrap_or(ptr::null());
+    let metadata_ptr = metadata_cstr
+        .as_ref()
+        .map(|c| c.as_ptr())
+        .unwrap_or(ptr::null());
 
     let arr = Box::new(ArrowArray {
         length: codes_len,
@@ -422,7 +447,7 @@ fn export_categorical_array_to_c(
         children: ptr::null_mut(),
         dictionary: dict_arr_ptr,
         release: Some(release_arrow_array),
-        private_data: ptr::null_mut()
+        private_data: ptr::null_mut(),
     });
 
     let flags = if field.nullable { 1 } else { 0 };
@@ -435,7 +460,7 @@ fn export_categorical_array_to_c(
         children: ptr::null_mut(),
         dictionary: dict_schema_ptr,
         release: Some(release_arrow_schema),
-        private_data: ptr::null_mut()
+        private_data: ptr::null_mut(),
     });
 
     let holder = Box::new(Holder {
@@ -444,7 +469,7 @@ fn export_categorical_array_to_c(
         buf_ptrs,
         name_cstr,
         format_cstr,
-        metadata_cstr
+        metadata_cstr,
     });
 
     let arr_ptr = Box::into_raw(arr);
@@ -469,13 +494,13 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
     let dtype = match fmt {
         b"n" => ArrowType::Null,
         b"b" => ArrowType::Boolean,
-         #[cfg(feature = "extended_numeric_types")] 
+        #[cfg(feature = "extended_numeric_types")]
         b"c" => ArrowType::Int8,
-        #[cfg(feature = "extended_numeric_types")] 
+        #[cfg(feature = "extended_numeric_types")]
         b"C" => ArrowType::UInt8,
-        #[cfg(feature = "extended_numeric_types")] 
+        #[cfg(feature = "extended_numeric_types")]
         b"s" => ArrowType::Int16,
-        #[cfg(feature = "extended_numeric_types")] 
+        #[cfg(feature = "extended_numeric_types")]
         b"S" => ArrowType::UInt16,
         b"i" => ArrowType::Int32,
         b"I" => ArrowType::UInt32,
@@ -520,7 +545,7 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
         _ if fmt.starts_with(b"tsu") => ArrowType::Timestamp(crate::TimeUnit::Microseconds),
         #[cfg(feature = "datetime")]
         _ if fmt.starts_with(b"tsn") => ArrowType::Timestamp(crate::TimeUnit::Nanoseconds),
-        o => panic!("unsupported format {:?}", o)
+        o => panic!("unsupported format {:?}", o),
     };
 
     // if the array owns a dictionary, map the physical index dtype ➜ CategoricalIndexType
@@ -528,7 +553,7 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
         Some(match dtype {
             #[cfg(feature = "extended_numeric_types")]
             #[cfg(feature = "extended_categorical")]
-            ArrowType::Int8 | ArrowType::UInt8   => CategoricalIndexType::UInt8,
+            ArrowType::Int8 | ArrowType::UInt8 => CategoricalIndexType::UInt8,
             #[cfg(feature = "extended_numeric_types")]
             #[cfg(feature = "extended_categorical")]
             ArrowType::Int16 | ArrowType::UInt16 => CategoricalIndexType::UInt16,
@@ -536,7 +561,10 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
             #[cfg(feature = "extended_numeric_types")]
             #[cfg(feature = "extended_categorical")]
             ArrowType::Int64 | ArrowType::UInt64 => CategoricalIndexType::UInt64,
-            _ => panic!("FFI import_from_c: unsupported dictionary index type {:?}", dtype),
+            _ => panic!(
+                "FFI import_from_c: unsupported dictionary index type {:?}",
+                dtype
+            ),
         })
     } else {
         None
@@ -554,21 +582,21 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
                 sch,
                 match dtype {
                     ArrowType::Dictionary(i) => i,
-                    _ => panic!("Expected Dictionary type")
-                }
+                    _ => panic!("Expected Dictionary type"),
+                },
             )
         }
     } else {
         match dtype {
             ArrowType::Boolean => unsafe { import_boolean(arr) },
             #[cfg(feature = "extended_numeric_types")]
-                    ArrowType::Int8 => unsafe { import_integer::<i8>(arr, Array::from_int8) },
+            ArrowType::Int8 => unsafe { import_integer::<i8>(arr, Array::from_int8) },
             #[cfg(feature = "extended_numeric_types")]
-                    ArrowType::UInt8 => unsafe { import_integer::<u8>(arr, Array::from_uint8) },
+            ArrowType::UInt8 => unsafe { import_integer::<u8>(arr, Array::from_uint8) },
             #[cfg(feature = "extended_numeric_types")]
-                    ArrowType::Int16 => unsafe { import_integer::<i16>(arr, Array::from_int16) },
+            ArrowType::Int16 => unsafe { import_integer::<i16>(arr, Array::from_int16) },
             #[cfg(feature = "extended_numeric_types")]
-                    ArrowType::UInt16 => unsafe { import_integer::<u16>(arr, Array::from_uint16) },
+            ArrowType::UInt16 => unsafe { import_integer::<u16>(arr, Array::from_uint16) },
             ArrowType::Int32 => unsafe { import_integer::<i32>(arr, Array::from_int32) },
             ArrowType::UInt32 => unsafe { import_integer::<u32>(arr, Array::from_uint32) },
             ArrowType::Int64 => unsafe { import_integer::<i64>(arr, Array::from_int64) },
@@ -577,31 +605,35 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
             ArrowType::Float64 => unsafe { import_float::<f64>(arr, Array::from_float64) },
             ArrowType::String => unsafe { import_utf8::<u32>(arr) },
             #[cfg(feature = "large_string")]
-                    ArrowType::LargeString => unsafe { import_utf8::<u64>(arr) },
+            ArrowType::LargeString => unsafe { import_utf8::<u64>(arr) },
             #[cfg(feature = "datetime")]
-                    ArrowType::Date32 => unsafe { import_datetime::<i32>(arr, crate::TimeUnit::Days) },
+            ArrowType::Date32 => unsafe { import_datetime::<i32>(arr, crate::TimeUnit::Days) },
             #[cfg(feature = "datetime")]
-                    ArrowType::Date64 => unsafe {
-                        import_datetime::<i64>(arr, crate::TimeUnit::Milliseconds)
-                    },
+            ArrowType::Date64 => unsafe {
+                import_datetime::<i64>(arr, crate::TimeUnit::Milliseconds)
+            },
             #[cfg(feature = "datetime")]
-                    ArrowType::Time32(u) => unsafe { import_datetime::<i32>(arr, u) },
+            ArrowType::Time32(u) => unsafe { import_datetime::<i32>(arr, u) },
             #[cfg(feature = "datetime")]
-                    ArrowType::Time64(u) => unsafe { import_datetime::<i64>(arr, u) },
+            ArrowType::Time64(u) => unsafe { import_datetime::<i64>(arr, u) },
             #[cfg(feature = "datetime")]
-                    ArrowType::Timestamp(u) => unsafe { import_datetime::<i64>(arr, u) },
+            ArrowType::Timestamp(u) => unsafe { import_datetime::<i64>(arr, u) },
             #[cfg(feature = "datetime")]
-                    ArrowType::Duration32(u) => unsafe { import_datetime::<i32>(arr, u) },
+            ArrowType::Duration32(u) => unsafe { import_datetime::<i32>(arr, u) },
             #[cfg(feature = "datetime")]
-                    ArrowType::Duration64(u) => unsafe { import_datetime::<i64>(arr, u) },
+            ArrowType::Duration64(u) => unsafe { import_datetime::<i64>(arr, u) },
             #[cfg(feature = "datetime")]
-                    ArrowType::Interval(_u) => {
-                        panic!("FFI import_from_c: Arrow Interval types are not yet supported");
-                    }
-            ArrowType::Null => panic!("FFI import_from_c: Arrow Null arrays types are not yet supported"),
+            ArrowType::Interval(_u) => {
+                panic!("FFI import_from_c: Arrow Interval types are not yet supported");
+            }
+            ArrowType::Null => {
+                panic!("FFI import_from_c: Arrow Null arrays types are not yet supported")
+            }
             ArrowType::Dictionary(idx) => {
                 if arr.dictionary.is_null() || sch.dictionary.is_null() {
-                    panic!("FFI import_from_c: dictionary pointers missing for dictionary-encoded array");
+                    panic!(
+                        "FFI import_from_c: dictionary pointers missing for dictionary-encoded array"
+                    );
                 }
                 unsafe { import_categorical(arr, sch, idx) }
             }
@@ -614,7 +646,7 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
 /// `arr` must contain valid buffers of expected length and type.
 unsafe fn import_integer<T: Integer>(
     arr: &ArrowArray,
-    tag: fn(IntegerArray<T>) -> Array
+    tag: fn(IntegerArray<T>) -> Array,
 ) -> Arc<Array> {
     let len = arr.length as usize;
     let buffers = unsafe { slice::from_raw_parts(arr.buffers, 2) };
@@ -634,7 +666,7 @@ unsafe fn import_integer<T: Integer>(
 unsafe fn import_float<T>(arr: &ArrowArray, tag: fn(FloatArray<T>) -> Array) -> Arc<Array>
 where
     T: Float,
-    FloatArray<T>: 'static
+    FloatArray<T>: 'static,
 {
     let len = arr.length as usize;
     let buffers = unsafe { slice::from_raw_parts(arr.buffers, 2) };
@@ -673,8 +705,8 @@ unsafe fn import_boolean(arr: &ArrowArray) -> Arc<Array> {
 unsafe fn import_utf8<T: Integer>(arr: &ArrowArray) -> Arc<Array> {
     let len = arr.length as usize;
     let buffers = unsafe { std::slice::from_raw_parts(arr.buffers, 3) };
-    let null_ptr   = buffers[0];
-    let offsets_ptr= buffers[1];
+    let null_ptr = buffers[0];
+    let offsets_ptr = buffers[1];
     let values_ptr = buffers[2];
 
     // Offsets
@@ -686,7 +718,10 @@ unsafe fn import_utf8<T: Integer>(arr: &ArrowArray) -> Arc<Array> {
     let mut prev = 0usize;
     for (i, off) in offsets.iter().enumerate().take(len + 1) {
         let cur = off.to_usize().expect("Error: could not unwrap usize");
-        assert!(cur >= prev, "UTF8: offsets not monotonically non-decreasing at {i}: {cur} < {prev}");
+        assert!(
+            cur >= prev,
+            "UTF8: offsets not monotonically non-decreasing at {i}: {cur} < {prev}"
+        );
         prev = cur;
     }
     let data_len = if len == 0 { 0 } else { offsets[len].to_usize() };
@@ -703,19 +738,20 @@ unsafe fn import_utf8<T: Integer>(arr: &ArrowArray) -> Arc<Array> {
 
     let arr = StringArray::<T>::new(Vec64::from(data), null_mask, Vec64::from(offsets));
 
+    #[cfg(feature = "large_string")]
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-        Arc::new(Array::TextArray(TextArray::String64(Arc::new(unsafe { std::mem::transmute::<
-            StringArray<T>, StringArray<u64>>(arr) }
-        ))))
-    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-        Arc::new(Array::TextArray(TextArray::String32(Arc::new(unsafe { std::mem::transmute::<
-            StringArray<T>, StringArray<u32>>(arr) }
-        ))))
+        return Arc::new(Array::TextArray(TextArray::String64(Arc::new(unsafe {
+            std::mem::transmute::<StringArray<T>, StringArray<u64>>(arr)
+        }))))
+    }
+    if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+        Arc::new(Array::TextArray(TextArray::String32(Arc::new(unsafe {
+            std::mem::transmute::<StringArray<T>, StringArray<u32>>(arr)
+        }))))
     } else {
         panic!("Unsupported offset type for StringArray (expected u32 or u64)");
     }
 }
-
 
 /// Imports a categorical array and dictionary from Arrow C format.
 /// # Safety
@@ -723,7 +759,7 @@ unsafe fn import_utf8<T: Integer>(arr: &ArrowArray) -> Arc<Array> {
 unsafe fn import_categorical(
     arr: &ArrowArray,
     sch: &ArrowSchema,
-    index_type: CategoricalIndexType
+    index_type: CategoricalIndexType,
 ) -> Arc<Array> {
     // buffers: [null, codes]
     let len = arr.length as usize;
@@ -734,13 +770,14 @@ unsafe fn import_categorical(
     // import dictionary recursively
     let dict = unsafe { import_from_c(arr.dictionary as *const _, sch.dictionary as *const _) };
     let dict_strings = match dict.as_ref() {
-        Array::TextArray(TextArray::String32(s)) => {
-            (0..s.len()).map(|i| s.get(i).unwrap_or_default().to_string()).collect()
-        }
-        Array::TextArray(TextArray::String64(s)) => {
-            (0..s.len()).map(|i| s.get(i).unwrap_or_default().to_string()).collect()
-        }
-        _ => panic!("Expected String32 dictionary")
+        Array::TextArray(TextArray::String32(s)) => (0..s.len())
+            .map(|i| s.get(i).unwrap_or_default().to_string())
+            .collect(),
+        #[cfg(feature = "large_string")]
+        Array::TextArray(TextArray::String64(s)) => (0..s.len())
+            .map(|i| s.get(i).unwrap_or_default().to_string())
+            .collect(),
+        _ => panic!("Expected String32 dictionary"),
     };
     let null_mask = if !null_ptr.is_null() {
         Some(unsafe { Bitmask::from_slice(null_ptr, len) })
@@ -796,17 +833,17 @@ unsafe fn import_datetime<T: Integer>(arr: &ArrowArray, unit: crate::TimeUnit) -
     let arr = DatetimeArray::<T> {
         data: Vec64::from(data).into(),
         null_mask,
-        time_unit: unit
+        time_unit: unit,
     };
 
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-        Arc::new(Array::TemporalArray(TemporalArray::Datetime64(Arc::new(unsafe {
-            std::mem::transmute::<DatetimeArray<T>, DatetimeArray<i64>>(arr)
-        }))))
+        Arc::new(Array::TemporalArray(TemporalArray::Datetime64(Arc::new(
+            unsafe { std::mem::transmute::<DatetimeArray<T>, DatetimeArray<i64>>(arr) },
+        ))))
     } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-        Arc::new(Array::TemporalArray(TemporalArray::Datetime32(Arc::new(unsafe {
-            std::mem::transmute::<DatetimeArray<T>, DatetimeArray<i32>>(arr)
-        }))))
+        Arc::new(Array::TemporalArray(TemporalArray::Datetime32(Arc::new(
+            unsafe { std::mem::transmute::<DatetimeArray<T>, DatetimeArray<i32>>(arr) },
+        ))))
     } else {
         panic!("Unsupported DatetimeArray type (expected i32 or i64)");
     }
@@ -837,7 +874,7 @@ fn create_arrow_export(
     mut buf_ptrs: Vec64<*const u8>,
     n_buffers: i64,
     length: i64,
-    name_cstr: CString
+    name_cstr: CString,
 ) -> (*mut ArrowArray, *mut ArrowSchema) {
     let null_count = if buf_ptrs[0].is_null() { 0 } else { -1 };
 
@@ -859,7 +896,10 @@ fn create_arrow_export(
             .join("\u{0001}");
         Some(CString::new(flat).unwrap())
     };
-    let metadata_ptr = metadata_cstr.as_ref().map(|c| c.as_ptr()).unwrap_or(ptr::null());
+    let metadata_ptr = metadata_cstr
+        .as_ref()
+        .map(|c| c.as_ptr())
+        .unwrap_or(ptr::null());
 
     // ArrowArray
     let arr = Box::new(ArrowArray {
@@ -872,7 +912,7 @@ fn create_arrow_export(
         children: ptr::null_mut(),
         dictionary: ptr::null_mut(),
         release: Some(release_arrow_array),
-        private_data: ptr::null_mut()
+        private_data: ptr::null_mut(),
     });
 
     // ArrowSchema
@@ -886,7 +926,7 @@ fn create_arrow_export(
         children: ptr::null_mut(),
         dictionary: ptr::null_mut(),
         release: Some(release_arrow_schema),
-        private_data: ptr::null_mut()
+        private_data: ptr::null_mut(),
     });
 
     let holder = Box::new(Holder {
@@ -895,7 +935,7 @@ fn create_arrow_export(
         buf_ptrs,
         name_cstr,
         format_cstr,
-        metadata_cstr
+        metadata_cstr,
     });
 
     let arr_ptr = Box::into_raw(arr);
@@ -924,7 +964,7 @@ mod tests {
     fn schema_for(name: &str, ty: ArrowType, nullable: bool) -> Schema {
         Schema {
             fields: vec![Field::new(name, ty, nullable, None)],
-            metadata: Default::default()
+            metadata: Default::default(),
         }
     }
 
@@ -1082,7 +1122,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_arrow_c_export_str_offsets() {
         let mut utf = StringArray::default();
@@ -1100,7 +1139,11 @@ mod tests {
             let bufs = std::slice::from_raw_parts((*arr_ptr).buffers, 3);
             // Offsets are buffer[1], values are buffer[2]
             let offsets = std::slice::from_raw_parts(bufs[1] as *const u32, 4);
-            assert_eq!(offsets, &[0, 3, 6, 9], "UTF8 offsets must be monotonically increasing starting at 0");
+            assert_eq!(
+                offsets,
+                &[0, 3, 6, 9],
+                "UTF8 offsets must be monotonically increasing starting at 0"
+            );
             ((*arr_ptr).release.unwrap())(arr_ptr);
             ((*sch_ptr).release.unwrap())(sch_ptr);
         }
@@ -1139,12 +1182,12 @@ mod tests {
         dt.push(1);
         dt.push(2);
         dt.time_unit = TimeUnit::Milliseconds;
-    
+
         let array = Arc::new(Array::from_datetime_i64(dt));
         let schema = schema_for("dt", ArrowType::Date64, false);
-    
+
         let (arr_ptr, sch_ptr) = export_to_c(array, schema);
-    
+
         unsafe {
             assert_eq!((*arr_ptr).length, 2);
             let bufs = std::slice::from_raw_parts((*arr_ptr).buffers, 2);
@@ -1153,5 +1196,4 @@ mod tests {
             ((*sch_ptr).release.unwrap())(sch_ptr);
         }
     }
-    
 }

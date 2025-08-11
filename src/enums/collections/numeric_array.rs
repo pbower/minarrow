@@ -1,9 +1,7 @@
 use std::{fmt::{Display, Formatter}, sync::Arc};
 
-#[cfg(feature = "typecasting")]
 use crate::enums::error::MinarrowError;
 use crate::{Bitmask, FloatArray, IntegerArray, MaskedArray};
-#[cfg(feature = "typecasting")]
 use crate::{BooleanArray, StringArray};
 
 /// Unifying numerical array container
@@ -148,7 +146,6 @@ impl NumericArray {
     }
 
     /// Convert to IntegerArray<i32> using From/TryFrom as appropriate per conversion.
-    #[cfg(feature = "typecasting")]
     pub fn i32(self) -> Result<IntegerArray<i32>, MinarrowError> {
         match self {
             #[cfg(feature = "extended_numeric_types")]
@@ -173,7 +170,6 @@ impl NumericArray {
     }
 
     /// Convert to IntegerArray<i64> using From/TryFrom as appropriate per conversion.
-    #[cfg(feature = "typecasting")]
     pub fn i64(self) -> Result<IntegerArray<i64>, MinarrowError> {
         match self {
             #[cfg(feature = "extended_numeric_types")]
@@ -198,7 +194,6 @@ impl NumericArray {
     }
 
     /// Convert to IntegerArray<u32> using From/TryFrom as appropriate per conversion.
-    #[cfg(feature = "typecasting")]
     pub fn u32(self) -> Result<IntegerArray<u32>, MinarrowError> {
         match self {
             #[cfg(feature = "extended_numeric_types")]
@@ -223,7 +218,6 @@ impl NumericArray {
     }
 
     /// Convert to IntegerArray<u64> using From/TryFrom as appropriate per conversion.
-    #[cfg(feature = "typecasting")]
     pub fn u64(self) -> Result<IntegerArray<u64>, MinarrowError> {
         match self {
             #[cfg(feature = "extended_numeric_types")]
@@ -248,7 +242,6 @@ impl NumericArray {
     }
 
     /// Convert to FloatArray<f32> using From.
-    #[cfg(feature = "typecasting")]
     pub fn f32(self) -> Result<FloatArray<f32>, MinarrowError> {
         match self {
             #[cfg(feature = "extended_numeric_types")]
@@ -273,7 +266,6 @@ impl NumericArray {
     }
 
     /// Convert to FloatArray<f64> using From.
-    #[cfg(feature = "typecasting")]
     pub fn f64(self) -> Result<FloatArray<f64>, MinarrowError> {
         match self {
             #[cfg(feature = "extended_numeric_types")]
@@ -300,7 +292,6 @@ impl NumericArray {
     /// Converts to BooleanArray<u8>. 
     /// 
     /// All non-zero values become `true`, but the null mask is preserved.
-    #[cfg(feature = "typecasting")]
     pub fn bool(self) -> Result<BooleanArray<u8>, MinarrowError> {
         match self {
             #[cfg(feature = "extended_numeric_types")]
@@ -324,7 +315,6 @@ impl NumericArray {
     /// Converts to StringArray<u32> by formatting each value as string. 
     /// 
     /// Preserves Null mask.
-    #[cfg(feature = "typecasting")]
     pub fn str(self) -> Result<StringArray<u32>, MinarrowError> {
         match self {
             #[cfg(feature = "extended_numeric_types")]

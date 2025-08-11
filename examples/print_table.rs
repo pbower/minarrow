@@ -44,19 +44,19 @@ fn main() {
     );
 
     // FieldArray (column) construction
-    let fa_i32 = FieldArray::from_inner("int32_col", col_i32.clone());
-    let fa_u32 = FieldArray::from_inner("uint32_col", col_u32.clone());
-    let fa_i64 = FieldArray::from_inner("int64_col", col_i64.clone());
-    let fa_u64 = FieldArray::from_inner("uint64_col", col_u64.clone());
-    let fa_f32 = FieldArray::from_inner("float32_col", col_f32.clone());
-    let fa_f64 = FieldArray::from_inner("float64_col", col_f64.clone());
-    let fa_bool = FieldArray::from_inner("bool_col", col_bool.clone());
-    let fa_str32 = FieldArray::from_inner("utf8_col", col_str32.clone());
-    let fa_cat32 = FieldArray::from_inner("dict32_col", col_cat32.clone());
+    let fa_i32 = FieldArray::from_inner("int32_col", col_i32);
+    let fa_u32 = FieldArray::from_inner("uint32_col", col_u32);
+    let fa_i64 = FieldArray::from_inner("int64_col", col_i64);
+    let fa_u64 = FieldArray::from_inner("uint64_col", col_u64);
+    let fa_f32 = FieldArray::from_inner("float32_col", col_f32);
+    let fa_f64 = FieldArray::from_inner("float64_col", col_f64);
+    let fa_bool = FieldArray::from_inner("bool_col", col_bool);
+    let fa_str32 = FieldArray::from_inner("utf8_col", col_str32);
+    let fa_cat32 = FieldArray::from_inner("dict32_col", col_cat32);
     #[cfg(feature = "datetime")]
-    let fa_dt32 = FieldArray::from_inner("datetime32_col", col_dt32.clone());
+    let fa_dt32 = FieldArray::from_inner("datetime32_col", col_dt32);
     #[cfg(feature = "datetime")]
-    let fa_dt64 = FieldArray::from_inner("datetime64_col", col_dt64.clone());
+    let fa_dt64 = FieldArray::from_inner("datetime64_col", col_dt64);
 
     // Build Table
     let mut tbl = Table::new("MyTable".to_string(), None);

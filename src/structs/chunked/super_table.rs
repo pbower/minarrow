@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::structs::field::Field;
 use crate::structs::field_array::FieldArray;
 use crate::structs::table::Table;
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 use crate::{SuperTableV, TableV};
 
 /// Batched (windowed/chunked) table - collection of `Tables`.
@@ -159,7 +159,7 @@ impl SuperTable {
     }
 
     // Return a new BatchedTable over a sub-range of rows.
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     pub fn view(&self, offset: usize, len: usize) -> SuperTableV {
         assert!(offset + len <= self.n_rows, "slice out of bounds");
         let mut slices = Vec::<TableV>::new();
@@ -182,7 +182,7 @@ impl SuperTable {
         SuperTableV { slices, len }
     }
 
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     pub fn from_views(slices: &[TableV], name: String) -> Self {
         assert!(!slices.is_empty(), "from_slices: no slices provided");
         let n_cols = slices[0].n_cols();
@@ -344,7 +344,7 @@ mod tests {
         t.push(Arc::new(table(vec![fa("a", &[3, 4]), fa("b", &[5, 6])])));
     }
 
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     #[test]
     fn test_slice_and_owned_table() {
         let batch1 = Arc::new(table(vec![fa("q", &[1, 2, 3]), fa("w", &[4, 5, 6])]));
@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(t.batches().len(), 1);
     }
 
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     #[test]
     fn test_from_slices() {
         let batch1 = Arc::new(table(vec![fa("x", &[1, 2]), fa("y", &[3, 4])]));

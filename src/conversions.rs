@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use num_traits::FromPrimitive;
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 use crate::traits::view::View;
 use crate::{
     Array, Bitmask, BooleanArray, CategoricalArray, FloatArray, Integer, IntegerArray, NumericArray, StringArray, TextArray, Vec64
@@ -693,7 +693,7 @@ impl From<Arc<IntegerArray<i8>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_numeric_types")]
 impl View for Arc<IntegerArray<i8>> {
     type BufferT = i8;
@@ -706,7 +706,7 @@ impl From<Arc<IntegerArray<i16>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_numeric_types")]
 impl View for Arc<IntegerArray<i16>> {
     type BufferT = i16;
@@ -718,7 +718,7 @@ impl From<Arc<IntegerArray<i32>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for Arc<IntegerArray<i32>> {
     type BufferT = i32;
 }
@@ -729,7 +729,7 @@ impl From<Arc<IntegerArray<i64>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for Arc<IntegerArray<i64>> {
     type BufferT = i64;
 }
@@ -741,7 +741,7 @@ impl From<Arc<IntegerArray<u8>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_numeric_types")]
 impl View for Arc<IntegerArray<u8>> {
     type BufferT = u8;
@@ -754,7 +754,7 @@ impl From<Arc<IntegerArray<u16>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_numeric_types")]
 impl View for Arc<IntegerArray<u16>> {
     type BufferT = u16;
@@ -766,7 +766,7 @@ impl From<Arc<IntegerArray<u32>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for Arc<IntegerArray<u32>> {
     type BufferT = u32;
 }
@@ -777,7 +777,7 @@ impl From<Arc<IntegerArray<u64>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for Arc<IntegerArray<u64>> {
     type BufferT = u64;
 }
@@ -788,7 +788,7 @@ impl From<Arc<FloatArray<f32>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for Arc<FloatArray<f32>> {
     type BufferT = f32;
 }
@@ -799,7 +799,7 @@ impl From<Arc<FloatArray<f64>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for Arc<FloatArray<f64>> {
     type BufferT = f64;
 }
@@ -813,7 +813,7 @@ impl From<Arc<DatetimeArray<i32>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "datetime")]
 impl View for Arc<DatetimeArray<i32>> {
     type BufferT = i32;
@@ -827,7 +827,7 @@ impl From<Arc<DatetimeArray<i64>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "datetime")]
 impl View for Arc<DatetimeArray<i64>> {
     type BufferT = i64;
@@ -841,7 +841,7 @@ impl From<Arc<StringArray<u32>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for Arc<StringArray<u32>> {
     type BufferT = u8;
 }
@@ -853,7 +853,7 @@ impl From<Arc<StringArray<u64>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "large_string")]
 impl View for Arc<StringArray<u64>> {
     type BufferT = u8;
@@ -866,7 +866,7 @@ impl From<Arc<CategoricalArray<u8>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_categorical")]
 impl View for Arc<CategoricalArray<u8>> {
     type BufferT = u8;
@@ -879,7 +879,7 @@ impl From<Arc<CategoricalArray<u16>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_categorical")]
 impl View for Arc<CategoricalArray<u16>> {
     type BufferT = u16;
@@ -891,7 +891,7 @@ impl From<Arc<CategoricalArray<u32>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for Arc<CategoricalArray<u32>> {
     type BufferT = u32;
 }
@@ -903,7 +903,7 @@ impl From<Arc<CategoricalArray<u64>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_categorical")]
 impl View for Arc<CategoricalArray<u64>> {
     type BufferT = u64;
@@ -917,7 +917,7 @@ impl From<Arc<BooleanArray<()>>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for Arc<BooleanArray<()>> {
     type BufferT = u8;
 }
@@ -933,7 +933,7 @@ impl From<IntegerArray<i8>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_numeric_types")]
 impl View for IntegerArray<i8> {
     type BufferT = i8;
@@ -946,7 +946,7 @@ impl From<IntegerArray<i16>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_numeric_types")]
 impl View for IntegerArray<i16> {
     type BufferT = i16;
@@ -958,7 +958,7 @@ impl From<IntegerArray<i32>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for IntegerArray<i32> {
     type BufferT = i32;
 }
@@ -969,7 +969,7 @@ impl From<IntegerArray<i64>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for IntegerArray<i64> {
     type BufferT = i64;
 }
@@ -981,7 +981,7 @@ impl From<IntegerArray<u8>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_numeric_types")]
 impl View for IntegerArray<u8> {
     type BufferT = u8;
@@ -994,7 +994,7 @@ impl From<IntegerArray<u16>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_numeric_types")]
 impl View for IntegerArray<u16> {
     type BufferT = u16;
@@ -1006,7 +1006,7 @@ impl From<IntegerArray<u32>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for IntegerArray<u32> {
     type BufferT = u32;
 }
@@ -1017,7 +1017,7 @@ impl From<IntegerArray<u64>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for IntegerArray<u64> {
     type BufferT = u64;
 }
@@ -1028,7 +1028,7 @@ impl From<FloatArray<f32>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for FloatArray<f32> {
     type BufferT = f32;
 }
@@ -1039,7 +1039,7 @@ impl From<FloatArray<f64>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for FloatArray<f64> {
     type BufferT = f64;
 }
@@ -1053,7 +1053,7 @@ impl From<DatetimeArray<i32>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "datetime")]
 impl View for DatetimeArray<i32> {
     type BufferT = i32;
@@ -1067,7 +1067,7 @@ impl From<DatetimeArray<i64>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "datetime")]
 impl View for DatetimeArray<i64> {
     type BufferT = i64;
@@ -1081,7 +1081,7 @@ impl From<StringArray<u32>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for StringArray<u32> {
     type BufferT = u8;
 }
@@ -1093,7 +1093,7 @@ impl From<StringArray<u64>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "large_string")]
 impl View for StringArray<u64> {
     type BufferT = u8;
@@ -1106,7 +1106,7 @@ impl From<CategoricalArray<u8>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_categorical")]
 impl View for CategoricalArray<u8> {
     type BufferT = u8;
@@ -1119,7 +1119,7 @@ impl From<CategoricalArray<u16>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_categorical")]
 impl View for CategoricalArray<u16> {
     type BufferT = u16;
@@ -1131,7 +1131,7 @@ impl From<CategoricalArray<u32>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for CategoricalArray<u32> {
     type BufferT = u32;
 }
@@ -1143,7 +1143,7 @@ impl From<CategoricalArray<u64>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "extended_categorical")]
 impl View for CategoricalArray<u64> {
     type BufferT = u64;
@@ -1157,7 +1157,7 @@ impl From<BooleanArray<()>> for Array {
     }
 }
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl View for BooleanArray<()> {
     type BufferT = u8;
 }

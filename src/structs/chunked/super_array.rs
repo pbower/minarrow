@@ -1,11 +1,11 @@
 use std::fmt::{Display, Formatter};
 use std::iter::FromIterator;
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 use std::sync::Arc;
 
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 use crate::ArrayV;
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 use crate::SuperArrayV;
 #[cfg(feature = "datetime")]
 use crate::enums::time_units::TimeUnit;
@@ -80,7 +80,7 @@ impl SuperArray {
     ///
     /// Panics if the slice list is empty, or if any slice's type or nullability
     /// does not match the provided field.
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     pub fn from_slices(slices: &[ArrayV], field: Arc<Field>) -> Self {
         assert!(!slices.is_empty(), "from_slices requires non-empty slice");
 
@@ -110,7 +110,7 @@ impl SuperArray {
     ///
     /// If the chunks are fragmented in memory, access patterns may result in
     /// degraded cache locality and reduced SIMD optimisation.
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     pub fn slice(&self, offset: usize, len: usize) -> SuperArrayV {
         assert!(offset + len <= self.len(), "slice out of bounds");
 
@@ -808,7 +808,7 @@ mod tests {
         let _ = SuperArray::from_field_array_chunks(Vec::new());
     }
 
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     #[test]
     fn test_slice_and_materialise() {
         let c1 = fa("a", &[10, 20, 30], 0);
@@ -824,7 +824,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     #[test]
     fn test_from_slices() {
         let c1 = fa("a", &[10, 20, 30], 0);

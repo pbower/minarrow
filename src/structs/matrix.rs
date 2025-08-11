@@ -4,9 +4,7 @@
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-#[cfg(feature = "typecasting")]
 use crate::Table;
-#[cfg(feature = "typecasting")]
 use crate::enums::error::MinarrowError;
 use crate::{FloatArray, Vec64};
 
@@ -233,7 +231,6 @@ impl From<&[FloatArray<f64>]> for Matrix {
 }
 
 // TODO: Fix
-// #[cfg(feature = "typecasting")]
 // impl TryFrom<&Table> for Matrix {
 //     type Error = MinarrowError;
 

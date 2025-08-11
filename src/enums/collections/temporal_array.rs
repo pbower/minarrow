@@ -1,6 +1,5 @@
 use std::{fmt::{Display, Formatter}, sync::Arc};
 
-#[cfg(feature = "typecasting")]
 use crate::enums::error::MinarrowError;
 use crate::{Bitmask, DatetimeArray, MaskedArray};
 
@@ -102,7 +101,6 @@ impl TemporalArray {
     }
 
     /// Returns an Arc<DatetimeArray<i32>> (casting if needed).
-    #[cfg(feature = "typecasting")]
     pub fn dt32(self) -> Result<DatetimeArray<i32>, MinarrowError> {
         match self {
             TemporalArray::Datetime32(arr) => match Arc::try_unwrap(arr) {
@@ -115,7 +113,6 @@ impl TemporalArray {
     }
 
     /// Returns an Arc<DatetimeArray<i64>> (casting if needed).
-    #[cfg(feature = "typecasting")]
     pub fn dt64(self) -> Result<DatetimeArray<i64>, MinarrowError> {
         match self {
             TemporalArray::Datetime64(arr) => match Arc::try_unwrap(arr) {

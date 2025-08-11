@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 use crate::ArrayV;
 use crate::traits::print::MAX_PREVIEW;
 use crate::{Field, FieldArray, Table};

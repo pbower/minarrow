@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-#[cfg(feature = "typecasting")]
 use crate::enums::error::MinarrowError;
 use crate::{Bitmask, CategoricalArray, MaskedArray, StringArray};
 
@@ -134,7 +133,6 @@ impl TextArray {
     /// 
     /// - Converts via TryFrom,
     /// - Uses *CloneOnWrite (COW)* when it's already a `String32`.
-    #[cfg(feature = "typecasting")]
     pub fn str32(self) -> Result<StringArray<u32>, MinarrowError> {
         match self {
             TextArray::String32(arr) => match Arc::try_unwrap(arr) {
@@ -159,7 +157,6 @@ impl TextArray {
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `String64`.
     #[cfg(feature = "large_string")]
-    #[cfg(feature = "typecasting")]
     pub fn str64(self) -> Result<StringArray<u64>, MinarrowError> {
         match self {
             TextArray::String64(arr) => match Arc::try_unwrap(arr) {
@@ -182,7 +179,6 @@ impl TextArray {
     /// 
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `Categorical32`.
-    #[cfg(feature = "typecasting")]
     pub fn cat32(self) -> Result<CategoricalArray<u32>, MinarrowError> {
         match self {
             TextArray::Categorical32(arr) => match Arc::try_unwrap(arr) {
@@ -207,7 +203,6 @@ impl TextArray {
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `Categorical32`.
     #[cfg(feature = "extended_categorical")]
-    #[cfg(feature = "typecasting")]
     pub fn cat64(self) -> Result<CategoricalArray<u64>, MinarrowError> {
         match self {
             TextArray::Categorical64(arr) => match Arc::try_unwrap(arr) {
@@ -231,7 +226,6 @@ impl TextArray {
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `Categorical8`.
     #[cfg(feature = "extended_categorical")]
-    #[cfg(feature = "typecasting")]
     pub fn cat8(self) -> Result<CategoricalArray<u8>, MinarrowError> {
         match self {
             TextArray::Categorical8(arr) => match Arc::try_unwrap(arr) {
@@ -255,7 +249,6 @@ impl TextArray {
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `Categorical16`.
     #[cfg(feature = "extended_categorical")]
-    #[cfg(feature = "typecasting")]
     pub fn cat16(self) -> Result<CategoricalArray<u16>, MinarrowError> {
         match self {
             TextArray::Categorical16(arr) => match Arc::try_unwrap(arr) {

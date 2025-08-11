@@ -107,7 +107,7 @@ impl SuperTableV {
     }
 }
 
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 #[cfg(test)]
 mod tests {
     use super::*;

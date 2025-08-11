@@ -5,15 +5,15 @@
 //!     cargo run --example print_arrays
 //! ---------------------------------------------------------
 
-#[cfg(feature = "large_string")]
 use std::sync::Arc;
 
 use minarrow::aliases::{BoolArr, CatArr, FltArr, IntArr, StrArr};
 use minarrow::enums::array::Array;
-use minarrow::{
-    ArrayV, Bitmask, BitmaskV, MaskedArray, NumericArray, NumericArrayV, Print, TextArray,
-    TextArrayV
-};
+use minarrow::{Bitmask, MaskedArray, NumericArray, Print, TextArray};
+
+#[cfg(feature = "views")]
+use minarrow::{ArrayV, BitmaskV, NumericArrayV, TextArrayV};
+
 #[cfg(feature = "datetime")]
 use minarrow::{DatetimeArray, TemporalArray};
 
@@ -31,24 +31,36 @@ fn main() {
     let col_str32 = StrArr::from_slice(&["red", "blue", "green", "yellow", "purple"]);
 
     let col_cat32 = CatArr::<u32>::from_values(
-        ["apple", "banana", "cherry", "banana", "apple"].iter().copied()
+        ["apple", "banana", "cherry", "banana", "apple"]
+            .iter()
+            .copied(),
     );
 
     // Datetime
     #[cfg(feature = "datetime")]
     let col_dt32 = DatetimeArray::<i32>::from_slice(
         &[1000, 2000, 3000, 4000, 5000],
-        Some(minarrow::enums::time_units::TimeUnit::Milliseconds)
+        Some(minarrow::enums::time_units::TimeUnit::Milliseconds),
     );
     #[cfg(feature = "datetime")]
     let col_dt64 = DatetimeArray::<i64>::from_slice(
-        &[1_000_000_000, 2_000_000_000, 3_000_000_000, 4_000_000_000, 5_000_000_000],
-        Some(minarrow::enums::time_units::TimeUnit::Nanoseconds)
+        &[
+            1_000_000_000,
+            2_000_000_000,
+            3_000_000_000,
+            4_000_000_000,
+            5_000_000_000,
+        ],
+        Some(minarrow::enums::time_units::TimeUnit::Nanoseconds),
     );
 
+    #[cfg(feature = "datetime")]
     col_dt32.print();
+    #[cfg(feature = "datetime")]
     println!("\n");
+    #[cfg(feature = "datetime")]
     col_dt64.print();
+    #[cfg(feature = "datetime")]
     println!("\n");
 
     // --- Print NumericArray, TextArray, TemporalArray enums
@@ -87,20 +99,28 @@ fn main() {
     Array::from_datetime_i32(col_dt32.clone()).print();
     println!("\n");
     // --- Print Array Views (ArrayV, NumericArrayV, TextArrayV, TemporalArrayV)
+    #[cfg(feature = "views")]
     println!("\n--- Array Views ---");
+    #[cfg(feature = "views")]
     ArrayV::new(Array::from_int32(col_i32.clone()), 1, 3).print();
 
     let num_arr = NumericArray::Int32(Arc::new(col_i32.clone()));
     num_arr.print();
+
+    #[cfg(feature = "views")]
     let num_view = NumericArrayV::new(num_arr, 1, 3);
+    #[cfg(feature = "views")]
     num_view.print();
 
     let txt_arr = TextArray::String32(Arc::new(col_str32.clone()));
     txt_arr.print();
+
+    #[cfg(feature = "views")]
     let txt_view = TextArrayV::new(txt_arr, 1, 3);
+    #[cfg(feature = "views")]
     txt_view.print();
 
-    #[cfg(feature = "datetime")]
+    #[cfg(all(feature = "datetime", feature = "views"))]
     {
         use minarrow::TemporalArrayV;
 
@@ -113,5 +133,6 @@ fn main() {
     println!("\n--- Bitmask & BitmaskV ---");
     let bm = Bitmask::from_bools(&[true, false, true, true, false]);
     bm.print();
+    #[cfg(feature = "views")]   
     BitmaskV::new(bm.clone(), 1, 3).print();
 }
