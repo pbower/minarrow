@@ -67,12 +67,12 @@ pub enum ArrowType {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum CategoricalIndexType {
-    #[cfg(feature = "extended_categorical")]
+    #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
     UInt8,
-    #[cfg(feature = "extended_categorical")]
+    #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
     UInt16,
     UInt32,
-    #[cfg(feature = "extended_categorical")]
+    #[cfg(all(feature = "extended_categorical"))]
     UInt64
 }
 

@@ -85,11 +85,16 @@ chunked = []
 # Int64-based string
 large_string = []
 
-# 1. Extra direct slicing from the `Array struct` for easy access.
-# 2. Dedicated `ArraySlice`, `ChunkedArraySlice`, `TableSlice`, `ChunkedTableSlice` objects.
-# Without these, you can slice ergonomically via &my_array.inner()[1..4] anyway.
-# However, use if you need to store slices for later use, or want direct access from the `Array`.
-slicing_extras = []
+# Provides windowed collection views for Numeric, String, and Temporal types.
+# Often, everything can be done with only the `ArrayView` abstraction, or,
+# the `ArrayViewT` (&Array, Offset, Length) tuple from aliases. 
+# These are for the cases where they fall short, e.g., you
+# have numeric or text specific functions, and want to streamline type management.
+# In those cases, these abstractions provide the equivalent of `Into<NumericArrayView>`
+# for several types, and accept both the original and windowed view variants. Therefore,
+# one can unify numeric entry points through here enabling a flexible API, at the cost
+# of more surface complexity. 
+views = []
 
 # Adds a 2D matrix that uses a flat buffer in the format compatible with BLAS and LAPACK Fortan and C kernels.
 # Includes `TryFrom` conversion methods so it's easy to move from `Table` column selections into the matrix,
@@ -99,17 +104,6 @@ slicing_extras = []
 # with a small once-off performance penalty of cloning the columns into a contiguous buffer, that becomes noticeable
 # with large data sizes.
 matrix = []
-
-# Provides windowed collection views for Numeric, String, and Temporal types.
-# Often, everything can be done with only the `ArrayView` abstraction, or even better,
-# the `ArrayViewT` (&Array, Offset, Length) tuple from aliases. 
-# These are for the cases where they fall short, e.g., you
-# have numeric or text specific functions, and want to streamline type management.
-# In those cases, these abstractions provide the equivalent of `Into<NumericArrayView>`
-# for several types, and accept both the original and windowed view variants. Therefore,
-# one can unify numeric entry points through here enabling a flexible API, at the cost
-# of more surface complexity. 
-collection_views = ["slicing_extras"]
 
 # Adds `From` and `TryFrom` typecasting traits supporting `.into()` semantics,
 # and typed accessors across the `Numeric`, `TextArray` and `TemporalArray` types.
@@ -141,10 +135,9 @@ datetime = []
 chrono = ["dep:chrono", "datetime"]
 
 default = [
-   "slicing_extras", 
+   "views", 
    "chunked", 
    "large_string", 
-   "collection_views",
    "scalar_type",
    "value_type",
    "cube",
@@ -152,3 +145,11 @@ default = [
    "typecasting",
    "extended_categorical",
 ]
+
+[package.metadata.cargo-all-features]
+
+# All optional dependencies have semnatic names
+skip_optional_dependencies = true
+
+# The maximum number of features to try at once
+max_combination_size = 3

@@ -1,7 +1,7 @@
 use crate::{
     Array, Bitmask, BooleanArray, CategoricalArray, Field, FieldArray, FloatArray, IntegerArray, StringArray, Table
 };
-#[cfg(feature = "cube")]
+#[cfg(all(feature = "cube", feature = "views"))]
 use crate::TableV;
 #[cfg(feature = "datetime")]
 use crate::DatetimeArray;
@@ -104,7 +104,7 @@ pub type BitmaskVT<'a> = (&'a Bitmask, Offset, Length);
 /// Respects the means in which each table is windowed,
 /// e.g., if offsets and lengths are different due to category lengths,
 /// time windows etc.
-#[cfg(feature = "cube")]
+#[cfg(all(feature = "cube", feature = "views"))]
 pub type CubeV = Vec<TableV>;
 
 // Low-level types

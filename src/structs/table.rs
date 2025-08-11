@@ -13,8 +13,7 @@ use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use super::field_array::FieldArray;
 use crate::Field;
-#[cfg(feature = "slicing_extras")]
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 use crate::TableV;
 use crate::traits::print::{
     MAX_PREVIEW, print_ellipsis_row, print_header_row, print_rule, value_to_string
@@ -218,7 +217,6 @@ impl Table {
     /// Returns a new owned `Table` containing rows `[offset, offset+len)`.
     ///
     /// All columns are deeply copied, but only for the affected row(s).
-    #[cfg(feature = "slicing_extras")]
     pub fn slice_clone(&self, offset: usize, len: usize) -> Self {
         assert!(offset <= self.n_rows, "offset out of bounds");
         assert!(offset + len <= self.n_rows, "slice window out of bounds");
@@ -230,8 +228,7 @@ impl Table {
 
     /// Returns a zero-copy view over rows `[offset, offset+len)`.
     /// This view borrows from the parent table and does not copy data.
-    #[cfg(feature = "slicing_extras")]
-    #[cfg(feature = "collection_views")]
+    #[cfg(feature = "views")]
     pub fn slice(&self, offset: usize, len: usize) -> TableV {
         assert!(offset <= self.n_rows, "offset out of bounds");
         assert!(offset + len <= self.n_rows, "slice window out of bounds");
@@ -524,7 +521,6 @@ mod tests {
         assert_eq!(names2, ["a", "b"]);
     }
 
-    #[cfg(feature = "slicing_extras")]
     #[test]
     fn test_table_slice_and_slice() {
         use crate::structs::field_array::field_array;

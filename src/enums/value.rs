@@ -1,20 +1,31 @@
-use crate::{enums::error::MinarrowError, traits::custom_value::CustomValue, Array, ArrayV, Bitmask, BitmaskV, SuperArray, SuperArrayV, SuperTable, SuperTableV, Field, FieldArray, Table, TableV};
-#[cfg(feature = "scalar_type")]
-use crate::Scalar;
 #[cfg(feature = "cube")]
 use crate::Cube;
-use std::{convert::From, sync::Arc};
 #[cfg(feature = "matrix")]
 use crate::Matrix;
+#[cfg(feature = "scalar_type")]
+use crate::Scalar;
+use crate::{
+    Array, Bitmask, Field, FieldArray,Table,
+    enums::error::MinarrowError, traits::custom_value::CustomValue,
+};
 use std::convert::TryFrom;
+use std::{convert::From, sync::Arc};
 
-#[cfg(feature = "collection_views")]
-use crate::{ TextArrayV, NumericArrayV};
+#[cfg(feature = "views")]
+use crate::{NumericArrayV, TextArrayV};
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "datetime")]
 use crate::TemporalArrayV;
 
+#[cfg(feature = "chunked")]
+use crate::{SuperArray, SuperTable};
+
+#[cfg(feature = "views")]
+use crate::{ArrayV, TableV, BitmaskV};
+
+#[cfg(all(feature = "chunked", feature="views"))]
+use crate::{SuperArrayV, SuperTableV};
 /// Unified value enum representing any supported data structure.
 ///
 /// # Details
@@ -25,38 +36,38 @@ use crate::TemporalArrayV;
 /// because of the flexibility it adds unifying all types to a single one.
 /// For example, to return `Result<Value, Error>`, particularly in engine contexts.
 /// - It's enabled optionally via the `value_type` feature.
-/// 
+///
 /// # Usage
 /// You can also use it to hold a custom type under the `Custom` entry.
 /// As long as the object implements `Debug`, `Clone`, and `PartialEq`,
 /// remains `Send + Sync`, and implements `Any` it can be stored in `Value::Custom`.
-/// `Any` is implemented automatically for all Rust types with a `'static` lifetime. 
+/// `Any` is implemented automatically for all Rust types with a `'static` lifetime.
 #[derive(Debug, Clone)]
 pub enum Value {
     #[cfg(feature = "scalar_type")]
     Scalar(Scalar),
     Array(Array),
+    #[cfg(feature = "views")]
     ArrayView(ArrayV),
     Table(Table),
-    TableView(TableV),    
-    #[cfg(feature = "collection_views")]
+    #[cfg(feature = "views")]
+    TableView(TableV),
+    #[cfg(all(feature = "views", feature="views"))]
     NumericArrayView(NumericArrayV),
-    #[cfg(feature = "collection_views")]
+    #[cfg(all(feature = "views", feature="views"))]
     TextArrayView(TextArrayV),
-    #[cfg(feature = "collection_views")]
-    #[cfg(feature = "datetime")]
+    #[cfg(all(feature = "views", feature="datetime"))]
     TemporalArrayView(TemporalArrayV),
     Bitmask(Bitmask),
+    #[cfg(feature = "views")]
     BitmaskView(BitmaskV),
     #[cfg(feature = "chunked")]
     ChunkedArray(SuperArray),
-    #[cfg(feature = "slicing_extras")]
-    #[cfg(feature = "chunked")]
+    #[cfg(all(feature = "chunked", feature="views"))]
     ChunkedArrayView(SuperArrayV),
     #[cfg(feature = "chunked")]
     ChunkedTable(SuperTable),
-    #[cfg(feature = "slicing_extras")]
-    #[cfg(feature = "chunked")]
+    #[cfg(all(feature = "chunked", feature="views"))]
     ChunkedTableView(SuperTableV),
     FieldArray(FieldArray),
     Field(Field),
@@ -64,7 +75,7 @@ pub enum Value {
     Matrix(Matrix),
     #[cfg(feature = "cube")]
     Cube(Cube),
-    VecValue(Vec<Value>), 
+    VecValue(Vec<Value>),
     // For recursive
     BoxValue(Box<Value>),
     ArcValue(Arc<Value>),
@@ -72,24 +83,33 @@ pub enum Value {
     Tuple3((Box<Value>, Box<Value>, Box<Value>)),
     Tuple4((Box<Value>, Box<Value>, Box<Value>, Box<Value>)),
     Tuple5((Box<Value>, Box<Value>, Box<Value>, Box<Value>, Box<Value>)),
-    Tuple6((Box<Value>, Box<Value>, Box<Value>, Box<Value>, Box<Value>, Box<Value>)),
-    
+    Tuple6(
+        (
+            Box<Value>,
+            Box<Value>,
+            Box<Value>,
+            Box<Value>,
+            Box<Value>,
+            Box<Value>,
+        ),
+    ),
+
     /// Arbitrary user or library-defined payload.
     ///
     /// As long as the object implements `Debug`, `Clone`, and `PartialEq`,
     /// remains `Send + Sync`, and implements `Any` it can be stored in `Value::Custom`.
-    /// `Any` is implemented automatically for all Rust types with a `'static` lifetime. 
+    /// `Any` is implemented automatically for all Rust types with a `'static` lifetime.
     ///
     /// Borrowed values **cannot** be used directly.
-    /// These must be wrapped in `Arc` or otherwise promoted to `'static` to 
+    /// These must be wrapped in `Arc` or otherwise promoted to `'static` to
     /// store inside `Value`.
-    /// 
+    ///
     /// It's recommended that creators also implement `From` and `TryFrom`.
     Custom(Arc<dyn CustomValue>),
 }
 
 /// Implements `PartialEq` for `Value`
-/// 
+///
 /// This includes special handling for the `Custom` type.
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
@@ -98,21 +118,23 @@ impl PartialEq for Value {
             #[cfg(feature = "scalar_type")]
             (Scalar(a), Scalar(b)) => a == b,
             (Array(a), Array(b)) => a == b,
+            #[cfg(feature = "views")]
             (ArrayView(a), ArrayView(b)) => a == b,
             (Table(a), Table(b)) => a == b,
+            #[cfg(feature = "views")]
             (TableView(a), TableView(b)) => a == b,
-            #[cfg(feature = "collection_views")]
+            #[cfg(feature = "views")]
             (NumericArrayView(a), NumericArrayView(b)) => a == b,
-            #[cfg(feature = "collection_views")]
+            #[cfg(feature = "views")]
             (TextArrayView(a), TextArrayView(b)) => a == b,
-            #[cfg(feature = "collection_views")]
-            #[cfg(feature = "datetime")]
+            #[cfg(all(feature = "views", feature = "datetime"))]
             (TemporalArrayView(a), TemporalArrayView(b)) => a == b,
             (Bitmask(a), Bitmask(b)) => a == b,
+            #[cfg(feature = "views")]
             (BitmaskView(a), BitmaskView(b)) => a == b,
             #[cfg(feature = "chunked")]
             (ChunkedArray(a), ChunkedArray(b)) => a == b,
-            #[cfg(feature = "chunked")]
+            #[cfg(all(feature = "chunked", feature = "views"))]
             (ChunkedArrayView(a), ChunkedArrayView(b)) => a == b,
             (FieldArray(a), FieldArray(b)) => a == b,
             (Field(a), Field(b)) => a == b,
@@ -127,14 +149,16 @@ impl PartialEq for Value {
             (Tuple2(a), Tuple2(b)) => a.0 == b.0 && a.1 == b.1,
             (Tuple3(a), Tuple3(b)) => a.0 == b.0 && a.1 == b.1 && a.2 == b.2,
             (Tuple4(a), Tuple4(b)) => a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
-            (Tuple5(a), Tuple5(b)) => a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-            (Tuple6(a), Tuple6(b)) => a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
+            (Tuple5(a), Tuple5(b)) => {
+                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4
+            }
+            (Tuple6(a), Tuple6(b)) => {
+                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
+            }
             _ => false,
         }
     }
 }
-
-
 
 /// Macro to implement `From` for `Value` variants.
 macro_rules! impl_value_from {
@@ -175,25 +199,27 @@ impl_tryfrom_value!(Scalar: Scalar);
 
 // Array-like types
 impl_value_from!(Array: Array);
+#[cfg(feature = "views")]
 impl_value_from!(ArrayView: ArrayV);
 impl_value_from!(Table: Table);
+#[cfg(feature = "views")]
 impl_value_from!(TableView: TableV);
 impl_value_from!(Bitmask: Bitmask);
+#[cfg(feature = "views")]
 impl_value_from!(BitmaskView: BitmaskV);
 impl_value_from!(FieldArray: FieldArray);
 impl_value_from!(Field: Field);
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl_value_from!(NumericArrayView: NumericArrayV);
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl_value_from!(TextArrayView: TextArrayV);
-#[cfg(feature = "collection_views")]
-#[cfg(feature = "datetime")]
+#[cfg(all(feature = "datetime", feature = "views"))]
 impl_value_from!(TemporalArrayView: TemporalArrayV);
 
 #[cfg(feature = "chunked")]
 impl_value_from!(ChunkedArray: SuperArray);
-#[cfg(feature = "chunked")]
+#[cfg(all(feature = "chunked", feature="views"))]
 impl_value_from!(ChunkedArrayView: SuperArrayV);
 
 #[cfg(feature = "matrix")]
@@ -203,25 +229,27 @@ impl_value_from!(Cube: Cube);
 
 // TryFrom for Array-like types
 impl_tryfrom_value!(Array: Array);
+#[cfg(feature = "views")]
 impl_tryfrom_value!(ArrayView: ArrayV);
 impl_tryfrom_value!(Table: Table);
+#[cfg(feature = "views")]
 impl_tryfrom_value!(TableView: TableV);
 impl_tryfrom_value!(Bitmask: Bitmask);
+#[cfg(feature = "views")]
 impl_tryfrom_value!(BitmaskView: BitmaskV);
 impl_tryfrom_value!(FieldArray: FieldArray);
 impl_tryfrom_value!(Field: Field);
 
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl_tryfrom_value!(NumericArrayView: NumericArrayV);
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 impl_tryfrom_value!(TextArrayView: TextArrayV);
-#[cfg(feature = "collection_views")]
-#[cfg(feature = "datetime")]
+#[cfg(all(feature = "datetime", feature = "views"))]
 impl_tryfrom_value!(TemporalArrayView: TemporalArrayV);
 
 #[cfg(feature = "chunked")]
 impl_tryfrom_value!(ChunkedArray: SuperArray);
-#[cfg(feature = "chunked")]
+#[cfg(all(feature = "chunked", feature = "views"))]
 impl_tryfrom_value!(ChunkedArrayView: SuperArrayV);
 
 #[cfg(feature = "matrix")]

@@ -6,10 +6,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use super::field_array::FieldArray;
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 use crate::aliases::CubeV;
 use crate::ffi::arrow_dtype::ArrowType;
 use crate::{Field, Table};
+#[cfg(feature = "views")]
 use crate::TableV;
 
 // Global counter for unnamed cube instances
@@ -330,7 +331,7 @@ impl Cube {
     }
 
     /// Returns a new owned Cube containing rows `[offset, offset+len)` for all tables.
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     pub fn slice_clone(&self, offset: usize, len: usize) -> Self {
         assert!(!self.tables.is_empty(), "No tables to slice");
         for n in &self.n_rows {
@@ -346,10 +347,9 @@ impl Cube {
             third_dim_index: self.third_dim_index.clone(),
         }
     }
-    
 
     /// Returns a zero-copy view over rows `[offset, offset+len)` for all tables.
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     pub fn slice(&self, offset: usize, len: usize) -> CubeV {
         assert!(!self.tables.is_empty(), "No tables to slice");
         for &n in &self.n_rows {
@@ -642,7 +642,7 @@ mod tests {
         assert_eq!(cube.third_dim_index().unwrap(), &["timestamp"]);
     }
     
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     #[test]
     fn test_cube_slice_and_slice_clone() {
         use crate::structs::field_array::field_array;

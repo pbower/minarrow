@@ -7,7 +7,7 @@ use arrow::array::ArrayRef;
 #[cfg(feature = "cast_polars")]
 use polars::series::Series;
 
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 use crate::aliases::FieldAVT;
 use crate::ffi::arrow_dtype::ArrowType;
 use crate::{Array, Field};
@@ -103,14 +103,13 @@ impl FieldArray {
     ///
     /// The `(&Array, Offset, WindowLength), &Field)` `FieldArraySlice` pattern here
     /// is a once-off we avoid recommending.
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     #[inline]
     pub fn to_window(&self, offset: usize, len: usize) -> FieldAVT {
         ((&self.array, offset, len), &self.field)
     }
 
     /// Returns a new owned FieldArray with array sliced `[offset, offset+len)`.
-    #[cfg(feature = "slicing_extras")]
     pub fn slice_clone(&self, offset: usize, len: usize) -> Self {
         let array: Array = self.array.slice_clone(offset, len).into();
         let null_count = array.null_count();
@@ -197,7 +196,7 @@ mod tests {
         assert_eq!(field_array.array, array.into());
     }
 
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     #[test]
     fn test_field_array_slice() {
         let mut arr = IntegerArray::<i32>::default();

@@ -10,13 +10,12 @@ use crate::ffi::schema::Schema;
 use arrow::array::{ArrayRef, make_array};
 #[cfg(feature = "cast_arrow")]
 use arrow::ffi::{FFI_ArrowArray, FFI_ArrowSchema};
-#[cfg(feature = "cast_arrow")]
+#[cfg(any(feature = "cast_arrow", feature = "cast_polars"))]
 use crate::Field;
 
-#[cfg(feature = "collection_views")]
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 use crate::ArrayV;
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 use crate::ArrayVT;
 #[cfg(feature = "datetime")]
 use crate::DatetimeArray;
@@ -722,8 +721,7 @@ impl Array {
     /// Does not slice the object (yet).
     ///
     /// Panics if out of bounds.
-    #[cfg(feature = "slicing_extras")]
-    #[cfg(feature = "collection_views")]
+    #[cfg(feature = "views")]
     pub fn to_window(&self, offset: usize, len: usize) -> ArrayV {
         assert!(offset <= self.len(), "offset out of bounds");
         assert!(offset + len <= self.len(), "slice window out of bounds");
@@ -735,7 +733,7 @@ impl Array {
     /// Does not slice the object (yet).
     ///
     /// Panics if out of bounds.
-    #[cfg(feature = "slicing_extras")]
+    #[cfg(feature = "views")]
     pub fn to_window_tuple(&self, offset: usize, len: usize) -> ArrayVT {
         assert!(offset <= self.len(), "offset out of bounds");
         assert!(offset + len <= self.len(), "slice window out of bounds");
@@ -1006,7 +1004,6 @@ impl Array {
         None
     }
 
-    #[cfg(feature = "slicing_extras")]
     #[inline]
     pub fn as_slice<T>(&self, offset: usize, len: usize) -> &[T] {
         match self {
@@ -1107,7 +1104,6 @@ impl Array {
         }
     }
 
-    #[cfg(feature = "slicing_extras")]
     #[inline]
     pub fn slice_raw<T: 'static>(&self, offset: usize, len: usize) -> Option<&[T]> {
         use std::any::TypeId;
@@ -1204,7 +1200,6 @@ impl Array {
     ///  
     /// If out-of-bounds, returns Self::Null.
     /// All null mask, offsets, etc. are trimmed.
-    #[cfg(feature = "slicing_extras")]
     #[inline]
     pub fn slice_clone(&self, offset: usize, len: usize) -> Self {
         match self {
@@ -1663,9 +1658,8 @@ impl Array {
     ///     - then, append the`minarrow::ArrowType` to the `Field` that matches the desired datetime type.
     #[cfg(feature = "cast_polars")]
     pub fn to_polars(&self, name: &str) -> polars::prelude::Series {
-        use crate::ffi::arrow_dtype::ArrowType;
         #[cfg(feature = "datetime")]
-        use crate::{TemporalArray, TimeUnit};
+        use crate::{TemporalArray, TimeUnit, ffi::arrow_dtype::ArrowType};
 
         // We infer what is directly inferrable and expected
         let field = match self {
@@ -2841,7 +2835,6 @@ mod tests {
         assert!(a.is_nullable());
     }
 
-    #[cfg(feature = "slicing_extras")]
     #[test]
     fn test_array_enum_slice() {
         use crate::Array;

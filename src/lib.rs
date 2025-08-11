@@ -37,24 +37,24 @@ pub mod structs {
         pub mod string;
     }
     pub mod views {
-        #[cfg(feature = "slicing_extras")]
+        #[cfg(feature = "views")]
         #[cfg(feature = "chunked")]
         pub mod chunked {
             pub mod super_array_view;
             pub mod super_table_view;
         }
-        #[cfg(feature = "collection_views")]
+        #[cfg(feature = "views")]
         pub mod collections {
             pub mod numeric_array_view;
             #[cfg(feature = "datetime")]
             pub mod temporal_array_view;
             pub mod text_array_view;
         }
-        #[cfg(feature = "slicing_extras")]
+        #[cfg(feature = "views")]
         pub mod array_view;
         pub mod bitmask_view;
 
-        #[cfg(feature = "slicing_extras")]
+        #[cfg(feature = "views")]
         pub mod table_view;
     }
     pub mod buffer;
@@ -79,7 +79,7 @@ pub mod ffi {
     
 pub mod traits {
     pub mod masked_array;
-    #[cfg(feature = "collection_views")]
+    #[cfg(feature = "views")]
     pub mod view;
     pub mod print;
     pub mod type_unions;
@@ -119,19 +119,19 @@ pub use structs::bitmask::Bitmask;
 pub use structs::views::bitmask_view::BitmaskV;
 #[cfg(feature = "chunked")]
 pub use structs::chunked::{super_array::SuperArray, super_table::SuperTable};
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 #[cfg(feature = "chunked")]
 pub use structs::views::chunked::{
     super_array_view::SuperArrayV, super_table_view::SuperTableV
 };
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 pub use structs::views::array_view::ArrayV;
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 pub use structs::views::collections::numeric_array_view::NumericArrayV;
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 #[cfg(feature = "datetime")]
 pub use structs::views::collections::temporal_array_view::TemporalArrayV;
-#[cfg(feature = "collection_views")]
+#[cfg(feature = "views")]
 pub use structs::views::collections::text_array_view::TextArrayV;
 
 pub use structs::field::Field;
@@ -149,7 +149,7 @@ pub use structs::variants::float::FloatArray;
 pub use structs::variants::integer::IntegerArray;
 pub use structs::variants::string::StringArray;
 pub use structs::vec64::Vec64;
-#[cfg(feature = "slicing_extras")]
+#[cfg(feature = "views")]
 pub use structs::views::table_view::TableV;
 pub use traits::masked_array::MaskedArray;
 pub use traits::print::Print;
