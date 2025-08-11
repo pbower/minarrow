@@ -41,6 +41,13 @@ Thank you for your interest in contributing to Minarrow! We welcome contribution
    ```bash
    cargo test --all-features
    ```
+or, for exhaustive feature-flag checks (requires cargo install cargo-all-features):
+   ```base
+   cargo test-all-features
+   ```
+The second form is recommended for changes that may affect multiple features.
+It tests combinations of up to two feature flags and takes about five minutes.
+
 5. Run clippy for linting:
    ```bash
    cargo clippy --all-features -- -D warnings

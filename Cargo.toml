@@ -4,6 +4,27 @@ version = "0.1.0"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/pbower/minarrow"
+keywords = [
+    "minarrow",
+    "arrow",
+    "apache-arrow",
+    "arrow2",
+    "polars_arrow",
+    "polars",
+    "data",
+    "fast",
+    "columnar",
+    "simd",
+    "zero-copy",
+    "dataframe",
+    "analytics",
+    "real-time",
+    "ffi",
+]
+categories = ["data-structures", "science", "parsing", "external-ffi-bindings"]
 
 # All of the below external dependencies do not need to be enabled directly
 # See [features] for the relevant feature that enables them.
@@ -11,7 +32,10 @@ build = "build.rs"
 
 # Arrow and Polars are for optional to/from_apache_arrow() and to/from_polars() via the optional
 # `cast_arrow` and `cast_polars` features.
-arrow = {version = "55.2.0", default-features = false, features = ["ffi", "prettyprint"] , optional = true}
+arrow = { version = "55.2.0", default-features = false, features = [
+    "ffi",
+    "prettyprint",
+], optional = true }
 arrow-schema = { version = "55.2.0", features = ["ffi"], optional = true }
 polars = { version = "0.50.0", features = [
     # Core needed for Series/DataFrame
@@ -23,14 +47,14 @@ polars = { version = "0.50.0", features = [
     "dtype-struct",
     "dtype-decimal",
     "performant",
-    "fmt"
+    "fmt",
 ], optional = true }
 polars-arrow = { version = "0.50.0", optional = true }
 chrono = { version = "0.4.41", optional = true }
 num-traits = "0.2.19"
 rayon = { version = "1.10.0", optional = true }
-snappy = { version = "0.4.0", optional = true } 
-zstd = { version = "0.13.3", optional = true } 
+snappy = { version = "0.4.0", optional = true }
+zstd = { version = "0.13.3", optional = true }
 
 [build-dependencies]
 cc = { version = "1", optional = true }
@@ -131,14 +155,14 @@ datetime = []
 chrono = ["dep:chrono", "datetime"]
 
 default = [
-   "views", 
-   "chunked", 
-   "large_string", 
-   "scalar_type",
-   "value_type",
-   "cube",
-   "datetime",
-   "extended_categorical",
+    "views",
+    "chunked",
+    "large_string",
+    "scalar_type",
+    "value_type",
+    "cube",
+    "datetime",
+    "extended_categorical",
 ]
 
 [package.metadata.cargo-all-features]

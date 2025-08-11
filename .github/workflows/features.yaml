@@ -1,0 +1,34 @@
+name: features
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: features-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  features:
+    name: features • required (nightly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (nightly)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: clippy,rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          target-dir: /tmp/target
+
+      - run: cargo +nightly test --target-dir /tmp/target -- --quiet
+      - run: cargo +nightly test --no-default-features --target-dir /tmp/target -- --quiet
+      - run: cargo +nightly test --all-features --target-dir /tmp/target -- --quiet
