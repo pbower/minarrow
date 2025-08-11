@@ -1,0 +1,802 @@
+/// Implements standard constructors for columnar array types with data, null_mask, and PhantomData fields.
+///
+/// # Arguments
+/// * `$array` - The array struct name (e.g., IntegerArray)
+/// * `$bound` - The trait bound for T (e.g., Integer or Float)
+#[macro_export]
+macro_rules! impl_numeric_array_constructors {
+    ($array:ident, $bound:ident) => {
+        impl<T> $array<T>
+        where
+            T: $bound
+        {
+            /// Constructs a new, empty array.
+            #[inline]
+            pub fn new(data: impl Into<Buffer<T>>, null_mask: Option<Bitmask>) -> Self {
+                let data: Buffer<T> = data.into();
+                crate::utils::validate_null_mask_len(data.len(), &null_mask);
+                Self { data, null_mask }
+            }
+
+            /// Constructs an array with reserved capacity and optional null mask.
+            ///
+            /// # Arguments
+            ///
+            /// * `cap` - Capacity (number of elements) to reserve for the backing buffer.
+            /// * `null_mask` - If true, allocates a null-mask bit vector.
+            #[inline]
+            pub fn with_capacity(cap: usize, null_mask: bool) -> Self {
+                Self {
+                    data: Vec64::with_capacity(cap).into(),
+                    null_mask: if null_mask {
+                        Some($crate::structs::bitmask::Bitmask::with_capacity(cap))
+                    } else {
+                        None
+                    }
+                }
+            }
+
+            /// Constructs a dense typed Array from a slice.
+            /// 
+            /// This is a streamlined constructor - if the Array has nulls the mask 
+            /// must be applied after construction.
+            #[inline]
+            pub fn from_slice(slice: &[T]) -> Self {
+                Self {
+                    data: Vec64(slice.to_vec_in($crate::structs::allocator::Alloc64)).into(),
+                    null_mask: None
+                }
+            }
+        }
+    };
+}
+
+/// Implements the MaskedArray<T> trait for the given struct and bound.
+///
+/// # Arguments
+///
+/// * `$array` - The array struct (e.g., IntegerArray)
+/// * `$bound` - The trait bound for T (e.g., Integer)
+#[macro_export]
+macro_rules! impl_masked_array {
+    ($array:ident, $bound:ident, $container:ty, $logicaltype:ty $(, $extra_field:ident)?) => {
+        impl<T> crate::traits::masked_array::MaskedArray for $array<T>
+        where
+            T: crate::traits::type_unions::$bound
+        {
+            type T = T;
+            type Container = $container;
+            type LogicalType = $logicaltype;
+            type CopyType = $logicaltype; // (currently the) same for all macro-implemented types
+
+            /// Returns a reference to the underlying data vector.
+            fn data(&self) -> &Buffer<T> {
+                &self.data
+            }
+
+            /// Appends a value to the array.
+            #[inline]
+            fn push(&mut self, value: T) {
+                self.data_mut().push(value);
+                let idx = self.len() - 1;
+                if let Some(nm) = &mut self.null_mask {
+                    nm.set(idx, true);
+                }
+            }
+
+            /// Appends a value without bounds checks.
+            ///
+            /// # Safety
+            /// Caller must ensure sufficient capacity in both the data and null mask.
+            ///
+                    #[inline(always)]
+            unsafe fn push_unchecked(&mut self, value: T) {
+                let idx = self.len();
+                // SAFETY: caller must ensure sufficient preallocated space in data and mask
+                unsafe {
+                    self.set_unchecked(idx, value);
+                    if let Some(mask) = self.null_mask_mut() {
+                        mask.set_unchecked(idx, true);
+                    }
+                }
+            }
+
+            /// Number of entries.
+            #[inline]
+            fn len(&self) -> usize {
+                self.data.len()
+            }
+
+            /// Returns a reference to the optional null mask.
+            fn null_mask(&self) -> Option<&$crate::structs::bitmask::Bitmask> {
+                self.null_mask.as_ref()
+            }
+
+            /// Returns a logical owned slice [offset, offset+len).
+            /// Uses `Vec64::from_slice`.
+            ///
+            /// For a non-copy reference, instead use `slice`.
+            fn slice_clone(&self, offset: usize, len: usize) -> Self {
+                assert!(offset + len <= self.data.len(), "slice out of bounds");
+
+                // Copy the data window
+                let data = crate::Vec64::from_slice(&self.data[offset..offset + len]);
+
+                // Copy / realign the null mask if present.
+                let null_mask = self.null_mask.as_ref().map(|m| m.slice_clone(offset, len));
+
+                Self { data: data.into(),
+                    null_mask,
+                    $(
+                        $extra_field: self.$extra_field.clone(),
+                    )?
+                    ..Default::default() }
+            }
+
+            #[doc = "Converts a [`"]
+            #[doc = stringify!($array)]
+            #[doc = "<T>`] window. Like a slice, but retains access to the original "]
+            #[doc = stringify!($array)]
+            #[doc = ". Generally, prefer `as_slice` for `Float`, `Integer`,
+            usually for `DateTime` array types, as it natively slices window boundaries. 
+            See **crate::structs::window** for further details."]
+            #[inline(always)]
+            fn tuple_ref<'a>(
+                &'a self,
+                offset: Offset,
+                len: Length,
+            ) -> (&'a Self, Offset, Length) {
+                (&self, offset, len)
+            }
+
+            /// Returns a mutable reference to the optional null mask.
+            fn null_mask_mut(&mut self) -> Option<&mut $crate::structs::bitmask::Bitmask> {
+                self.null_mask.as_mut()
+            }
+
+            /// Replaces the null mask.
+            fn set_null_mask(&mut self, mask: Option<$crate::structs::bitmask::Bitmask>) {
+                self.null_mask = mask;
+            }
+
+            /// Returns a mutable reference to the underlying data vector.
+            fn data_mut(&mut self) -> &mut $crate::structs::buffer::Buffer<T> {
+                &mut self.data
+            }
+
+            /// Returns an iterator over the T values in this array.
+            #[inline]
+            fn iter(&self) -> impl Iterator<Item = T> + '_
+            where
+                T: Copy
+            {
+                (0..self.len()).map(move |i| self.data()[i])
+            }
+
+            /// Returns an iterator over the T values, as `Option<T>`.
+            #[inline]
+            fn iter_opt(&self) -> impl Iterator<Item = Option<T>> + '_
+            where
+                T: Copy
+            {
+                (0..self.len()).map(
+                    move |i| {
+                        if self.is_null(i) { None } else { Some(self.data()[i]) }
+                    }
+                )
+            }
+
+            /// Returns an iterator over a range of T values in this array.
+            #[inline]
+            fn iter_range(&self, offset: usize, len: usize) -> impl Iterator<Item = T> + '_
+            where
+                T: Copy,
+            {
+                (offset..offset + len).map(move |i| self.data()[i])
+            }
+
+            /// Returns an iterator over a range of T values, as `Option<T>`.
+            #[inline]
+            fn iter_opt_range(&self, offset: usize, len: usize) -> impl Iterator<Item = Option<T>> + '_
+            where
+                T: Copy,
+            {
+                (offset..offset + len).map(move |i| {
+                    if self.is_null(i) {
+                        None
+                    } else {
+                        Some(self.data()[i])
+                    }
+                })
+            }
+
+            /// Retrieves the value at the given index, or None if null or beyond length.
+            #[inline]
+            fn get(&self, idx: usize) -> Option<T> {
+                if idx >= self.len() {
+                    return None;
+                }
+                if self.is_null(idx) { None } else { self.data().get(idx).copied() }
+            }
+
+            /// Like `get`, but skips the `idx >= len()` check.
+                    #[inline(always)]
+            unsafe fn get_unchecked(&self, idx: usize) -> Option<T> {
+                // Null‐check only
+                if let Some(mask) = self.null_mask() {
+                    if !mask.get(idx) {
+                        return None;
+                    }
+                }
+                // No bounds check on `idx`
+                Some(unsafe { *self.data().get_unchecked(idx) })
+            }
+
+            /// Sets the value at the given index, updating the null‐mask.
+            #[inline]
+            fn set(&mut self, idx: usize, value: T) {
+                // bounds‐check
+                assert!(idx < self.len(), "index out of bounds");
+                // write the new value
+                let data = self.data_mut().as_mut_slice();
+                data[idx] = value;
+                // mark non-null
+                if let Some(mask) = self.null_mask_mut() {
+                    mask.set(idx, true);
+                }
+            }
+
+            /// Like `set`, but skips bounds checks.
+                    #[inline(always)]
+            unsafe fn set_unchecked(&mut self, idx: usize, value: T) {
+                // direct unchecked write
+                let data = self.data_mut().as_mut_slice();
+                data[idx] = value;
+                if let Some(mask) = self.null_mask_mut() {
+                    mask.set(idx, true);
+                }
+            }
+
+            /// Resizes the data by 'n' and fills any new values
+            /// with 'value'
+            fn resize(&mut self, n: usize, value: T) {
+                self.data.resize(n, value)
+            }
+
+            /// Appends all values (and null mask if present) from `other` to `self`.
+            fn append_array(&mut self, other: &Self) {
+                let orig_len = self.len();
+                let other_len = other.len();
+
+                if other_len == 0 {
+                    return;
+                }
+
+                // Append data
+                self.data_mut().extend_from_slice(other.data());
+
+                // Handle null masks
+                match (self.null_mask_mut(), other.null_mask()) {
+                        (Some(self_mask), Some(other_mask)) => {
+                            self_mask.extend_from_bitmask(other_mask);
+                        }
+                        // caller had a mask but `other` didn’t → explicitly set each new bit true
+                        (Some(self_mask), None) => {
+                            for i in orig_len..(orig_len + other_len) {
+                                self_mask.set(i, true);
+                            }
+                        }
+                    (None, Some(other_mask)) => {
+                        // Materialise new null mask for self, all existing valid.
+                        let mut mask = Bitmask::new_set_all(orig_len + other_len, true);
+                        for i in 0..other_len {
+                            mask.set(orig_len + i, other_mask.get(i));
+                        }
+                        self.set_null_mask(Some(mask));
+                    }
+                    (None, None) => {
+                        // No mask in either: nothing to do.
+                    }
+                }
+            }
+
+        }
+
+        // Parallel iterators as inherent methods (requires Send+Sync+Copy, gated on feature)
+        #[cfg(feature = "parallel_proc")]
+        impl<T> $array<T>
+        where
+            T: $bound + Send + Sync + Copy + 'static
+        {
+            /// Parallel iterator – returns `&T`
+            /// One must consult the null-mask if they care about nulls.
+            #[inline]
+            pub fn par_iter(&self) -> rayon::slice::Iter<'_, T> {
+                self.data.par_iter()
+            }
+
+            ///  Nullable parallel iterator
+            /// `None` for null, `Some(&T)` for valid values.
+            /// Not zero-copy like par_iter.
+            #[inline]
+            pub fn par_iter_opt(
+                &self
+            ) -> impl rayon::prelude::ParallelIterator<Item = Option<&T>> + '_ {
+                use rayon::prelude::*;
+                let nmask = self.null_mask.as_ref();
+                self.data.par_iter().enumerate().map(move |(idx, val)| {
+                    if nmask.map(|m| !m.get(idx)).unwrap_or(false) { None } else { Some(val) }
+                })
+            }
+
+            /// Parallel mutable iterator (zero-copy, gives `&mut T`)
+            #[inline]
+            pub fn par_iter_mut(&mut self) -> rayon::slice::IterMut<'_, T> {
+                self.data.par_iter_mut()
+            }
+
+            /// Zero-copy parallel iterator over window [start, end)
+            #[inline]
+            pub fn par_iter_range(
+                &self,
+                start: usize,
+                end: usize
+            ) -> impl rayon::prelude::ParallelIterator<Item = Option<&T>> + '_
+            where
+                for<'r> &'r T: Send
+            {
+                use rayon::prelude::*;
+                let nmask = self.null_mask.as_ref();
+                let data = &self.data;
+                debug_assert!(start <= end && end <= data.len());
+                (start..end).into_par_iter().map(move |i| {
+                    if nmask.map(|m| !m.get(i)).unwrap_or(false) { None } else { Some(&data[i]) }
+                })
+            }
+
+            /// Parallel iterator over window [start, end), None if null
+            pub fn par_iter_range_opt(
+                &self,
+                start: usize,
+                end: usize
+            ) -> impl rayon::prelude::ParallelIterator<Item = Option<&T>> + '_ {
+                use rayon::prelude::*;
+                let nmask = self.null_mask.as_ref();
+                let data = &self.data;
+                (start..end).into_par_iter().map(move |i| {
+                    if nmask.map(|m| !m.get(i)).unwrap_or(false) { None } else { Some(&data[i]) }
+                })
+            }
+
+            /// `[start, end)` – _unchecked_  ➜ `&T`
+            /// No bounds checks
+                    #[inline]
+            pub unsafe fn par_iter_range_unchecked(
+                &self,
+                start: usize,
+                end: usize
+            ) -> impl rayon::prelude::ParallelIterator<Item = &T> + '_ {
+                use rayon::prelude::*;
+                let data = &self.data;
+                (start..end).into_par_iter().map(move |i| unsafe { data.get_unchecked(i) })
+            }
+
+            /// Skips bounds checks with `get_unchecked`; still honours the null-mask.
+                    #[inline]
+            pub unsafe fn par_iter_range_opt_unchecked(
+                &self,
+                start: usize,
+                end: usize
+            ) -> impl rayon::prelude::ParallelIterator<Item = Option<&T>> + '_
+            where
+                for<'r> &'r T: Send
+            {
+                use rayon::prelude::*;
+                let nmask = self.null_mask.as_ref();
+                let data = &self.data;
+                (start..end).into_par_iter().map(move |i| unsafe {
+                    if nmask.map(|m| !m.get_unchecked(i)).unwrap_or(false) {
+                        None
+                    } else {
+                        Some(data.get_unchecked(i))
+                    }
+                })
+            }
+        }
+    };
+}
+
+/// Implement `from_vec` + `from_std_vec` for the “numeric-shaped” arrays
+/// (IntegerArray / FloatArray / DatetimeArray).
+#[macro_export]
+macro_rules! impl_from_vec_primitive {
+    ($array:ident $(, $extra:tt )?) => {
+        impl<T> $array<T>
+        where
+            T: $crate::traits::type_unions::Primitive $( $extra )?
+        {
+            /// Construct directly from an already 64-byte–aligned buffer,
+            /// taking ownership without copying.
+            #[inline]
+            pub fn from_vec64(
+                data: $crate::Vec64<T>,
+                null_mask: Option<$crate::structs::bitmask::Bitmask>,
+                $($extra)?  // e.g. time_unit for DatetimeArray
+            ) -> Self {
+                Self {
+                    data: data.into(),
+                    null_mask,
+                    $(, $extra )?                           // DatetimeArray field(s)
+                }
+            }
+
+            /// Converts a standard `Vec<T>` to Vec64<T>, by
+            /// taking ownership of the existing buffer, and aligning
+            /// it to 64 bit boundaries where needed.
+            #[inline]
+            pub fn from_vec(
+                data: Vec<T>,
+                null_mask: Option<$crate::structs::bitmask::Bitmask>,
+                $($extra)?
+            ) -> Self {
+                Self::from_vec64(data.into(), null_mask $(, $extra )?)
+            }
+        }
+    };
+}
+
+/// Reduces matching boilerplate when all positive paths share the outcome
+#[macro_export]
+macro_rules! match_array {
+    ($self:expr, $method:ident $(, $args:expr)* $(,)?) => {{
+        match $self {
+            Array::NumericArray(inner) => match inner {
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a)           => a.$method($($args),*),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a)          => a.$method($($args),*),
+                NumericArray::Int32(a)          => a.$method($($args),*),
+                NumericArray::Int64(a)          => a.$method($($args),*),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a)          => a.$method($($args),*),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a)         => a.$method($($args),*),
+                NumericArray::UInt32(a)         => a.$method($($args),*),
+                NumericArray::UInt64(a)         => a.$method($($args),*),
+                NumericArray::Float32(a)        => a.$method($($args),*),
+                NumericArray::Float64(a)        => a.$method($($args),*),
+                NumericArray::Null              => Default::default(),
+            },
+            Array::BooleanArray(a)                  => a.$method($($args),*),
+            Array::TextArray(inner) => match inner {
+                TextArray::String32(a)              => a.$method($($args),*),
+                #[cfg(feature = "large_string")]
+                TextArray::String64(a)              => a.$method($($args),*),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical8(a)          => a.$method($($args),*),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical16(a)         => a.$method($($args),*),
+                TextArray::Categorical32(a)         => a.$method($($args),*),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(a)         => a.$method($($args),*),
+                TextArray::Null                     => Default::default(),
+            },
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(inner) => match inner {
+                TemporalArray::Datetime32(a)       => a.$method($($args),*),
+                TemporalArray::Datetime64(a)       => a.$method($($args),*),
+                TemporalArray::Null                 => Default::default(),
+            },
+            Array::Null                             => Default::default(),
+        }
+    }};
+}
+
+/// Implements usize conversions for integers
+#[macro_export]
+macro_rules! impl_usize_conversions {
+    ($($t:ty),*) => {$(
+        impl Integer for $t {
+            #[inline] fn to_usize(self) -> usize { self as usize }
+            #[inline] fn from_usize(v: usize) -> Self {
+                v.try_into().expect("overflow casting usize → offset type")
+            }
+        }
+    )*};
+}
+
+/// Implements AsRef, AsMut, Deref, and DerefMut for standard array types with `.data: Vec64<T>`.
+/// This macro is for value buffers only, not dictionary arrays or string offset views.
+#[macro_export]
+macro_rules! impl_array_ref_deref {
+    // For generic array types with a bound: e.g. impl_array_slicers!(CategoricalArray<T>: Integer);
+    ($array:ident < $t:ident > : $bound:path) => {
+        impl<$t: $bound> AsRef<[$t]> for $array<$t> {
+            #[inline]
+            fn as_ref(&self) -> &[$t] {
+                self.data.as_ref()
+            }
+        }
+        impl<$t: $bound> AsMut<[$t]> for $array<$t> {
+            #[inline]
+            fn as_mut(&mut self) -> &mut [$t] {
+                self.data.as_mut()
+            }
+        }
+        impl<$t: $bound> ::std::ops::Deref for $array<$t> {
+            type Target = [$t];
+            #[inline]
+            fn deref(&self) -> &Self::Target {
+                self.data.as_ref()
+            }
+        }
+        impl<$t: $bound> ::std::ops::DerefMut for $array<$t> {
+            #[inline]
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                self.data.as_mut()
+            }
+        }
+    };
+    // For generic array types with no bound: impl_array_slicers!(FloatArray<T>);
+    ($array:ident < $t:ident >) => {
+        impl<$t> AsRef<[$t]> for $array<$t> {
+            #[inline]
+            fn as_ref(&self) -> &[$t] {
+                self.data.as_ref()
+            }
+        }
+        impl<$t> AsMut<[$t]> for $array<$t> {
+            #[inline]
+            fn as_mut(&mut self) -> &mut [$t] {
+                self.data.as_mut()
+            }
+        }
+        impl<$t> ::std::ops::Deref for $array<$t> {
+            type Target = [$t];
+            #[inline]
+            fn deref(&self) -> &Self::Target {
+                self.data.as_ref()
+            }
+        }
+        impl<$t> ::std::ops::DerefMut for $array<$t> {
+            #[inline]
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                self.data.as_mut()
+            }
+        }
+    };
+    // For non-generic array types (BooleanArray, etc.)
+    ($array:ident) => {
+        impl AsRef<[u8]> for $array {
+            #[inline]
+            fn as_ref(&self) -> &[u8] {
+                self.data.as_ref()
+            }
+        }
+        impl AsMut<[u8]> for $array {
+            #[inline]
+            fn as_mut(&mut self) -> &mut [u8] {
+                self.data.as_mut()
+            }
+        }
+        impl ::std::ops::Deref for $array {
+            type Target = [u8];
+            #[inline]
+            fn deref(&self) -> &Self::Target {
+                self.data.as_ref()
+            }
+        }
+        impl ::std::ops::DerefMut for $array {
+            #[inline]
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                self.data.as_mut()
+            }
+        }
+    };
+}
+
+/// ### Overview
+/// Implements `MaskedArray` by delegating to the inner type with clone‐on‐write for mutators.
+///
+/// These support accessing `MaskedArray` methods without needing to dereference.
+///
+/// ### `View` trait building block
+/// `MaskedArray` for `Arc<Inner>` is a preliminary requirement for `Into<Array>`, and `View`
+/// enabling:
+/// 1. `View`: Zero-copy accessors for slicing and windowed views.
+/// 2. `Into<Array>`: self-explanatory *(convenient conversion to Array)*.
+///
+/// We implement these under [crate::conversions].
+///
+/// ### Parameters
+/// - `Inner = $inner:ty`               — the concrete array type, e.g. `BooleanArray<()>`  
+/// - `T = $T:ty`                       — element type, e.g. `bool`  
+/// - `Container = $Container:ty`       — backing store, e.g. `Bitmask`  
+/// - `LogicalType = $LogicalType:ty`   — logical type, e.g. `bool`  
+/// - `CopyType = $CopyType:ty`         — copy type, e.g. `bool`  
+/// - `BufferT = $BufferT:ty`           — view buffer type, e.g. `u8`  
+/// - `Variant = $variant:ident`        — enum variant, e.g. `BooleanArray`
+/// - `Bound = &Bound:path`             —  
+///
+/// *Due to inherent variation, it turns out that all of these parameters
+/// are required to support unification, despite appearing overkill at first glance*.
+#[macro_export]
+macro_rules! impl_arc_masked_array {
+    // Generic<T> lane
+    (
+        Inner = $inner:ident < $T:ident >,
+        T = $T2:ident,
+        Container = $Container:ty,
+        LogicalType = $LogicalType:ty,
+        CopyType = $CopyType:ty,
+        BufferT = $BufferT:ty,
+        Variant = $variant:ident,
+        Bound = $Bound:path,
+    ) => {
+        // 1) MaskedArray for Arc<Inner<T>>
+        impl<$T: $Bound> $crate::traits::masked_array::MaskedArray
+            for ::std::sync::Arc<$inner<$T>>
+        {
+            type T = $T;
+            type Container = $Container;
+            type LogicalType = $LogicalType;
+            type CopyType = $CopyType;
+
+            fn len(&self) -> usize {
+                (**self).len()
+            }
+            fn is_empty(&self) -> bool {
+                (**self).is_empty()
+            }
+            fn data(&self) -> &Self::Container {
+                (**self).data()
+            }
+            fn data_mut(&mut self) -> &mut Self::Container {
+                ::std::sync::Arc::make_mut(self).data_mut()
+            }
+            fn get(&self, idx: usize) -> Option<Self::CopyType> {
+                (**self).get(idx)
+            }
+            fn set(&mut self, idx: usize, value: Self::LogicalType) {
+                ::std::sync::Arc::make_mut(self).set(idx, value)
+            }
+            unsafe fn get_unchecked(&self, idx: usize) -> Option<Self::CopyType> {
+                unsafe { (**self).get_unchecked(idx) }
+            }
+            unsafe fn set_unchecked(&mut self, idx: usize, value: Self::LogicalType) {
+                unsafe { ::std::sync::Arc::make_mut(self).set_unchecked(idx, value) }
+            }
+            fn iter(&self) -> impl Iterator<Item = Self::CopyType> + '_ {
+                (**self).iter()
+            }
+            fn iter_opt(&self) -> impl Iterator<Item = Option<Self::CopyType>> + '_ {
+                (**self).iter_opt()
+            }
+            fn iter_range(
+                &self,
+                offset: usize,
+                len: usize
+            ) -> impl Iterator<Item = Self::CopyType> + '_ {
+                (**self).iter_range(offset, len)
+            }
+            fn iter_opt_range(
+                &self,
+                offset: usize,
+                len: usize
+            ) -> impl Iterator<Item = Option<Self::CopyType>> + '_ {
+                (**self).iter_opt_range(offset, len)
+            }
+            fn push(&mut self, value: Self::LogicalType) {
+                ::std::sync::Arc::make_mut(self).push(value)
+            }
+            unsafe fn push_unchecked(&mut self, value: Self::LogicalType) {
+                unsafe { ::std::sync::Arc::make_mut(self).push_unchecked(value) }
+            }
+            fn slice_clone(&self, offset: usize, len: usize) -> Self {
+                ::std::sync::Arc::new((**self).slice_clone(offset, len))
+            }
+            fn resize(&mut self, n: usize, value: Self::LogicalType) {
+                ::std::sync::Arc::make_mut(self).resize(n, value)
+            }
+            fn null_mask(&self) -> Option<&$crate::Bitmask> {
+                (**self).null_mask()
+            }
+            fn null_mask_mut(&mut self) -> Option<&mut $crate::Bitmask> {
+                ::std::sync::Arc::make_mut(self).null_mask_mut()
+            }
+            fn set_null_mask(&mut self, mask: Option<$crate::Bitmask>) {
+                ::std::sync::Arc::make_mut(self).set_null_mask(mask)
+            }
+            fn append_array(&mut self, other: &Self) {
+                ::std::sync::Arc::make_mut(self).append_array(&**other)
+            }
+        }
+    };
+
+    // Non-generic / Phantom <T> lane
+    (
+        Inner = $inner:ty,
+        T = $T:ty,
+        Container = $Container:ty,
+        LogicalType = $LogicalType:ty,
+        CopyType = $CopyType:ty,
+        BufferT = $BufferT:ty,
+        Variant = $variant:ident
+    ) => {
+        impl $crate::traits::masked_array::MaskedArray for ::std::sync::Arc<$inner> {
+            type T = $T;
+            type Container = $Container;
+            type LogicalType = $LogicalType;
+            type CopyType = $CopyType;
+
+            fn len(&self) -> usize {
+                (**self).len()
+            }
+            fn is_empty(&self) -> bool {
+                (**self).is_empty()
+            }
+            fn data(&self) -> &Self::Container {
+                (**self).data()
+            }
+            fn data_mut(&mut self) -> &mut Self::Container {
+                ::std::sync::Arc::make_mut(self).data_mut()
+            }
+            fn get(&self, idx: usize) -> Option<Self::CopyType> {
+                (**self).get(idx)
+            }
+            fn set(&mut self, idx: usize, value: Self::LogicalType) {
+                ::std::sync::Arc::make_mut(self).set(idx, value)
+            }
+            unsafe fn get_unchecked(&self, idx: usize) -> Option<Self::CopyType> {
+                unsafe { (**self).get_unchecked(idx) }
+            }
+            unsafe fn set_unchecked(&mut self, idx: usize, value: Self::LogicalType) {
+                unsafe { ::std::sync::Arc::make_mut(self).set_unchecked(idx, value) }
+            }
+            fn iter(&self) -> impl Iterator<Item = Self::CopyType> + '_ {
+                (**self).iter()
+            }
+            fn iter_opt(&self) -> impl Iterator<Item = Option<Self::CopyType>> + '_ {
+                (**self).iter_opt()
+            }
+            fn iter_range(
+                &self,
+                offset: usize,
+                len: usize
+            ) -> impl Iterator<Item = Self::CopyType> + '_ {
+                (**self).iter_range(offset, len)
+            }
+            fn iter_opt_range(
+                &self,
+                offset: usize,
+                len: usize
+            ) -> impl Iterator<Item = Option<Self::CopyType>> + '_ {
+                (**self).iter_opt_range(offset, len)
+            }
+            fn push(&mut self, value: Self::LogicalType) {
+                ::std::sync::Arc::make_mut(self).push(value)
+            }
+            unsafe fn push_unchecked(&mut self, value: Self::LogicalType) {
+                unsafe { ::std::sync::Arc::make_mut(self).push_unchecked(value) }
+            }
+            fn slice_clone(&self, offset: usize, len: usize) -> Self {
+                ::std::sync::Arc::new((**self).slice_clone(offset, len))
+            }
+            fn resize(&mut self, n: usize, value: Self::LogicalType) {
+                ::std::sync::Arc::make_mut(self).resize(n, value)
+            }
+            fn null_mask(&self) -> Option<&$crate::Bitmask> {
+                (**self).null_mask()
+            }
+            fn null_mask_mut(&mut self) -> Option<&mut $crate::Bitmask> {
+                ::std::sync::Arc::make_mut(self).null_mask_mut()
+            }
+            fn set_null_mask(&mut self, mask: Option<$crate::Bitmask>) {
+                ::std::sync::Arc::make_mut(self).set_null_mask(mask)
+            }
+            fn append_array(&mut self, other: &Self) {
+                ::std::sync::Arc::make_mut(self).append_array(&**other)
+            }
+        }
+    };
+}

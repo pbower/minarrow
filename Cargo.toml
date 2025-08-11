@@ -1,0 +1,154 @@
+[package]
+name = "minarrow"
+version = "0.1.0"
+edition = "2024"
+authors = ['Peter G. Bower']
+build = "build.rs"
+
+# All of the below external dependencies do not need to be enabled directly
+# See [features] for the relevant feature that enables them.
+[dependencies]
+
+# Arrow and Polars are for optional to/from_apache_arrow() and to/from_polars() via the optional
+# `cast_arrow` and `cast_polars` features.
+arrow = {version = "55.2.0", default-features = false, features = ["ffi", "prettyprint"] , optional = true}
+arrow-schema = { version = "55.2.0", features = ["ffi"], optional = true }
+polars = { version = "0.50.0", features = [
+    # Core needed for Series/DataFrame
+    "lazy",
+    "dtype-categorical",
+    "dtype-date",
+    "dtype-datetime",
+    "dtype-time",
+    "dtype-struct",
+    "dtype-decimal",
+    "performant",
+    "fmt"
+], optional = true }
+polars-arrow = { version = "0.50.0", optional = true }
+chrono = { version = "0.4.41", optional = true }
+num-traits = "0.2.19"
+rayon = { version = "1.10.0", optional = true }
+snappy = { version = "0.4.0", optional = true } 
+zstd = { version = "0.13.3", optional = true } 
+
+[build-dependencies]
+cc = { version = "1", optional = true }
+
+[features]
+
+# Adds parallel iterators via `Rayon`
+parallel_proc = ["rayon"]
+
+# Adds roundtrip FFI tests. Leave off if you don't need it 
+# in your build pipeline, as it's mostly C-code.
+c_ffi_tests = ['cc']
+
+# Adds Categorical8, Categorical16, and Categorical64.
+#
+# Highly recommend keeping these off unless required
+# E.g., constrained or embedded environments, as they add combinatorial
+# weight to the binary and enum match arms
+extended_categorical = ["extended_numeric_types"]
+
+# Adds UInt8, UInt16, Int8, Int16 types.
+#
+# Highly recommend keeping these off unless required
+# E.g., constrained or embedded environments, as they add combinatorial
+# weight to the binary and enum match arms.
+#
+# For most analytical use cases, they get upcasted anyway.
+extended_numeric_types = []
+
+# Adds a cube object for stacking tables on an extra axis
+# Useful for time series, and group analytics
+cube = []
+
+# Adds a unified scalar type, that's useful for `Array` aggregations, and other use cases where you end up with one value.
+# However, it is one of several downcasting methods available in Rust, and when predominantly
+# working with numbers, one might prefer using `my_function::<i32>()` semantics which addresses
+# the type immediately, e.g., in conjunction with `T: Numeric`, `T: Integer` or `T:Float` generic functions,
+# rather than getting a `Scalar` object make that then needs `.i32()` style access, or a manual match.
+# It is a pain that Rust can't just get the value when it's wrapped in such cases, but this is an inherent type safety limitation.
+scalar_type = []
+
+# Adds a unified value enum, that can be used for engine-level orchestration or any situation
+# where a catch-all, unified encompassing type is required to satisfy the compiler.
+# It includes roundtrip `From` and `TryFrom` for each inner type so that signatures do 
+# not need to couple to it directly. Recommend leaving off if you don't need it. 
+value_type = []
+
+# `ChunkedArray` and `ChunkedTable` objects that support iterating
+# over multiple inner objects of the same type, for memory-mapped streaming etc. 
+chunked = []
+
+# Int64-based string
+large_string = []
+
+# 1. Extra direct slicing from the `Array struct` for easy access.
+# 2. Dedicated `ArraySlice`, `ChunkedArraySlice`, `TableSlice`, `ChunkedTableSlice` objects.
+# Without these, you can slice ergonomically via &my_array.inner()[1..4] anyway.
+# However, use if you need to store slices for later use, or want direct access from the `Array`.
+slicing_extras = []
+
+# Adds a 2D matrix that uses a flat buffer in the format compatible with BLAS and LAPACK Fortan and C kernels.
+# Includes `TryFrom` conversion methods so it's easy to move from `Table` column selections into the matrix,
+# without worrying too much about buffers and strides. Hence, if you are working *only* with matrices, you may want
+# this from the get-go. If you are working predominantly with Tabular data but running PCA's and SVD's (for e.g.),
+# you can keep your data in Table format and any functions that accept `Matrix` should also work for your `Table`,
+# with a small once-off performance penalty of cloning the columns into a contiguous buffer, that becomes noticeable
+# with large data sizes.
+matrix = []
+
+# Provides windowed collection views for Numeric, String, and Temporal types.
+# Often, everything can be done with only the `ArrayView` abstraction, or even better,
+# the `ArrayViewT` (&Array, Offset, Length) tuple from aliases. 
+# These are for the cases where they fall short, e.g., you
+# have numeric or text specific functions, and want to streamline type management.
+# In those cases, these abstractions provide the equivalent of `Into<NumericArrayView>`
+# for several types, and accept both the original and windowed view variants. Therefore,
+# one can unify numeric entry points through here enabling a flexible API, at the cost
+# of more surface complexity. 
+collection_views = ["slicing_extras"]
+
+# Adds `From` and `TryFrom` typecasting traits supporting `.into()` semantics,
+# and typed accessors across the `Numeric`, `TextArray` and `TemporalArray` types.
+typecasting = []
+
+# Adds the zstd compression option for Parquet and IPC formats
+# Zstd offers a higher compression ratio but is slightly slower.
+zstd = ["dep:zstd"]
+
+# Adds the snappy compression option for Parquet and IPC format.
+# Snappy is lightweight, minimal, but with less compression than zstd.
+snappy = ["dep:snappy"]
+
+# Adds `to_apache_arrow()` for casting into that library.
+cast_arrow = ["arrow", "arrow-schema"]
+
+# Adds `to_polars()` for casting into that library.
+cast_polars = ["polars", "polars-arrow"]
+
+# Adds `Datetime` array types.
+datetime = []
+
+# Adds `as_datetime` outputs for easy conversion.
+# Also, formats datetime values as dates since unix epoch 1970-01-01 .
+# Without this, they are raw values that can either represent 
+# since epoch, or just be a standalone length, depending on your
+# requirements, and the `ArrowType` you can store in `Field` and/or `FieldArray` 
+# tags this accurately for each use case, along with any optional metadata.
+chrono = ["dep:chrono", "datetime"]
+
+default = [
+   "slicing_extras", 
+   "chunked", 
+   "large_string", 
+   "collection_views",
+   "scalar_type",
+   "value_type",
+   "cube",
+   "datetime",
+   "typecasting",
+   "extended_categorical",
+]
