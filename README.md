@@ -50,6 +50,7 @@ Unified views:
 
 And a single top-level Array for mixed tables. 
 
+The inner arrays match the Arrow IPC memory layout.
 
 ## Example: Create Arrays
 
