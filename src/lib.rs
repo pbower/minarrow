@@ -1,7 +1,7 @@
-//! # Minarrow
+//! # Minarrow - The Latest and Greatest Rust Innovation Since One-Nanosecond Ago
 //!
-//! Next-generation Rust library implementing the Apache Arrow memory layout —
-//! engineered for zero-copy, high-performance computing, streaming, embedded
+//! Next-generation Rust library implementing the Apache Arrow zero-copy memory layout —
+//! built for high-performance computing, streaming, embedded
 //! systems, and for Rust developers who demand simple, powerful, and efficient data.
 //!
 //! ## Standout features:

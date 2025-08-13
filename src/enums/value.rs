@@ -1,4 +1,4 @@
-//! # Value Module
+//! # Value Module - *Single *Whole Type Universe* Value Container*
 //!
 //! Contains the `Value` enum, a unified container for any Minarrow-supported data structure.
 //!  

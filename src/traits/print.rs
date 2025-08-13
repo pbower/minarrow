@@ -1,4 +1,4 @@
-//! # Print Module
+//! # Print Module - *Pretty Printing with Attitude*
 //! 
 //! Contains implementations of the Display trait
 //! and an additional `Print` trait which wraps it to provide

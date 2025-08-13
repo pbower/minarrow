@@ -1,3 +1,5 @@
+//! # Internal module
+//!
 //! Promotable vector types for SharedBuffer lazy heap allocation.
 //!
 //! Provides reference-counted wrappers that enable SharedBuffer to promote

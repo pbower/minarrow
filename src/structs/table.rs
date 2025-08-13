@@ -1,4 +1,4 @@
-//! # Table
+//! # Table Module - *Standard Table ("RecordBatch") for Columnar Analytics and Data Engineering*
 //!
 //! Columnar data container pairing a fixed-length set of rows
 //! with named, typed `FieldArray` columns.

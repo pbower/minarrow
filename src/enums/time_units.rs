@@ -1,4 +1,4 @@
-//! # TimeUnits Module
+//! # TimeUnits Module - *Arrow Datetime Units*
 //! 
 //! Defines time and interval units used by temporal arrays in Minarrow.
 //!  

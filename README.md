@@ -133,9 +133,9 @@ Lightstream *(planned Aug ’25)* enables IPC streaming in Tokio async contexts 
 
 ## Benchmarks
 
-***Sum of 1 billion sequential integers starting at 0.***
-
 Intel(R) Core(TM) Ultra 7 155H | x86_64 | 22 CPUs  
+
+***Sum of 1,000 sequential integers starting at 0.***
 Averaged over 1,000 runs (release).  
 
 ### No SIMD 
@@ -178,14 +178,16 @@ Averaged over 1,000 runs (release).
 
 ### SIMD + Rayon
 
-***(n=1000, lanes=4, iters=1000)***
+***Sum of 1 billion sequential integers starting at 0.***
+
+***(n=1,000,000,000, lanes=4)***
 
 | Case                                    | Time (ms)   |
 |-----------------------------------------|-------------|
 | SIMD + Rayon `IntegerArray<i64>`        | 113.874     |
 | SIMD + Rayon `FloatArray<f64>`          | 114.095     |
 
-### Other factors
+### Other factors (SIMD + No SIMD Benchmarks)
 Vec<i64> construction (generating + allocating 1000 elements - avg): 87 ns  
 Vec64<i64> construction (avg): 84 ns  
 

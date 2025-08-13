@@ -1,4 +1,4 @@
-//! # DatetimeArray Module
+//! # DatetimeArray Module - *Mid-Level, Inner Typed DateTime Array*
 //!
 //! Arrow-compatible datetime/timestamp array implementation with optional null-mask,
 //! 64-byte alignment, and efficient memory layout for analytical workloads.

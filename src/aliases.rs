@@ -1,4 +1,4 @@
-//! # Aliases & View Tuples
+//! # Aliases & View Tuples - *Lightweight Tuple Views and Fast-To-Type Aliases*
 //!
 //! Aliases for convenience and lightweight *view tuple* types used across the crate.
 //!

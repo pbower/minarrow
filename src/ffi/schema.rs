@@ -1,4 +1,4 @@
-//! # Schema Module
+//! # Schema Module - *Arrow's schema type for cross-FFI compatibility*
 //!
 //! Contains the `Schema` type for Arrow FFI compatibility.
 //!

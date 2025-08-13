@@ -1,4 +1,4 @@
-//! # Field
+//! # Field Module - *Arrow-compliant Column Metadata Tagging*
 //!
 //! Defines column-level schema metadata for `Minarrow`.
 //!

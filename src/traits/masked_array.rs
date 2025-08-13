@@ -1,4 +1,4 @@
-//! # MaskedArray Module
+//! # MaskedArray Module - *Standardises all Inner Array types and null handling in Minarrow*
 //! 
 //! Defines the `MaskedArray` trait — the common interface for all nullable array types in Minarrow.
 //!

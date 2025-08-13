@@ -1,3 +1,5 @@
+//! # View Trait Module - *Standardises Slicing and View Moves in Minarrow*
+//! 
 //! Zero-copy array view abstractions for `MinArrow`.
 //!
 //! This module defines the [`View`] trait, which provides a unified interface

@@ -1,4 +1,4 @@
-//! # SuperTableView Module
+//! # SuperTableView Module - *Chunked, Windowed View over 1:M Tables*
 //!
 //! `SuperTableV` is a **borrowed, zero-copy view** over a row range
 //! `[offset .. offset + len)` from a [`SuperTable`], potentially spanning

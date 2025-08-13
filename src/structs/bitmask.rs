@@ -1,4 +1,4 @@
-//! # Bitmask Module
+//! # Bitmask Module - *Fast Bitpacked Byte Bitmask*
 //!
 //! Arrow-compatible, packed validity/boolean bitmask with 64-byte alignment.
 //!

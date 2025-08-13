@@ -1,4 +1,4 @@
-//! # Scalar Module
+//! # Scalar Module - *Single Value Container*
 //! 
 //! Contains the Scalar type for holding a single value.
 //!

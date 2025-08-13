@@ -1,4 +1,4 @@
-//! # Arrow-C-FFI Module
+//! # Arrow-C-FFI Module - *Share data to another language and/or run-time** 
 //! 
 //! Implements the *Apache Arrow* **C Data Interface** for Minarrow, enabling zero-copy
 //! data exchange across language boundaries.  

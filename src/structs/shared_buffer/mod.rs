@@ -1,4 +1,4 @@
-//! # SharedBuffer Module
+//! # SharedBuffer Internal Module - Backs *Buffer* for ZC MMAP and foreign buffer sharing
 //! 
 //! Zero-copy, reference-counted byte buffer with 64-byte SIMD alignment.
 //! 

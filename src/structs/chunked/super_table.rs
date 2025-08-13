@@ -1,4 +1,4 @@
-//! # SuperTable Module
+//! # SuperTable Module - *Holds multiple Tables for chunked data partitioning, streaming, and/or fast mem+IO*
 //!
 //! SuperTable groups multiple `Table` batches under a shared schema.
 //!

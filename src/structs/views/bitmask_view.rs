@@ -1,4 +1,4 @@
-//! # BitmaskV Module
+//! # BitmaskV Module - *Windowed View over an Bitmask*
 //!
 //! `BitmaskV` is a **logical, zero-copy, read-only window** into a contiguous
 //! region of a [`Bitmask`].

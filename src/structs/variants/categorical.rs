@@ -1,4 +1,4 @@
-//! # CategoricalArray Module
+//! # CategoricalArray Module - *Mid-Level, Inner Typed Categorical Array*
 //!
 //! CategoricalArray uses dictionary-encoded strings where each row stores a
 //! small integer “code” that references a per-column dictionary of unique strings.

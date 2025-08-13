@@ -1,4 +1,4 @@
-//! # NumericArray Module
+//! # NumericArray Module - *High-Level Numerical Array Type for Unified Signature Dispatch*
 //! 
 //! NumericArray unifies all integer and floating-point arrays 
 //! into a single enum for standardised numeric operations.
@@ -19,7 +19,7 @@ use crate::{BooleanArray, StringArray};
 
 /// # NumericArray
 /// 
-/// Unifying numerical array container
+/// Unified numerical array container
 /// 
 /// ## Purpose
 /// Exists to unify numerical operations,

@@ -1,4 +1,4 @@
-//! # Macros — array plumbing & ergonomics
+//! # Macros — *Streamlines repetitive Array implementations to avoid duplication*
 //!
 //! Utilities to remove boilerplate when building Minarrow array types, trait impls,
 //! and enum dispatch. These macros keep array definitions small and consistent.

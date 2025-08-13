@@ -1,4 +1,4 @@
-//! # ArrowDType Module
+//! # ArrowDType Module - *Arrow type tagging for self-documenting data*
 //!
 //! Unified Minarrow representations of supported *Apache Arrow* data types.
 //!

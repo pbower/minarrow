@@ -1,4 +1,4 @@
-//! # NumericArrayView Module
+//! # NumericArrayView Module - *Windowed View over a NumericArray*
 //!
 //! `NumericArrayV` is a **read-only, windowed view** over a [`NumericArray`].
 //! It groups all integer and float variants and exposes a zero-copy slice

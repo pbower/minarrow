@@ -1,4 +1,4 @@
-//! # Error Module
+//! # Error Module - Custom *Minarrow* Error Type
 //! 
 //! Defines the unified error type for Minarrow.
 //! 

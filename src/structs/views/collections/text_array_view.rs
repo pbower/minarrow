@@ -1,4 +1,4 @@
-//! # TextArrayView Module
+//! # TextArrayView Module - *Windowed View over a TextArray*
 //!
 //! `TextArrayV` is a **read-only, zero-copy view** into a `[offset .. offset + len)`
 //! slice of a [`TextArray`].

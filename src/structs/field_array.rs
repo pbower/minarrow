@@ -1,4 +1,4 @@
-//! # FieldArray
+//! # FieldArray Module - *De-Facto *Column* Array type w' Tagged Arrow Metadata*
 //!
 //! Couples a `Field` (array-level schema metadata) with an immutable `Array` of values.
 //!

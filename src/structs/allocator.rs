@@ -1,4 +1,4 @@
-//! # Allocator64 Module
+//! # Allocator64 Module - *Custom 64-Byte Aligned Vec Allocator*
 //! 
 //! 64-byte-aligned allocator for AVX-512 / Arrow buffers.
 //!

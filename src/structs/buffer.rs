@@ -1,3 +1,68 @@
+//! # Buffer — *Unified owned/shared data storage*
+//!
+//! Buffer backs most inner Array types in *Minarrow* (`IntegerArray`, `FloatArray`, `CategoricalArray`, `StringArray`, `DatetimeArray`).
+//! 
+//! # Design
+//! `Buffer<T>` abstracts over two storage backends:
+//! - **Owned**: [`Vec64<T>`] — an internally aligned, 64-byte, heap-allocated vector optimised
+//!   for SIMD kernels.
+//! - **Shared**: [`SharedBuffer`] — a zero-copy, read-only window into externally owned memory
+//!   (e.g. memory-mapped files, network streams).
+//! - Whilst it would be simpler to avoid an extra abstraction *(putting `Vec64` directly in the above types)*,
+//! that would mean data would be copied from those external sources breaking zero-copy guarantees.
+//! Hence, we make it invisible for all common use cases through the implementation of deref, indexing,
+//! and other common traits + fns.
+//!
+//! ## Purpose
+//! - Provide `Vec`-like ergonomics and performance for owned data.
+//! - Allow *in-place* processing of externally sourced buffers without copy overhead,
+//!   subject to alignment constraints.
+//! - Enforce copy-on-write for any mutation of shared data for safety-first.
+//! - It's primarily for internal use, but advanced users may want to use it directly.
+//!
+//! ## Behaviour
+//! - **Read-only ops** (`&[T]` slicing, iteration, parallel reads) operate directly on the
+//!   backing memory regardless of ownership.
+//! - **Mutating ops** (push, splice, clear, etc.) transparently convert shared buffers into
+//!   owned `Vec64<T>` before modifying.
+//! - All owned buffers are guaranteed 64-byte aligned for predictable SIMD performance.
+//! - Shared buffers *may* be 64-byte aligned — if not, they are cloned into an aligned `Vec64<T>`
+//!   on ingestion.
+//!
+//! ## Alignment rules
+//! - `Vec64<T>` is always 64-byte aligned.
+//! - Shared buffers must be validated by the caller for both type and SIMD alignment. The
+//!   `from_shared` and `from_shared_raw` constructors enforce alignment checks and perform
+//!   cloning if needed.
+//! - The Arrow spec allows both 8-byte and 64-byte alignment; Minarrow prefers 64-byte for
+//!   optimal SIMD kernels.
+//!
+//! ## Safety notes
+//! - When using `from_shared_raw`, the pointer must be valid, correctly aligned for `T`,
+//!   and must lie entirely within the lifetime of the provided `Arc<[u8]>`.
+//! - For externally supplied memory, alignment should be ensured at source — *Minarrow*’s
+//!   IO paths (e.g. via *Lightstream-IO*) guarantee it.
+//!
+//! ## Typical use
+//! ```rust
+//! use minarrow::{Buffer, vec64};
+//!
+//! // Owned buffer
+//! let mut b = Buffer::from(vec64![1u32, 2, 3]);
+//! b.push(4);
+//! assert_eq!(b.as_slice(), &[1, 2, 3, 4]);
+//!
+//! // Shared buffer (read-only until mutation)
+//! use std::sync::Arc;
+//! let raw = vec64![10u8, 20, 30];
+//! let arc: Arc<[u8]> = Arc::from(&raw[..]);
+//! let shared = unsafe { Buffer::from_shared_raw(arc.clone(), arc.as_ptr(), arc.len()) };
+//! assert_eq!(shared[1], 20);
+//! ```
+//!
+//! This type is Send + Sync (subject to `T`) and implements most of the `Vec` and slice
+//! interfaces for smooth interoperability.
+
 use std::fmt::{Display, Formatter};
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut, RangeBounds};
