@@ -1,12 +1,13 @@
 [package]
 name = "minarrow"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/pbower/minarrow"
+documentation = "https://docs.rs/minarrow/"
 keywords = [
     "arrow",
     "apache-arrow",
