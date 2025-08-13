@@ -185,6 +185,12 @@ Averaged over 1,000 runs (release).
 | SIMD + Rayon `IntegerArray<i64>`        | 113.874     |
 | SIMD + Rayon `FloatArray<f64>`          | 114.095     |
 
+### Other factors
+Vec<i64> construction (generating + allocating 1000 elements - avg): 87 ns  
+Vec64<i64> construction (avg): 84 ns  
+
+_The construction delta is not included in the benchmark timings above._
+
 ## Ideal Use Cases
 
 | Use Case                              | Description |

@@ -1,3 +1,30 @@
+//! # BitmaskV Module
+//!
+//! `BitmaskV` is a **logical, zero-copy, read-only window** into a contiguous
+//! region of a [`Bitmask`].
+//!
+//! ## Purpose
+//! - **Indexable** and **bounds-checked** access to a subset of a bit-packed mask.
+//! - All logical indices are **relative to the window**.
+//! - Avoids copying — shares the parent mask buffer via `Arc`.
+//!
+//! ## Behaviour
+//! - All operations remap indices internally to the correct positions in the parent mask.
+//! - Window slicing (`slice`) is O(1) — pointer and metadata updates only.
+//! - Arc Clones cheaply.
+//! - Use [`to_bitmask`](BitmaskV::to_bitmask) for a materialised copy of the view.
+//!
+//! ## Threading
+//! - Thread-safe by virtue of immutability — no interior mutability.
+//!
+//! ## Performance Notes
+//! - Before introducing a `BitmaskV`, consider whether simply cloning the [`Bitmask`]
+//!   would be sufficient, since cloning is already extremely cheap.
+//!
+//! ## Related
+//! - [`Bitmask`] — the full mask structure this views into.
+//! - [`BitmaskVT`] — the tuple form returned by [`as_tuple`](BitmaskV::as_tuple).
+
 use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::Index;
 use std::sync::Arc;
@@ -5,14 +32,33 @@ use std::sync::Arc;
 use crate::traits::print::MAX_PREVIEW;
 use crate::{Bitmask, BitmaskVT};
 
-/// Windowed view over a Bitmask.
+/// # BitmaskView
 ///
-/// - All logical indices are relative to the window, not the bitmask.
-/// - Methods automatically remap to the correct region of the parent mask.
-/// - Zero-copy.
-/// - Guarantees that all accesses are in-bounds (relative to the view).
-/// - Cloning bitmasks is already very cheap relative to data buffer calculations
-/// so before using it consider if it's necessary.
+/// Zero-copy, bounds-checked window over a [`Bitmask`].
+///
+/// ## Fields
+/// - `bitmask`: backing [`Bitmask`] (shared via `Arc`).
+/// - `offset`: start bit position in the parent mask.
+/// - `len`: number of bits in the view.
+///
+/// ## Behaviour
+/// - All indexing is **relative** to the view's start.
+/// - All accesses are in-bounds (panics if violated).
+/// - No allocation or buffer copying occurs when creating or slicing views.
+///
+/// ## Example
+/// ```rust
+/// use minarrow::Bitmask;
+/// use minarrow::BitmaskV;
+///
+/// let mask = Bitmask::from_bools(&[true, false, true, true, false]);
+/// let view = BitmaskV::new(mask, 1, 3); // window: false, true, true
+///
+/// assert_eq!(view.len(), 3);
+/// assert!(!view.get(0));
+/// assert!(view.get(1));
+/// assert!(view.get(2));
+/// ```
 #[derive(Clone, PartialEq)]
 pub struct BitmaskV {
     pub bitmask: Arc<Bitmask>,

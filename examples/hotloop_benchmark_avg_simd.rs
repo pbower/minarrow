@@ -15,7 +15,7 @@
 #[cfg(feature = "cast_arrow")]
 use crate::avg_simd::run_benchmark;
 
-pub (crate) const N: usize = 1000;
+pub (crate) const N: usize = 1000000;
 pub (crate) const SIMD_LANES: usize = 4;
 pub (crate) const ITERATIONS: usize = 1000;
 
@@ -571,7 +571,7 @@ fn main() {
         run_benchmark(N, SIMD_LANES);
     } else {
         println!(
-            "The hotloop_benchmark_avg_std example requires enabling the `cast_arrow` feature."
+            "The hotloop_benchmark_avg_simd example requires enabling the `cast_arrow` feature."
         )
     }
 }

@@ -1,3 +1,43 @@
+//! # IntegerArray Module
+//!
+//! Arrow-compatible, SIMD-aligned integer array optimized for analytical workloads.
+//!
+//! ## Overview
+//! - Logical type: fixed-width signed/unsigned integers (`T: Integer`).
+//! - Physical storage: `Buffer<T>` (backed by `Vec64<T>` for 64-byte alignment) plus
+//!   optional bit-packed validity mask (`Bitmask`).
+//! - Usable standalone or as the numeric arm of higher-level enums (`NumericArray`, `Array`).
+//! - Zero-copy friendly and integrates with Arrow FFI.
+//!
+//! ## Features
+//! - **Construction** from slices, `Vec`, or `Vec64`, with optional null mask.
+//! - **Mutation**: push/set, bulk null insertion, resize.
+//! - **Iteration**: safe and (optionally) parallel, via the `MaskedArray` trait surface.
+//! - **Null handling**: Arrow-style bitmask (`1 = valid`, `0 = null`) with length validation.
+//!
+//! ## Usage Tips
+//! Prefer function signatures with `&[T]` or generic `T: Integer` where possible to keep
+//! callsites simple while remaining zero-copy compatible with `IntegerArray`.
+//!
+//! ## Performance Benchmarks
+//! Benchmarks under `examples/hotloop_benchmark_std` compare construction + sum over 1000 elems,
+//! averaged across 1000 runs on a 2024 Intel(R) Core(TM) Ultra 7 155H (22 logical CPUs, 32 GB RAM).
+//!
+//! **Averaged Results (1000 runs, size = 1000)**
+//! - `Vec<i64>` (raw):                        avg = 0.131 µs
+//! - `IntegerArray` (minarrow, direct):       avg = 0.130 µs
+//! - `Int64Array` (arrow-rs, struct):         avg = 0.327 µs
+//! - `IntegerArray` (minarrow, enum):         avg = 2.494 µs
+//! - `Int64Array` (arrow-rs, dynamic trait):  avg = 3.283 µs
+//!
+//! **Build note:** use `--release` for representative numbers; debug builds distort results.
+//!
+//! **Takeaways**
+//! - Direct `IntegerArray` matches raw `Vec<i64>` while adding SIMD alignment + Arrow interop.
+//! - Enum dispatch adds modest overhead but remains faster than dynamic dispatch (arrow-rs).
+//! - For (extreme) latency-sensitive paths, prefer direct `IntegerArray`; otherwise differences are minor
+//!   vs. real compute/system overhead.
+
 use std::fmt::{Display, Formatter};
 
 use crate::structs::vec64::Vec64;
@@ -8,65 +48,43 @@ use crate::{
     impl_from_vec_primitive, impl_masked_array, impl_numeric_array_constructors
 };
 
-/// Arrow-compatible Integer array with 64-byte SIMD alignment.
+/// # IntegerArray
 ///
-/// This array can be used as a standalone numeric buffer or as part of the broader
-/// `NumericArray` and/or `Array` abstractions.
+/// Arrow-compatible, 64-byte aligned integer array with optional null mask.
 ///
-/// ### Features
-/// - A null mask for marking missing values.
-/// - A backing data buffer, typically wrapping `Vec64` with the `Alloc64` allocator,
-///   storing native Rust integer types. `Buffer` implements `Deref`, allowing
-///   seamless use similar to standard `Vec`.
+/// ## Role
+/// - Many will prefer the higher level `Array` type, which dispatches to this when
+/// necessary. 
+/// - Can be used as a standalone array or as the numeric arm of `NumericArray` / `Array`.
+/// 
+/// ## Description
+/// - Stores fixed-width integer values in a contiguous `Buffer<T>` (`Vec64<T>` under the hood).
+/// - Optional Arrow-style validity bitmap (`1 = valid`, `0 = null`) via `Bitmask`.
+/// - Implements [`MaskedArray`] for consistent nullable array behavior and interop with
+///   higher-level containers/enums.
+/// - Can be used as a standalone numeric buffer or as the numeric arm of `NumericArray` / `Array`.
 ///
 /// ### Fields
-/// - `data`: Backing buffer containing integer values.
-/// - `null_mask`: Optional bit-packed validity bitmap (1 = valid, 0 = null).
+/// - `data`: backing buffer of integer values (`Buffer<T>`).
+/// - `null_mask`: optional bit-packed validity bitmap.
 ///
-/// ### Null Mask Handling
-/// Nullability can be represented using a bit-packed mask. Alternatively, for integer
-/// types where there is no `NaN`, the mask should be used when nullable semantics are required.
-/// This follows the `Apache Arrow` framework for representing nulls.
+/// ## Example
+/// ```rust
+/// use minarrow::{IntegerArray, MaskedArray};
 ///
-/// ### Usage Tips
-/// For performance and compatibility, prefer defining functions over generic slices,
-/// such as `&[i64]` or `&[T]`, where `T` implements integer-related traits from
-/// [`crate::traits::type_unions`]. This enables:
-/// - Compatibility with this library’s internal types
-/// - Seamless interop with enum representations
-/// - Zero-copy access from standard `Vec` and slice types
+/// // Dense, no nulls
+/// let arr = IntegerArray::<i64>::from_slice(&[1, 2, 3, 4]);
+/// assert_eq!(arr.len(), 4);
+/// assert_eq!(arr.get(2), Some(3));
 ///
-/// While this approach may reduce ergonomics when exposing types to external consumers,
-/// it enables fast, type-safe access patterns suited for numeric computing pipelines.
-///
-/// ### Performance Benchmarks
-/// Benchmarks under `examples/hotloop_benchmark_std` compare construction and summation
-/// performance across different array representations. Results are from 1000 independent
-/// runs on a 2024 Intel(R) Core(TM) Ultra 7 155H (22 logical CPUs, x86_64, 2 threads per core, 32 GB RAM).
-///
-/// Each benchmark measures time from buffer construction to summing 1000 integer values.
-///
-/// **Note**: Always run with `--release` mode enabled for representative performance. Debug
-/// builds distort performance characteristics, particularly for trait-based systems like `arrow-rs`.
-///
-/// #### Averaged Results (1000 runs, size = 1000)
-/// - `Vec<i64>` (raw):                          avg = 0.131 µs
-/// - `IntegerArray` (minarrow, direct):        avg = 0.130 µs
-/// - `Int64Array` (arrow-rs, struct):          avg = 0.327 µs
-/// - `IntegerArray` (minarrow, enum):          avg = 2.494 µs
-/// - `Int64Array` (arrow-rs, dynamic trait):   avg = 3.283 µs
-///
-/// ### Key Takeaways
-/// - `IntegerArray` (direct usage) matches the raw `Vec<i64>` performance, while providing
-///   SIMD-aligned memory and Arrow-compatible metadata.
-/// - The `minarrow` representation outperforms `arrow-rs`, largely due to avoiding
-///   trait-based dispatch and internal indirection via `ArrayData`.
-/// - Enum-based dispatch incurs moderate overhead but still outperforms dynamic dispatch
-///   used by `arrow-rs`.
-/// - For real-time or latency-sensitive systems, prefer direct usage of `IntegerArray`.
-/// - For general-purpose applications, performance differences are negligible compared
-///   to the cost of actual computations and system-level overhead.
-#[repr(C, align(64))]
+/// // With nulls
+/// let mut arr = IntegerArray::<i32>::with_capacity(3, true);
+/// arr.push(10);
+/// arr.push_null();
+/// arr.push(30);
+/// assert_eq!(arr.get(1), None);
+/// assert_eq!(arr.null_count(), 1);
+/// ```
 #[derive(PartialEq, Clone, Debug, Default)]
 pub struct IntegerArray<T> {
     /// Backing buffer for values (Arrow-compatible).

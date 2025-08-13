@@ -1,3 +1,21 @@
+//! # Value Module
+//!
+//! Contains the `Value` enum, a unified container for any Minarrow-supported data structure.
+//!  
+//! ## Description
+//! -Encapsulates scalars, arrays, tables, views, chunked collections, bitmasks, fields,
+//! matrices, cubes, nested values, and custom user-defined types.  
+//!  
+//! ## Purpose
+//! Used to create a global type universe for function signatures and dispatch, enabling
+//! constructs like `Result<Value, MinarrowError>` without restricting the contained type.  
+//!  
+//! ## Supports:
+//! - recursive containers (boxed, arced, tuples, vectors)
+//! - `From`/`TryFrom` conversions for safe extraction
+//! - equality comparison across all variants, including custom values
+//! - custom extension types if needed
+
 #[cfg(feature = "cube")]
 use crate::Cube;
 #[cfg(feature = "matrix")]
@@ -26,9 +44,12 @@ use crate::{ArrayV, TableV, BitmaskV};
 
 #[cfg(all(feature = "chunked", feature="views"))]
 use crate::{SuperArrayV, SuperTableV};
+
+/// # Value
+/// 
 /// Unified value enum representing any supported data structure.
 ///
-/// # Details
+/// ## Details
 /// - Wraps scalar values, arrays, array windows, full tables, or table windows
 /// under a single type for function signatures and downstream dispatch.
 /// - This can be useful when you need a global *type universe*.
@@ -37,7 +58,7 @@ use crate::{SuperArrayV, SuperTableV};
 /// For example, to return `Result<Value, Error>`, particularly in engine contexts.
 /// - It's enabled optionally via the `value_type` feature.
 ///
-/// # Usage
+/// ## Usage
 /// You can also use it to hold a custom type under the `Custom` entry.
 /// As long as the object implements `Debug`, `Clone`, and `PartialEq`,
 /// remains `Send + Sync`, and implements `Any` it can be stored in `Value::Custom`.

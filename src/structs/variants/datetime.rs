@@ -1,3 +1,39 @@
+//! # DatetimeArray Module
+//!
+//! Arrow-compatible datetime/timestamp array implementation with optional null-mask,
+//! 64-byte alignment, and efficient memory layout for analytical workloads.
+//!
+//! ## Overview
+//! - Logical type: temporal values with a defined [`TimeUnit`] (seconds, milliseconds,
+//!   microseconds, nanoseconds, days).
+//! - Physical storage: numeric buffer (`Buffer<T>`) representing raw time offsets from
+//!   the UNIX epoch or a base date, plus an optional bit-packed validity mask.
+//! - Single generic type supports all Arrow datetime/timestamp variants via `Field`
+//!   metadata, avoiding multiple specialised array structs.
+//! - Integrates with Arrow FFI for zero-copy interop.
+//!
+//! ## Features
+//! - **Construction** from slices, `Vec64` or plain `Vec` buffers, with optional null mask.
+//! - **Mutation**: push, set, and bulk null insertion.
+//! - **Iteration**: sequential and parallel (with `parallel_proc` feature).
+//! - **Null handling**: optional validity mask with length validation.
+//! - **Conversion**: when `chrono` feature is enabled, convert to native date/time
+//!   values or `(year, month, day, hour, minute, second, millisecond, nanosecond)` tuples.
+//!
+//! ## Use Cases
+//! - High-performance temporal analytics.
+//! - FFI-based interchange with Apache Arrow or other columnar systems.
+//! - Streaming or batch ingestion with incremental append.
+//!
+//! ## Performance Notes
+//! - Prefer bulk pushes and slice construction over repeated single inserts.
+//! - Parallel iteration is available with the `parallel_proc` feature.
+//!
+//! ## Related Types
+//! - [`TimeUnit`]: enumerates supported time granularities.
+//! - [`Bitmask`]: underlying null-mask storage.
+//! - [`MaskedArray`]: trait defining the nullable array API.
+
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[cfg(feature = "datetime")]
@@ -12,24 +48,48 @@ use crate::{
     Bitmask, Length, Offset, impl_arc_masked_array, impl_array_ref_deref, impl_masked_array
 };
 
-/// Arrow-compatible datetime/timestamp array with 64-byte alignment.
+/// # DatetimeArray
 ///
-/// Consolidates multiple datetime types defined in the *Apache Arrow* standard into a
-/// single structure. While this struct on its own doesn't map 1:1 to *Arrow*'s
-/// distinct type definitions, it maps back to them when accompanied with a `Field`,
-/// which supports the logical `ArrowType`.
+/// Arrow-compatible datetime/timestamp array with 64-byte alignment and optional null mask.
 ///
-/// Additionally, it helps keep the API-surface minimal, providing essential ergonomics within this crate by:
+/// ## Role
+/// - Many will prefer the higher level `Array` type, which dispatches to this when
+/// necessary. 
+/// - Can be used as a standalone datetime array or as the datetime arm of `TemporalArray` / `Array`.
+/// 
+/// ## Description
+/// - Stores temporal values as numeric offsets (`T: Integer`) from the UNIX epoch or a base date,
+///   with units defined by [`TimeUnit`].
+/// - A single struct supports all Arrow datetime/timestamp variants, with the exact logical
+///   type determined by an associated `Field`’s `ArrowType`.
+/// - `null_mask` is an optional bit-packed validity bitmap (`1 = valid`, `0 = null`).
+/// - Implements [`MaskedArray`] for consistent nullable array behaviour.
+/// - When `chrono` is enabled, provides conversion to native date/time representations.
 ///
-/// - Avoiding exhaustive match arms for every semantic datetime variant.
-/// - Keeping matches atomic on each unique numeric `T`, avoiding duplicate logic across type aliases.
+/// ### Fields
+/// - `data`: backing buffer storing raw temporal values.
+/// - `null_mask`: optional bit-packed validity bitmap.
+/// - `time_unit`: time units associated with the stored values.
 ///
-/// When sending over FFI, it interprets as the correct Arrow data type.
+/// ## Example
+/// ```rust
+/// use minarrow::{Bitmask, DatetimeArray, vec64};
+/// use minarrow::enums::time_units::TimeUnit;
 ///
-/// ### Fields:
-/// - `data`: backing buffer storing time values (e.g. milliseconds since epoch).
-/// - `null_mask`: optional bit-packed validity bitmap (1=valid, 0=null).
-/// - `time_unit`: time units associated with the datatype.
+/// // Milliseconds since epoch, no nulls
+/// let arr = DatetimeArray::<i64>::from_slice(&[1_700_000_000_000, 1_700_000_100_000], Some(TimeUnit::Milliseconds));
+/// assert_eq!(arr.len(), 2);
+/// assert_eq!(arr.value(0), Some(1_700_000_000_000));
+///
+/// // With nulls
+/// let mask = Bitmask::from_bools(&[true, false, true]);
+/// let arr_with_nulls = DatetimeArray::new(
+///     vec64![1000_i64, 2000, 3000],
+///     Some(mask),
+///     Some(TimeUnit::Milliseconds)
+/// );
+/// assert_eq!(arr_with_nulls.value(1), None);
+/// ```
 #[cfg(feature = "datetime")]
 #[repr(C, align(64))]
 #[derive(PartialEq, Clone, Debug, Default)]

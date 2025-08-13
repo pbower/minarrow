@@ -1,3 +1,13 @@
+//! # SuperArray Module
+//!
+//! Contains SuperArray, a higher-order container representing a logical column split into multiple immutable `FieldArray` chunks.
+//!
+//! ## Overview
+//! - Equivalent to Apache Arrow's `ChunkedArray`.
+//! - Stores an ordered list of `FieldArray` segments, each with identical field metadata.
+//! - Chunk lengths may vary.
+//! - A solid fit for append-only patterns, partitioned storage, and streaming data ingestion.
+
 use std::fmt::{Display, Formatter};
 use std::iter::FromIterator;
 #[cfg(feature = "views")]
@@ -19,26 +29,32 @@ use crate::{
 #[cfg(feature = "datetime")]
 use crate::{DatetimeArray, TemporalArray};
 
-/// Logical column chunked into multiple immutable `FieldArray` segments.
-///
-/// - Stored as a sequence of `FieldArray` chunks,
-/// enabling efficient partitioned or append-only storage.
-/// - It is the `Minarrow` equivalent to a `ChunkedArray` in `Apache Arrow.
-/// - Chunk lengths may vary without issue.
-/// - Useful for appendable-chunk streams and building partition-backed engines.
-///
-/// ### Fields:
-/// - `arrays`: the sequence of `FieldArray` segments comprising the column.
+/// # SuperArray
 /// 
-/// # Naming Rationale
-/// Apache Arrow's "ChunkedArray" represents a single logical column split across multiple array chunks.
-/// `SuperArray` follows the same pattern as `SuperTable`, indicating this is a collection
-/// of separate array segments rather than a single contiguous array. The "Super" prefix maintains
-/// naming consistency and clearly distinguishes it as a higher-order container of multiple arrays.
+/// Higher-order container for multiple immutable `FieldArray` segments.
+///
+/// ## Description
+/// - Stores an ordered sequence of `FieldArray` chunks, each with identical field metadata.
+/// - Equivalent to Apache Arrow’s `ChunkedArray` when sent over FFI, where it is treated
+///   as a single logical column.
+/// - It can also serve as an unbounded or continuously growing
+///   collection of segments, making it useful for streaming ingestion and partitioned storage.
+/// - Chunk lengths may vary without restriction.
+///
+/// ## Example
+/// ```ignore
+/// // Create from multiple chunks with matching metadata
+/// let sa = SuperArray::from_chunks(vec![fa("col", &[1, 2], 0), fa("col", &[3], 0)]);
+///
+/// assert_eq!(sa.len(), 3);         // total rows across chunks
+/// assert_eq!(sa.n_chunks(), 2);    // number of chunks
+/// assert_eq!(sa.field().name, "col");
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct SuperArray {
     arrays: Vec<FieldArray>
 }
+
 
 impl SuperArray {
     // Constructors

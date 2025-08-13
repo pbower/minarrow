@@ -1,3 +1,34 @@
+//! # NumericArrayView Module
+//!
+//! `NumericArrayV` is a **read-only, windowed view** over a [`NumericArray`].
+//! It groups all integer and float variants and exposes a zero-copy slice
+//! `[offset .. offset + len)` for fast, indexable access.
+//!
+//! ## Role
+//! - Lets APIs accept either a full `NumericArray` or a pre-sliced view.
+//! - Avoids deep copies while enabling per-window operations and previews.
+//! - Can cache per-window null counts to speed up repeated scans.
+//!
+//! ## Behaviour
+//! - Works across numeric variants (ints + floats) behind `NumericArray`.
+//! - Provides convenience accessors like [`get_f64`](NumericArrayV::get_f64) that
+//!   upcast to `f64` for uniform downstream handling.
+//! - Slicing returns another borrowed view; data buffers are not cloned.
+//!
+//! ## Threading
+//! - Not thread-safe: uses `Cell` to cache the window’s null count.
+//! - For parallel use, create per-thread views via [`slice`](NumericArrayV::slice).
+//!
+//! ## Interop
+//! - Convert to an owned `NumericArray` of the window via
+//!   [`to_numeric_array`](NumericArrayV::to_numeric_array).
+//! - Lift to `Array` with [`as_array`](NumericArrayV::as_array) when you need
+//!   enum-level APIs.
+//!
+//! ## Invariants
+//! - `offset + len <= array.len()`
+//! - `len` is the logical row count of this view.
+
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
 
@@ -5,26 +36,29 @@ use crate::structs::views::bitmask_view::BitmaskV;
 use crate::traits::print::MAX_PREVIEW;
 use crate::{Array, ArrayV, FieldArray, MaskedArray, NumericArray};
 
-/// Read-only, windowed view over a `NumericArray`.
+/// # NumericArrayView
 ///
-/// ### Purpose
-/// This is used to return an indexable view over a subset of the array.
-/// Additionally, it can be used to cache null counts for those regions,
-/// which can be used to speed up calculations.
+/// Read-only, zero-copy view over a `[offset .. offset + len)` window of a
+/// [`NumericArray`].
 ///
-/// ### Behaviour
-/// - Groups all integer and float variants.
-/// - Provides windowed access to numeric data without deep copying.
-/// - Simplifies function signatures when operations are specific to numeric arrays.
+/// ## Purpose
+/// - Return an indexable subrange without cloning buffers.
+/// - Optionally cache per-window null counts for faster repeated passes.
 ///
-/// ### Usage
-/// Enables APIs to accept both full arrays and windowed views.
-/// For example, a function taking `Into<NumericArrayView>` can support:
-/// - A full `NumericArray`, treated as offset `0` and length `self.len()`.
-/// - A `NumericArrayView` representing a subrange of the array.
+/// ## Behaviour
+/// - Groups integer and float variants under one enum.
+/// - Upcasts via [`get_f64`](Self::get_f64) for uniform handling.
+/// - Further slicing yields another borrowed view.
 ///
-/// This struct is not thread-safe due to its use of `Cell` for caching the null count.
-/// For multi-threaded use, create separate arc-clone views per thread using `slice`.
+/// ## Fields
+/// - `array`: backing [`NumericArray`] (enum over numeric types).
+/// - `offset`: starting index into the backing array.
+/// - `len`: logical number of elements in the view.
+/// - `null_count`: cached `Option<usize>` for this window (internal).
+///
+/// ## Notes
+/// - Not thread-safe due to `Cell`. Create per-thread views with [`slice`](Self::slice).
+/// - Use [`to_numeric_array`](Self::to_numeric_array) to materialise the window.
 #[derive(Clone, PartialEq)]
 pub struct NumericArrayV {
     pub array: NumericArray,

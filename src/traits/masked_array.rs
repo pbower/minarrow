@@ -1,8 +1,15 @@
-//! Core `MaskedArray` trait, providing a common interface for all base array types,
-//! including support for null masks.
+//! # MaskedArray Module
+//! 
+//! Defines the `MaskedArray` trait — the common interface for all nullable array types in Minarrow.
+//!
+//! This module standardises how arrays store and manage optional null bitmasks,
+//! ensuring consistent null-handling behaviour across fixed-width and variable-length arrays.
+//! It also provides default implementations for common mask operations to reduce duplication.
 
 use crate::{Bitmask, Length, Offset};
 
+/// # MaskedArray
+/// 
 /// MaskedArray is implemented by all inner, nullable arrays.
 /// 
 /// ### Purpose

@@ -1,10 +1,33 @@
-// ### Copyright notice
-// - The `Minarrow` crate is not affiliated with the `Apache Arrow` project.
-// - The term `Apache Arrow` is a trademark of the *Apache Software Foundation*.
-// - The term `Arrow` is used here under fair use to implement the public FFI compatibility standard,
-// in accordance with the official guidance: https://www.apache.org/foundation/marks/
-//
-// See ./LICENSE for more info 
+//! # ArrowDType Module
+//!
+//! Unified Minarrow representations of supported *Apache Arrow* data types.
+//!
+//! ## Overview
+//! - Covers integer, floating-point, boolean, string, dictionary-encoded, and optional temporal types  
+//!   (date, time, duration, timestamp, interval).
+//! - Each Minarrow array type implements `arrow_type()` to return its matching `ArrowType`.
+//! - Enables consistent Arrow FFI compatibility without requiring the full Arrow type system.
+//!
+//! ## CategoricalIndexType
+//! - Specifies the integer size of dictionary keys for categorical arrays.
+//! - Supports multiple unsigned integer widths depending on feature flags.
+//!
+//! ## Display
+//! - Human-readable type names are produced for all variants.
+//! - Temporal types include their units in the rendered output.
+//!
+//! ## Interoperability
+//! - Implements a focused subset of the public Arrow specification.
+//! - Maintains compatibility while keeping Minarrow minimal.
+//!
+//! ## Copyright Notice
+//! - The `Minarrow` crate is not affiliated with the `Apache Arrow` project.
+//! - The term `Apache Arrow` is a trademark of the *Apache Software Foundation*.
+//! - The term `Arrow` is used here under fair use to implement the public FFI compatibility standard,  
+//!   in accordance with the official guidance: <https://www.apache.org/foundation/marks/>.
+//!
+//! See `./LICENSE` for more information.
+
 use std::any::TypeId;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -17,10 +40,32 @@ use crate::{
     StringArray
 };
 
-/// Unifies supported `Arrow` types.
-/// Supports Arrow C-FFI compatibility, and
-/// contains a focused subset of the official Arrow specification located here:
-/// https://arrow.apache.org/docs/python/api/datatypes.html
+/// # ArrowType
+///
+/// Unified representation of supported *Apache Arrow* data types in Minarrow.
+///
+/// ## Purpose
+/// - Encodes the physical type and, for temporal variants, associated unit information for all supported Minarrow arrays.
+/// - Provides a single discriminant used across the crate for schema definitions, type matching, and Arrow FFI export.
+/// - Implements a focused subset of the official Arrow type specification:  
+///   <https://arrow.apache.org/docs/python/api/datatypes.html>.
+///
+/// ## Coverage
+/// - **Core primitives**: integer, floating-point, boolean.
+/// - **Strings**: UTF-8 (`String`) and optionally large UTF-8 (`LargeString`).
+/// - **Dictionary-encoded strings**: via `Dictionary(CategoricalIndexType)`.
+/// - **Optional temporal types**: `date`, `time`, `duration`, `timestamp`, and `interval` with explicit units.
+/// - **`Null`**: placeholder or metadata-only fields.
+///
+/// ## Interoperability
+/// - Directly compatible with the Apache Arrow C Data Interface type descriptors.
+/// - Preserves type and temporal unit information when arrays are transmitted over FFI.
+/// - Simplifies Minarrow’s type system *(e.g., one `DatetimeArray` type)* while tagging `ArrowType` on `Field` for ecosystem compatibility. 
+///
+/// ## Notes
+/// - For `DatetimeArray` types, `ArrowType` reflects only the physical encoding.  
+///   Logical distinctions (e.g., interpreting a `Date64` as a timestamp vs. a duration) are stored in `Field` metadata.
+/// - Dictionary key widths are defined by the associated `CategoricalIndexType`.
 #[derive(PartialEq, Clone, Debug)]
 pub enum ArrowType {
     Null,
@@ -64,6 +109,23 @@ pub enum ArrowType {
     // on top of the base string collection.
     Dictionary(CategoricalIndexType)
 }
+
+/// # CategoricalIndexType
+///
+/// Specifies the unsigned integer width used for dictionary keys in categorical arrays.
+///
+/// ## Overview
+/// - Determines the storage size of the key column that indexes into the categorical dictionary.
+/// - Smaller widths reduce memory footprint for low-cardinality data.
+/// - Larger widths enable more distinct categories without overflow.
+/// - Variant availability depends on feature flags:
+///   - `UInt8` and `UInt16` require both `extended_categorical` and `extended_numeric_types`.
+///   - `UInt64` requires `extended_categorical`.
+///   - `UInt32` is always available.
+///
+/// ## Interoperability
+/// - Maps directly to the integer index type in Apache Arrow's `DictionaryType`.
+/// - Preserved when sending categorical arrays over the Arrow C Data Interface.
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum CategoricalIndexType {

@@ -1,3 +1,47 @@
+//! # TableV Module
+//!
+//! `TableV` is a **row-aligned, zero-copy view** over a `Table`, holding the
+//! window `[offset .. offset+len)` across all columns.
+//!
+//! ## Purpose
+//! - Stream or batch rows without copying full columns.
+//! - Do per-partition / per-window work with stable schema metadata (`Field`s).
+//! - Glue for chunked processing alongside `SuperTableV` and `ArrayV`, but focused
+//! on windowed zero-copy access within a single Table batch.
+//!
+//! ## Behaviour
+//! - Columns are exposed as `ArrayV` windows with the same `(offset, len)`.
+//! - Schema (`Field`s) is retained and shared; column data is not copied.
+//! - Slicing a `TableV` (`from_self`) is O(1) — metadata-only.
+//! - `to_table()` materialises an owned `Table` copy of the window.
+//!
+//! ## When to use
+//! - Sliding windows, micro-batching, streaming sinks/sources.
+//! - Thread-local views where each worker consumes a row range.
+//! - Building higher-level chunked tables (`SuperTableV`) from base tables.
+//!
+//! ## Example
+//! ```rust
+//! # use minarrow::{Table, TableV, Array, IntegerArray, FieldArray};
+//! # use std::sync::Arc;
+//! // Build a simple 2-column table
+//! let a = FieldArray::from_inner("a", Array::from_int32(IntegerArray::<i32>::from_slice(&[1,2,3,4,5])));
+//! let b = FieldArray::from_inner("b", Array::from_int32(IntegerArray::<i32>::from_slice(&[10,20,30,40,50])));
+//! let mut tbl = Table::new("T".to_string(), vec![a,b].into());
+//!
+//! // View rows 1..4 (3 rows total)
+//! let tv = TableV::from_table(tbl, 1, 3);
+//! assert_eq!(tv.n_rows(), 3);
+//! assert_eq!(tv.n_cols(), 2);
+//! // Access a column window
+//! let col0 = tv.col(0).unwrap();
+//! assert_eq!(col0.get::<minarrow::IntegerArray<i32>>(0), Some(2));
+//!
+//! // Materialise the window as an owned Table copy
+//! let owned = tv.to_table();
+//! assert_eq!(owned.n_rows, 3);
+//! ```
+
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -6,16 +50,22 @@ use crate::ArrayV;
 use crate::traits::print::MAX_PREVIEW;
 use crate::{Field, FieldArray, Table};
 
-/// Row-aligned view into a `Table` over `[offset..offset+len)`.
+/// # TableView
 ///
-/// Provides a view over a range of rows in a `Table`, retaining the column schema,
-/// ownership of metadata, and arc copy references to the underlying column data.
+/// Row-aligned view into a `Table` over `[offset .. offset+len)`.
 ///
-/// Facilitates semantic windowing, streaming, thread-local processing or any other
-/// use cases where zero-copy access to a subset of a table is required, including
-/// on a transient-basis.
+/// ## Fields
+/// - `name`: table name - propagated from the parent `Table`.
+/// - `fields`: shared schema - `Arc<Field>` per column.
+/// - `cols`: column windows as `ArrayV`, all with the same `(offset, len)`.
+/// - `offset`: starting row, relative to parent table.
+/// - `len`: number of rows in the window.
 ///
-/// Each column is accessed as an `ArrayView`.
+/// ## Notes
+/// - Construction from a `Table`/`Arc<Table>` is zero-copy for column data.
+/// - Use `from_self` to take sub-windows cheaply.
+/// - Use `to_table()` to materialise an owned copy of just this window.
+/// - Column helpers (`col`, `col_by_name`, `col_window`) provide ergonomic access.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableV {
     /// Table name

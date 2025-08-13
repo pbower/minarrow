@@ -1,3 +1,25 @@
+//! # CategoricalArray Module
+//!
+//! CategoricalArray uses dictionary-encoded strings where each row stores a
+//! small integer “code” that references a per-column dictionary of unique strings.
+//! This saves memory and accelerates comparisons/joins when many values repeat.
+//!
+//! ## Interop
+//! - Arrow-compatible dictionary layout (`indices` + string `dictionary`), and
+//!   round-trips over the Arrow C Data Interface to/from the `Dictionary` array type.
+//! - Index width is the generic `T` (e.g., `u8/u16/u32/u64`) and corresponds to
+//!   Arrow’s `CategoricalIndexType`.
+//!
+//! ## Features
+//! - Optional `null_mask`: bit-packed, where `1 = valid`, `0 = null`
+//! - Builders from raw values (`from_values`, `from_vec64`) and from raw parts.
+//! - Iterators over indices and over resolved strings (nullable and non-nullable).
+//! - Convert to a dense `StringArray` via `to_string_array()` when needed.
+//! - Parallel helpers behind `parallel_proc` feature.
+//!
+//! ## When to use
+//! Use for arrays with repeated strings to reduce memory and speed up operations.
+
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::slice::{Iter, IterMut};
@@ -12,24 +34,53 @@ use crate::traits::type_unions::Integer;
 use crate::utils::validate_null_mask_len;
 use crate::{
     Bitmask, Buffer, Length, MaskedArray, Offset, StringArray, impl_arc_masked_array,
-    impl_array_ref_deref
+    impl_array_ref_deref,
 };
 
+/// # CategoricalArray
+///
 /// Categorical array with unique string instances mapped to indices.
 ///
+/// ## Role
+/// - Many will prefer the higher level `Array` type, which dispatches to this when
+/// necessary.
+/// - Can be used as a standalone text array or as the text arm of `TextArray` / `Array`.
+///
+/// ## Description
 /// Compatible with the `Arrow Dictionary` memory layout, where each value is
 /// represented as an index into a dictionary of unique strings, and materialises
 /// into the format over FFI.
-///
-/// Consider this when you have a common set of unique string values, and want to
-/// save space and increase speed by storing the string values only once
-/// *(in the `unique_values` Vec)*, and then only the integers that map to them
-/// in the `data` field.
 ///
 /// ### Fields:
 /// - `data`: indices buffer referencing entries in `unique_values`.
 /// - `unique_values`: dictionary of unique string values.
 /// - `null_mask`: optional bit-packed validity bitmap (1=valid, 0=null).
+///
+/// ## Purpose
+/// Consider this when you have a common set of unique string values, and want to
+/// save space and increase speed by storing the string values only once
+/// *(in the `unique_values` Vec)*, and then only the integers that map to them
+/// in the `data` field.
+///
+/// ## Example
+/// ```rust
+/// use minarrow::{CategoricalArray, MaskedArray};
+///
+/// let arr = CategoricalArray::<u8>::from_values(vec!["apple", "banana", "apple", "cherry"]);
+/// assert_eq!(arr.len(), 4);
+///
+/// // Indices into the unique_values dictionary
+/// assert_eq!(arr.indices(), &[0u8, 1, 0, 2]);
+///
+/// // Dictionary of unique values
+/// assert_eq!(arr.values(), &["apple".to_string(), "banana".to_string(), "cherry".to_string()]);
+///
+/// // Resolved value lookups
+/// assert_eq!(arr.get_str(0), Some("apple"));
+/// assert_eq!(arr.get_str(1), Some("banana"));
+/// assert_eq!(arr.get_str(2), Some("apple"));
+/// assert_eq!(arr.get_str(3), Some("cherry"));
+/// ```
 #[repr(C, align(64))]
 #[derive(PartialEq, Clone, Debug, Default)]
 pub struct CategoricalArray<T: Integer> {
@@ -38,7 +89,7 @@ pub struct CategoricalArray<T: Integer> {
     /// Dictionary values (unique values, i.e., Vec64<String>).
     pub unique_values: Vec64<String>,
     /// Optional null mask (bit-packed; 1=valid, 0=null).
-    pub null_mask: Option<Bitmask>
+    pub null_mask: Option<Bitmask>,
 }
 
 impl<T: Integer> CategoricalArray<T> {
@@ -47,7 +98,7 @@ impl<T: Integer> CategoricalArray<T> {
     pub fn new(
         data: impl Into<Buffer<T>>,
         unique_values: Vec64<String>,
-        null_mask: Option<Bitmask>
+        null_mask: Option<Bitmask>,
     ) -> Self {
         let data: Buffer<T> = data.into();
 
@@ -65,7 +116,11 @@ impl<T: Integer> CategoricalArray<T> {
             );
         }
 
-        Self { data: data, unique_values, null_mask }
+        Self {
+            data: data,
+            unique_values,
+            null_mask,
+        }
     }
 
     /// Build a categorical column from raw string values, auto-deriving the dictionary.
@@ -106,7 +161,7 @@ impl<T: Integer> CategoricalArray<T> {
         Self {
             data: codes.into(),
             unique_values,
-            null_mask
+            null_mask,
         }
     }
 
@@ -121,12 +176,12 @@ impl<T: Integer> CategoricalArray<T> {
     pub fn new_unchecked(
         data: Vec64<T>,
         unique_values: Vec64<String>,
-        null_mask: Option<Bitmask>
+        null_mask: Option<Bitmask>,
     ) -> Self {
         Self {
             data: data.into(),
             unique_values,
-            null_mask
+            null_mask,
         }
     }
 
@@ -143,7 +198,7 @@ impl<T: Integer> CategoricalArray<T> {
         Self {
             data: Vec64(indices.to_vec_in(Alloc64)).into(),
             unique_values: Vec64(unique_values.to_vec_in(Alloc64)).into(),
-            null_mask: None
+            null_mask: None,
         }
     }
 
@@ -295,7 +350,11 @@ impl<T: Integer> CategoricalArray<T> {
     #[inline]
     pub fn iter_str(&self) -> impl Iterator<Item = &str> + '_ {
         self.data.iter().enumerate().map(move |(idx, &dict_idx)| {
-            if self.is_null(idx) { "" } else { &self.unique_values[dict_idx.to_usize()] }
+            if self.is_null(idx) {
+                ""
+            } else {
+                &self.unique_values[dict_idx.to_usize()]
+            }
         })
     }
 
@@ -308,7 +367,7 @@ impl<T: Integer> CategoricalArray<T> {
             } else {
                 Some(unsafe {
                     std::mem::transmute::<&str, &'static str>(
-                        &self.unique_values[dict_idx.to_usize()]
+                        &self.unique_values[dict_idx.to_usize()],
                     )
                 })
             }
@@ -318,10 +377,17 @@ impl<T: Integer> CategoricalArray<T> {
     /// Returns an iterator of `&str` values (nulls yield `""`) for a specified range.
     #[inline]
     pub fn iter_str_range(&self, offset: usize, len: usize) -> impl Iterator<Item = &str> + '_ {
-        self.data[offset..offset + len].iter().enumerate().map(move |(i, &dict_idx)| {
-            let idx = offset + i;
-            if self.is_null(idx) { "" } else { &self.unique_values[dict_idx.to_usize()] }
-        })
+        self.data[offset..offset + len]
+            .iter()
+            .enumerate()
+            .map(move |(i, &dict_idx)| {
+                let idx = offset + i;
+                if self.is_null(idx) {
+                    ""
+                } else {
+                    &self.unique_values[dict_idx.to_usize()]
+                }
+            })
     }
 
     /// Returns an iterator of `Option<&str>` values for a specified range.
@@ -329,20 +395,23 @@ impl<T: Integer> CategoricalArray<T> {
     pub fn iter_str_opt_range(
         &self,
         offset: usize,
-        len: usize
+        len: usize,
     ) -> impl Iterator<Item = Option<&str>> + '_ {
-        self.data[offset..offset + len].iter().enumerate().map(move |(i, &dict_idx)| {
-            let idx = offset + i;
-            if self.is_null(idx) {
-                None
-            } else {
-                Some(unsafe {
-                    std::mem::transmute::<&str, &'static str>(
-                        &self.unique_values[dict_idx.to_usize()]
-                    )
-                })
-            }
-        })
+        self.data[offset..offset + len]
+            .iter()
+            .enumerate()
+            .map(move |(i, &dict_idx)| {
+                let idx = offset + i;
+                if self.is_null(idx) {
+                    None
+                } else {
+                    Some(unsafe {
+                        std::mem::transmute::<&str, &'static str>(
+                            &self.unique_values[dict_idx.to_usize()],
+                        )
+                    })
+                }
+            })
     }
 
     /// Build from an iterator of &str in one pass.
@@ -364,7 +433,7 @@ impl<T: Integer> CategoricalArray<T> {
         Self {
             data: idx_buf.into(),
             unique_values: dict.into(),
-            null_mask: None
+            null_mask: None,
         }
     }
 
@@ -373,12 +442,12 @@ impl<T: Integer> CategoricalArray<T> {
     pub fn from_parts(
         indices: Vec64<T>,
         unique_values: Vec64<String>,
-        null_mask: Option<Bitmask>
+        null_mask: Option<Bitmask>,
     ) -> Self {
         Self {
             data: indices.into(),
             unique_values: unique_values.into(),
-            null_mask
+            null_mask,
         }
     }
 
@@ -404,7 +473,7 @@ impl<T: Integer> CategoricalArray<T> {
         StringArray {
             offsets: offsets.into(),
             data: data.into(),
-            null_mask: self.null_mask.clone()
+            null_mask: self.null_mask.clone(),
         }
     }
 }
@@ -540,7 +609,7 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
             } else {
                 unsafe {
                     std::mem::transmute::<&str, &'static str>(
-                        &self.unique_values[dict_idx.to_usize()]
+                        &self.unique_values[dict_idx.to_usize()],
                     )
                 }
             }
@@ -564,7 +633,7 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
             } else {
                 Some(unsafe {
                     std::mem::transmute::<&str, &'static str>(
-                        &self.unique_values[dict_idx.to_usize()]
+                        &self.unique_values[dict_idx.to_usize()],
                     )
                 })
             }
@@ -577,18 +646,21 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
     /// The returned references borrow from the backing buffer and are not truly static.
     #[inline]
     fn iter_range(&self, offset: usize, len: usize) -> impl Iterator<Item = &'static str> + '_ {
-        self.data[offset..offset + len].iter().enumerate().map(move |(i, &dict_idx)| {
-            let idx = offset + i;
-            if self.is_null(idx) {
-                ""
-            } else {
-                unsafe {
-                    std::mem::transmute::<&str, &'static str>(
-                        &self.unique_values[dict_idx.to_usize()]
-                    )
+        self.data[offset..offset + len]
+            .iter()
+            .enumerate()
+            .map(move |(i, &dict_idx)| {
+                let idx = offset + i;
+                if self.is_null(idx) {
+                    ""
+                } else {
+                    unsafe {
+                        std::mem::transmute::<&str, &'static str>(
+                            &self.unique_values[dict_idx.to_usize()],
+                        )
+                    }
                 }
-            }
-        })
+            })
     }
 
     /// Returns an iterator over `Option<&'static str>` values for a specified range.
@@ -599,20 +671,23 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
     fn iter_opt_range(
         &self,
         offset: usize,
-        len: usize
+        len: usize,
     ) -> impl Iterator<Item = Option<&'static str>> + '_ {
-        self.data[offset..offset + len].iter().enumerate().map(move |(i, &dict_idx)| {
-            let idx = offset + i;
-            if self.is_null(idx) {
-                None
-            } else {
-                Some(unsafe {
-                    std::mem::transmute::<&str, &'static str>(
-                        &self.unique_values[dict_idx.to_usize()]
-                    )
-                })
-            }
-        })
+        self.data[offset..offset + len]
+            .iter()
+            .enumerate()
+            .map(move |(i, &dict_idx)| {
+                let idx = offset + i;
+                if self.is_null(idx) {
+                    None
+                } else {
+                    Some(unsafe {
+                        std::mem::transmute::<&str, &'static str>(
+                            &self.unique_values[dict_idx.to_usize()],
+                        )
+                    })
+                }
+            })
     }
 
     /// Append string, adding to dictionary if new.
@@ -641,14 +716,20 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
     ///
     /// For a non-copy slice view, use `slice` from the parent Array object
     fn slice_clone(&self, offset: usize, len: usize) -> Self {
-        assert!(offset + len <= self.data.len(), "slice window out of bounds");
+        assert!(
+            offset + len <= self.data.len(),
+            "slice window out of bounds"
+        );
 
         let data = self.data[offset..offset + len].to_vec_in(Alloc64);
-        let null_mask = self.null_mask.as_ref().map(|nm| nm.slice_clone(offset, len));
+        let null_mask = self
+            .null_mask
+            .as_ref()
+            .map(|nm| nm.slice_clone(offset, len));
         Self {
             data: Vec64(data).into(),
             unique_values: self.unique_values.clone(),
-            null_mask
+            null_mask,
         }
     }
 
@@ -664,7 +745,10 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
 
     /// Returns the total number of nulls.
     fn null_count(&self) -> usize {
-        self.null_mask.as_ref().map(|m| m.count_zeros()).unwrap_or(0)
+        self.null_mask
+            .as_ref()
+            .map(|m| m.count_zeros())
+            .unwrap_or(0)
     }
 
     /// Resizes the data in-place so that `len` is equal to `new_len`.
@@ -672,8 +756,12 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
         let current_len = self.len();
 
         // Temporary index map to avoid duplicate dictionary search
-        let mut index_map: HashMap<String, u32> =
-            self.unique_values.iter().enumerate().map(|(i, s)| (s.clone(), i as u32)).collect();
+        let mut index_map: HashMap<String, u32> = self
+            .unique_values
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.clone(), i as u32))
+            .collect();
 
         let code = intern(&value, &mut index_map, &mut self.unique_values);
         let encoded = T::from_usize(code as usize);
@@ -764,7 +852,7 @@ impl<T: Integer + Send + Sync> CategoricalArray<T> {
     pub fn par_iter_range(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl ParallelIterator<Item = &str> + '_ {
         use rayon::prelude::*;
         let null_mask = self.null_mask.as_ref();
@@ -785,7 +873,7 @@ impl<T: Integer + Send + Sync> CategoricalArray<T> {
     pub fn par_iter_range_opt(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl ParallelIterator<Item = Option<&str>> + '_ {
         use rayon::prelude::*;
         let null_mask = self.null_mask.as_ref();
@@ -806,7 +894,7 @@ impl<T: Integer + Send + Sync> CategoricalArray<T> {
     pub fn par_iter_range_unchecked(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl rayon::prelude::ParallelIterator<Item = &str> + '_ {
         use rayon::prelude::*;
         let null_mask = self.null_mask.as_ref();
@@ -828,7 +916,7 @@ impl<T: Integer + Send + Sync> CategoricalArray<T> {
     pub fn par_iter_range_opt_unchecked(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl rayon::prelude::ParallelIterator<Item = Option<&str>> + '_ {
         use rayon::prelude::*;
         let null_mask = self.null_mask.as_ref();
@@ -874,7 +962,7 @@ impl_array_ref_deref!(CategoricalArray<T>: Integer);
 
 impl<T> Display for CategoricalArray<T>
 where
-    T: Integer + std::fmt::Debug
+    T: Integer + std::fmt::Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let len = self.len();
@@ -895,7 +983,7 @@ where
             }
             match self.get(i) {
                 Some(s) => write!(f, "\"{}\"", s)?,
-                None => write!(f, "null")?
+                None => write!(f, "null")?,
             }
         }
         if len > MAX_PREVIEW {
@@ -1004,7 +1092,7 @@ mod tests {
         arr.unique_values.extend_from_slice(&[
             "green".to_string(),
             "blue".to_string(),
-            "red".to_string()
+            "red".to_string(),
         ]);
         arr.null_mask = Some(Bitmask::from_bools(&[false, true, true]));
         let sliced = arr.slice_clone(0, 3);
@@ -1068,7 +1156,7 @@ mod tests {
         let cat = CategoricalArray {
             data: data.into(),
             unique_values: unique,
-            null_mask: Some(mask)
+            null_mask: Some(mask),
         };
 
         let str_arr = cat.to_string_array();

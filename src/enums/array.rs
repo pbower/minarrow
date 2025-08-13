@@ -1,3 +1,15 @@
+//! # Array Module
+//! 
+//! `Array` is the primary unified container for all array types in Minarrow.
+//!   
+//! ## Features:
+//! - direct variant access to numeric, temporal, text, and other array categories
+//! - zero-cost casts when the contained type is known
+//! - lossless conversions between compatible array types
+//! - simplifies function signatures by allowing `impl Into<Array>`
+//! - centralises dispatch for all array operations
+//! - preserves SIMD-aligned buffers and metadata across variants.
+
 use std::any::TypeId;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
@@ -28,35 +40,44 @@ use crate::{
     NumericArray, StringArray, TextArray, Vec64, match_array,
 };
 
-/// Standard `Array` type. Wrap in a `FieldArray` when used in a `Table` or standalone case requiring tagged metadata association.
+/// # Array
+/// 
+/// Standard `Array` type. Wrap in a `FieldArray` when using inside a `Table`
+/// or as a standalone value requiring tagged metadata.
 ///
-/// The dual-enum architecture may look clunky but works well in practice:
+/// ## Overview
+/// The dual-enum approach may look verbose but works well in practice:
 ///
 /// - Enables clean function signatures with direct access to concrete types
-///   (e.g. `&NumericArray`), supporting trait-aligned dispatch
-///   (such as `T: Numeric` via `crate::aliases`) without needing exhaustive
-///   matches at every call site.
-/// - Supports ergonomic categorisation: functions typically match on the outer enum
-///   to handle broad categories (numeric, text, temporal, boolean) uniformly,
-///   while allowing inner variant matching for precise type-level handling when needed.
-///
+///   (e.g. `&NumericArray`), supporting trait-aligned dispatch without
+///   exhaustive matches at every call site.
+/// - Supports ergonomic categorisation: functions typically match on the
+///   outer enum for broad category handling *(numeric, text, temporal, boolean)*,
+///   while allowing inner variant matching for precise type handling.
+/// - The focused typeset (no nested types) helps keeps enum size efficient 
+///   as memory is allocated for the largest variant.
+/// 
+/// ## Usage
 /// Functions can accept references tailored to the intended match granularity:
 ///
-/// - `&IntegerArray`: an arc loan of the inner type or a direct reference.
+/// - `&IntegerArray`: direct reference to the inner type e.g., `arr.num().i64()`.
 /// - `&NumericArray`: any numeric type via `arr.num()`.
-/// - `&Array`: exhaustively match every type, or route all outer-layer matches of a given
-///   category to the desired lane(s).
-/// => etc.
-///
-/// This:
-/// - incurs no material runtime indirection or box heap allocation overhead, as both
-///   enum layers are represented inline with minimal discriminant cost.
-/// - maintains a focused typeset, as enums allocate memory based on their largest variant.
-/// - unifies all types at the same call site with compiler-enforced consistency.
-///
-/// Additionally, it provides an easy route to cast to `String` via `.str()`.
-///
-/// # Examples
+/// - `&Array`: match on categories or individual types.
+/// 
+/// ## Benefits
+/// - No heap allocation or runtime indirection — all enum variants are inline
+///   with minimal discriminant cost.
+/// - Unified call sites with compiler-enforced type safety.
+/// - Easy casting to inner types (e.g., `.str()` for strings).
+/// - Supports aggressive compiler inlining, unlike approaches relying on
+///   dynamic dispatch and downcasting.
+/// 
+/// ## Trade-offs
+/// - Adds ~30–100 ns latency compared to direct inner type calls — only
+///   noticeable in extreme low-latency contexts such as HFT.
+/// - Requires enum matching at dispatch sites compared to direct inner type usage.
+
+/// ## Examples
 /// ```rust
 /// use minarrow::{
 ///     Array, IntegerArray, NumericArray, arr_bool, arr_cat32, arr_f64, arr_i32, arr_i64,

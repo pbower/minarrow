@@ -1,23 +1,58 @@
+//! # SuperTableView Module
+//!
+//! `SuperTableV` is a **borrowed, zero-copy view** over a row range
+//! `[offset .. offset + len)` from a [`SuperTable`], potentially spanning
+//! multiple underlying `Table` batches.
+//!
+//! ## Role
+//! - Similar in structure to [`SuperTable`], but semantically a *windowed view*
+//!   over one **logical table** instead of an owned multi-batch table.
+//! - Represents a *mini-batch* within one `Table` (or one batch of a `SuperTable`).
+//! - Useful when cached statistics (e.g. null counts) are tied to batch or region
+//!   boundaries and should be preserved while slicing.
+//!
+//! ## Interop
+//! - Built by higher-level slicing APIs (`SuperTable::view` / `SuperTable::slice`).
+//! - Can be materialised into a single contiguous [`Table`] with
+//!   [`to_table`](SuperTableV::to_table).
+//!
+//! ## Features
+//! - Zero-copy traversal of the constituent [`TableV`] slices via
+//!   [`chunks`](SuperTableV::chunks) / [`iter`](SuperTableV::iter).
+//! - Random access to a single row: [`row`](SuperTableV::row) or
+//!   [`row_slice`](SuperTableV::row_slice).
+//! - Sub-windowing into another borrowed view with [`slice`](SuperTableV::slice).
+//!
+//! ## Performance Notes
+//! - Iterating across slices is efficient but may span non-contiguous memory.
+//!   For dense, contiguous runs, consider materialising with [`to_table`](SuperTableV::to_table).
+//!
+//! ## Invariants
+//! - `len` is the logical number of rows in this view.
+//! - `slices` are ordered, non-overlapping, and each covers a contiguous region
+//!   within its underlying table batch.
+
 use crate::structs::chunked::super_table::SuperTable;
 use crate::{Table, TableV};
 
-/// Borrowed view over a row range `[offset .. offset+len)` in a `SuperTable`.
-/// 
-/// ### Purpose
-/// Is a windowed, zero-copy view into a `SuperTable`, composed of
-/// one or more `TableView` slices covering the specified range.
-/// 
-/// Although similar in structure to `SuperTable`, semantically, this instead
-/// represents a chunked view of a single `Table` batch.
-/// 
-/// I.e., one mini-batch, of one `Table` (or `SuperTable` table batch).
-/// 
-/// Why?: Although general-purpose, it's helpful for cases where one has cached 
-/// null counts across multiple table and array regions, and wants to retain that info.
+/// # SuperTableView
 ///
-/// ### Fields:
-/// - `slices`: the constituent `TableView` slices spanning the view.
-/// - `len`: total number of rows in the view.
+/// Borrowed view over `[offset .. offset + len)` rows from a [`SuperTable`],
+/// potentially spanning multiple table batches (`TableV` slices).
+///
+/// ## Purpose
+/// - Mini-batch representation of a single logical `Table` or `SuperTable` batch.
+/// - Allows preserving cached metadata (e.g. null counts) across multiple regions
+///   without merging or cloning data.
+///
+/// ## Fields
+/// - `slices`: constituent [`TableV`] slices covering the window.
+/// - `len`: logical row count of this view.
+///
+/// ## Notes
+/// - Use [`chunks`](Self::chunks) / [`iter`](Self::iter) for slice-level access.
+/// - Random row access via [`row`](Self::row) / [`row_slice`](Self::row_slice).
+/// - Create smaller windows via [`slice`](Self::slice) without data copies.
 #[derive(Debug, Clone)]
 pub struct SuperTableV {
     pub slices: Vec<TableV>,
@@ -114,10 +149,6 @@ mod tests {
     use crate::ffi::arrow_dtype::ArrowType;
     use crate::{Array, Field, FieldArray, IntegerArray, NumericArray, Table};
 
-    // ------------------------------------------------------------------ *
-    // Helpers                                                            *
-    // ------------------------------------------------------------------
-
     /// Build a `FieldArray` containing an Int32 column with the given values
     fn fa_i32(name: &str, vals: &[i32]) -> FieldArray {
         let arr = Array::from_int32(IntegerArray::<i32>::from_slice(vals));
@@ -142,10 +173,6 @@ mod tests {
         }
     }
 
-    // ------------------------------------------------------------------ *
-    // Basic construction & metadata                                      *
-    // ------------------------------------------------------------------
-
     #[test]
     fn slice_basic_properties() {
         // batch 1: 2 rows; batch 2: 3 rows
@@ -166,10 +193,6 @@ mod tests {
         assert_eq!(tbl.n_rows, 5);
         assert_eq!(col_vals(&tbl), vec![1, 2, 3, 4, 5]);
     }
-
-    // ------------------------------------------------------------------ *
-    // slice(), row(), row_slice()                                        *
-    // ------------------------------------------------------------------
 
     #[test]
     fn subslice_and_row_access() {
@@ -198,10 +221,6 @@ mod tests {
         assert_eq!(col_vals(&single_tbl)[0], 13);
     }
 
-    // ------------------------------------------------------------------ *
-    // iter() & chunks()                                                  *
-    // ------------------------------------------------------------------
-
     #[test]
     fn iterate_slices_and_iters() {
         let b1 = table("c", &[0, 1]);
@@ -222,10 +241,6 @@ mod tests {
         assert_eq!(collected.len(), 2);
         assert_eq!(collected[0].offset, 0);
     }
-
-    // ------------------------------------------------------------------ *
-    // out-of-bounds handling                                             *
-    // ------------------------------------------------------------------
 
     #[test]
     #[should_panic(expected = "row index out of bounds")]

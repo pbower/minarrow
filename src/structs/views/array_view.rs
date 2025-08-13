@@ -1,21 +1,57 @@
+//! # ArrayView Module
+//!
+//! `ArrayV` is a **logical, read-only, zero-copy view** into a contiguous window
+//! `[offset .. offset + len)` of any [`Array`] variant.
+//!
+//! ## Purpose
+//! - Provides indexable, bounds-checked access to a subrange of an array without copying buffers.
+//! - Caches null counts per view for efficient repeated queries.
+//! - Acts as a unifying abstraction for windowed operations across all array types.
+//!
+//! ## Behaviour
+//! - All indices are **relative** to the view's start.
+//! - Internally retains an `Arc` reference to the parent array's buffers.
+//! - Windowing and slicing are O(1) operations (pointer + metadata updates only).
+//! - Cached null counts are stored in a `Cell` for fast repeated access.
+//!
+//! ## Threading
+//! - Not thread-safe due to `Cell`.
+//! - For parallelism, create per-thread clones with [`slice`](ArrayV::slice).
+//!
+//! ## Interop
+//! - Convert back to a full array via [`to_array`](ArrayV::to_array).
+//! - Promote to `(Array, offset, len)` tuple with [`as_tuple`](ArrayV::as_tuple).
+//! - Access raw data pointer and element size via [`data_ptr_and_byte_len`](ArrayV::data_ptr_and_byte_len).
+//!
+//! ## Invariants
+//! - `offset + len <= array.len()`
+//! - `len` reflects the **logical** number of elements in the view.
+
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::traits::print::MAX_PREVIEW;
 use crate::{Array, BitmaskV, FieldArray, MaskedArray, TextArray};
 
+/// # ArrayView
+/// 
 /// Logical, windowed view over an `Array`.
 ///
+/// ## Purpose
 /// This is used to return an indexable view over a subset of the array.
 /// Additionally, it can be used to cache null counts for those regions,
 /// which can be used to speed up calculations.
 ///
-/// ### Behaviour
+/// ## Behaviour
 /// - Indices are always relative to the window.
 /// - Holds a reference to the original `Array` and window bounds.
 /// - Windowing uses an arc clone
 /// - All access (get/index, etc.) is offset-correct and bounds-checked.
 /// - Null count is computed once (on demand or at creation) and cached for subsequent use.
+/// 
+/// ## Notes
+/// - Use [`slice`](Self::slice) to derive smaller views without data copy.
+/// - Use [`to_array`](Self::to_array) to materialise as an owned array.
 #[derive(Clone, PartialEq)]
 pub struct ArrayV {
     pub array: Array, // contains Arc<inner>

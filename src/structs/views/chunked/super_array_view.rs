@@ -1,28 +1,60 @@
+//! # SuperArrayView Module
+//!
+//! `SuperArrayV` is a **borrowed, chunked view** over a single logical array,
+//! exposing an arbitrary `[offset .. offset + len)` window that may span
+//! multiple underlying chunks. It presents those chunks as one continuous
+//! logical range without copying the underlying memory.
+//!
+//! ## Role
+//! - Represents a *mini-batch* window for one `Array` (or one entry inside a
+//!   `SuperArray`), useful for streaming, batching, or region-wise processing.
+//! - Similar in shape to `SuperArray`, but semantically a **view** over a single
+//!   column’s region rather than a bag of heterogeneous columns.
+//!
+//! ## Interop
+//! - Constructed by higher-level chunked containers (`SuperArray::slice`).
+//! - Can be materialised to a contiguous `Array` via [`SuperArrayV::copy_to_array`].
+//! - Preserves schema via an `Arc<Field>`; no schema cloning per row.
+//!
+//! ## Features
+//! - Zero-copy iteration over chunks: [`chunks`](SuperArrayV::chunks) / [`iter`](SuperArrayV::iter).
+//! - Row-wise logical iteration: [`iter_rows`](SuperArrayV::iter_rows) and
+//!   random access via [`row_slice`](SuperArrayV::row_slice) / [`get_value`](SuperArrayV::get_value).
+//! - Sub-windowing: [`slice`](SuperArrayV::slice) returns another borrowed view.
+//!
+//! ## Performance Notes
+//! - Iterating rows may touch non-contiguous memory if the window crosses chunk
+//!   boundaries. For hot loops, prefer contiguous runs or materialise with
+//!   `copy_to_array()`.
+//!
+//! ## Invariants
+//! - `len` is the logical row count of this view.
+//! - `slices` are ordered, non-overlapping, and cover at most `len` rows.
+//! - `field` is the schema for the underlying array and is shared by all slices.
 use std::sync::Arc;
 
 use crate::{Array, ArrayV, ArrayVT, Field, SuperArray};
 
+/// # SuperArrayView
+/// 
 /// Borrowed view over an arbitrary `[offset .. offset+len)` window of a `ChunkedArray`.
-///
 /// The window may span multiple internal chunks, presenting them as a unified logical view.
 ///
-/// Use `iter_rows` to iterate over rows within the view. Note that this may involve
-/// non-contiguous memory access if the underlying chunks are fragmented.
-/// For optimal performance, prefer working with a contiguous run.
+/// ## Purpose
+/// A mini-batch of **one** array (or one `SuperArray` entry). Handy when you’ve
+/// cached null counts / stats over regions and want to operate on those regions
+/// without materialising the whole column.
 ///
-/// ### Purpose
-/// Although similar in structure to `SuperArray`, semantically, this instead
-/// represents a chunked view of a single `Array`.
-/// 
-/// I.e., one mini-batch, of one `Array` (or `SuperArray` entry).
-/// 
-/// Why?: Although general-purpose, it's helpful for cases where one has cached 
-/// null counts across multiple array regions, and wants to retain that info.
-/// 
-/// ### Fields:
-/// - `slices`: the constituent `ArrayView` slices spanning the window.
-/// - `len`: total number of rows in the view.
-/// - `field`: schema field associated with the array.
+/// ## Fields
+/// - `slices`: constituent `ArrayView` pieces spanning the window.
+/// - `len`: total logical row count for this view.
+/// - `field`: schema field associated with the array (shared).
+///
+/// ## Notes
+/// - Use [`chunks`](Self::chunks) / [`iter`](Self::iter) to walk chunk pieces,
+///   or [`iter_rows`](Self::iter_rows) to traverse row-by-row across chunks.
+/// - For hot paths, prefer contiguous (memory) windows; otherwise consider
+///   [`copy_to_array`](Self::copy_to_array) to materialise a single buffer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SuperArrayV {
     pub slices: Vec<ArrayV>,

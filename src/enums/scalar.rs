@@ -1,3 +1,12 @@
+//! # Scalar Module
+//! 
+//! Contains the Scalar type for holding a single value.
+//!
+//! ## Purpose
+//! - Supports numeric, text, temporal, and null variants.  
+//! - Used for unifying type signatures and other cases when one would like
+//! to match to one of a range of possible values.
+
 use std::convert::From;
 
 #[cfg(feature = "datetime")]
@@ -6,9 +15,11 @@ use crate::DatetimeArray;
 #[cfg(feature = "scalar_type")]
 use crate::{Array, Bitmask, BooleanArray, FloatArray, IntegerArray, MaskedArray, StringArray};
 
-/// Scalar (single-array index) literals covering all supported types.
+/// # Scalar
 /// 
-/// # Description
+/// Scalar literals (single values) covering all supported types.
+/// 
+/// ## Description
 /// - Useful when unifying type signatures.
 /// - Includes accessor methods to avoid needing to match to a known type.
 ///   These also downcast to that type, including for e.g., string operations.

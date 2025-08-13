@@ -1,5 +1,28 @@
+//! # Custom Value Trait Module
+//!
+//! Includes the [`CustomValue`] trait, enabling storage of arbitrary user-defined
+//! types inside [`enums::Value::Custom`] while maintaining a unified interface
+//! with scalars, arrays, and tables.
+//!
+//! This mechanism supports advanced or intermediate pipeline states—such as
+//! partial aggregates, sketches, or engine-specific outputs—that do not fit into
+//! the standard Arrow type system.
+//!
+//! Dynamic dispatch and `Any` downcasting allow recovery of the concrete type
+//! at runtime for type-specific operations. The library provides a blanket
+//! implementation so that any `Send + Sync + Clone + PartialEq + Debug + 'static`
+//! type can be used without manual implementation.
+//!
+//! ## Key Points
+//! - Enables integration of custom, non-Arrow types in Minarrow pipelines.
+//! - Supports deep cloning, semantic equality, and safe downcasting.
+//! - Borrowed types are not supported; use owned types or `Arc`.
+//! - Intended for specialised use cases; most data should use Arrow-compatible arrays.
+
 use std::{any::Any, sync::Arc};
 
+/// # Custom Value
+/// 
 /// Trait for any object that can be stored in `enums::Value::Custom`.
 ///
 /// `CustomValue` extends *MinArrow's* `Value` universe, allowing engines or 

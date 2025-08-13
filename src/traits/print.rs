@@ -1,6 +1,8 @@
+//! # Print Module
+//! 
 //! Contains implementations of the Display trait
 //! and an additional `Print` trait which wraps it to provide
-//! `myobj.print()` semantics.
+//! `myobj.print()` for any object that implements it.
 use std::fmt::{self, Display, Formatter};
 
 #[cfg(feature = "datetime")]
@@ -9,11 +11,13 @@ use crate::{Array, Buffer,  Float, NumericArray, TextArray};
 
 pub (crate) const MAX_PREVIEW: usize = 50;
 
+/// # Print
+/// 
 /// Loaded print trait for pretty printing tables
 /// 
-/// Also provides a convenient way to activate `Display`
+/// Provides a more convenient way to activate `Display`
 /// for other types such as arrays via `myarr.print()`,
-/// avoiding the need to compose `println!("{}", myarr);`
+/// avoiding the need to write `println!("{}", myarr);`
 pub trait Print {
     #[inline]
     fn print(&self)

@@ -1,15 +1,31 @@
+//! # NumericArray Module
+//! 
+//! NumericArray unifies all integer and floating-point arrays 
+//! into a single enum for standardised numeric operations.
+//!   
+//! ## Features
+//! - direct variant access
+//! - zero-cost casts when the type is known
+//! - lossless conversions between integer and float types. 
+//! - simplifies function signatures by accepting `impl Into<NumericArray>`
+//! - centralises dispatch
+//! - preserves SIMD-aligned buffers across all numeric variants.
+
 use std::{fmt::{Display, Formatter}, sync::Arc};
 
 use crate::enums::error::MinarrowError;
 use crate::{Bitmask, FloatArray, IntegerArray, MaskedArray};
 use crate::{BooleanArray, StringArray};
 
+/// # NumericArray
+/// 
 /// Unifying numerical array container
 /// 
-/// This exists to unify numerical operations,
+/// ## Purpose
+/// Exists to unify numerical operations,
 /// simplify API's and streamline user ergonomics.
 /// 
-/// ### Usage:
+/// ## Usage:
 /// - It is accessible from `Array` using `.num()`,
 /// and provides typed variant access via for e.g.,
 /// `.i64()`, so one can drill down to the required
@@ -33,7 +49,7 @@ use crate::{BooleanArray, StringArray};
 /// `.int32()` already in the enum, it will convert it. Therefore, be mindful
 /// of performance when this occurs.
 /// 
-/// ### Also see:
+/// ## Also see:
 /// - Under [crate::traits::type_unions] , we additionally
 /// include minimal `Integer`, `Float`, `Numeric` and `Primitive` traits that 
 /// for which the base Rust primitive types already qualify. 

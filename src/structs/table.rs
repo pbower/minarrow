@@ -1,3 +1,17 @@
+//! # Table
+//!
+//! Columnar data container pairing a fixed-length set of rows
+//! with named, typed `FieldArray` columns.
+//!
+//! Equivalent in role to Apache Arrow’s `RecordBatch`, with
+//! guaranteed column length consistency and optional table name.
+//!
+//! Great for in-memory analytics, transformation pipelines,
+//! and zero-copy FFI interchange.
+//! 
+//! Cast into *Polars* dataframe via `.to_polars()` or *Apache Arrow* RecordBatch via `.to_apache_arrow()`,
+//! zero-copy, via the `cast_polars` and `cast_arrow` features.
+
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -22,7 +36,7 @@ use crate::traits::print::{
 // Global counter for unnamed table instances
 static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
-/// Standard Table
+/// # Table
 ///
 /// # Description
 /// - Standard columnar table with named columns (`FieldArray`),
@@ -38,9 +52,11 @@ static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 ///
 /// # Usage
 /// - Use `Table` as a general-purpose, in-memory columnar data container.
-/// - Good for analytics, transformation pipelines, and FFI or Arrow interoperability.
+/// - Good for analytics, and transformation pipelines.
 /// - For batched/partitioned tables, see [`SuperTable`] or windowed/chunked abstractions.
-///
+/// - Cast into *Polars* dataframe via `.to_polars()` or *Apache Arrow* via `.to_apache_arrow()`
+/// - FFI-compatible
+/// 
 /// # Notes
 /// - Table instances are typically lightweight to clone and pass by value.
 /// - For mutation, construct a new table or replace individual columns as needed.

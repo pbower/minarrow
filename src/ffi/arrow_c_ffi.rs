@@ -1,31 +1,40 @@
-//! This module implements the *Apache Arrow* `C-Data-Interface`, which is used to send data
-//! across language boundaries. It is not too difficult then, to send data across to *Python*,
-//! *C++*, or any other run-time that contains an `Arrow` `C-Data-Interface` implementation.
-//!  
-//! ### Sending data over FFI
-//! When doing so, it is important to keep the lifetime open so that Rust (`Minarrow`) doesn't
-//! drop the value, when it's being used to back a type in the other language.
-//! Frameworks such as `pyo3` streamline this process with `Python` via a simplified typing
-//! interface, but it is not necessarily required. We also plan to add Pyo3 bindings to this
-//! library in future. In the absence of that, because we already wrap inner array values in
-//! `Arc`, we increment the reference count to avoid it being cleaned up. The difference is,
-//! in this case, you will need to make sure it gets cleaned up afterwards.
+//! # Arrow-C-FFI Module
+//! 
+//! Implements the *Apache Arrow* **C Data Interface** for Minarrow, enabling zero-copy
+//! data exchange across language boundaries.  
+//! Compatible with any runtime implementing the Arrow C interface, including Python, C++,
+//! Java, and others.
 //!
-//! To achieve the FFI, you will first need to make sure your `Array` has an associated `Field`,
-//! or is bundled in a `FieldArray`. This requires you to ensure that the `ArrowType` backing
-//! the field has the correct logical type metadata when you construct it. This is particularly
-//! applicable for the `Datetime` array variants, as this is where compatibility for the transfer
-//! into `TIME32`, `TIME64`, `INTERVAL`, `DATE32`, `DATE64` etc. happens, when on the `Minarrow`
-//! side we use the one `DatetimeArray<T>` for common storage.
+//! ## Features
+//! - **Export**: Convert Minarrow arrays into Arrow C `ArrowArray` and `ArrowSchema` pointers.
+//! - **Import**: Construct Minarrow arrays directly from Arrow C pointers.
+//! - **Type fidelity**: Preserves physical layout, logical type metadata, and temporal units.
+//! - **FFI safety**: Backing buffers are reference-counted to ensure lifetime validity
+//!   across the boundary, with explicit release functions for deallocation.
 //!
-//! ### Examples
-//! There is a roundtrip example under `examples` of using this to send data to `Apache Arrow` in Rust.
-//! It is runnable via `cargo run --example apache-ffi`. We plan to add additional examples to other languages in future.
+//! ## Usage
+//! 1. Ensure the array has an associated `Field` or is wrapped in a `FieldArray`.
+//! 2. For temporal arrays, set the correct `ArrowType` with appropriate `TimeUnit` or `IntervalUnit`.
+//! 3. Call [`export_to_c`] to obtain Arrow-compatible pointers for FFI transmission.
+//! 4. On the receiving side, reconstruct a Minarrow array with [`import_from_c`].
 //!
-//! ### Disclaimer
-// The term `Apache Arrow` is a trademark of the `Apache Software Foundation`,
-// and is used below under fair-use implementation of the public
-// FFI-compatibility standard in accordance with https://www.apache.org/foundation/marks/
+//! ## Examples
+//! - Rust → Arrow: `cargo run --example apache-ffi`
+//! - Planned: Python, C++, and other language bindings.
+//!
+//! ## Notes
+//! - Dictionary-encoded (categorical) arrays are supported, including index type mapping.
+//! - UTF-8 and large UTF-8 string arrays preserve offset and value buffer ordering.
+//! - Temporal arrays validate logical type ↔ physical storage alignment prior to export.
+//!- `pyo3` normally abstracts pointer handling and lifetime management when integrating
+//!   with Python; we do not yet use it, but once integrated, instead of manual `Arc` reference 
+//!  count handling and explicit clean-up, one will be able to instead leverage automatic, 
+//!  Python-owned lifetimes.
+//!
+//! ## Trademark Notice
+//! *Apache Arrow* is a trademark of the Apache Software Foundation, used here under
+//! fair-use to implement its published interoperability standard as per 
+//! https://www.apache.org/foundation/marks/ .
 
 use std::ffi::{CString, c_void};
 use std::sync::Arc;
@@ -652,7 +661,7 @@ unsafe fn import_integer<T: Integer>(
     let buffers = unsafe { slice::from_raw_parts(arr.buffers, 2) };
     let data = unsafe { slice::from_raw_parts(buffers[1] as *const T, len) };
     let null_mask = if !buffers[0].is_null() {
-        Some(unsafe { Bitmask::from_slice(buffers[0], len) })
+        Some(unsafe { Bitmask::from_raw_slice(buffers[0], len) })
     } else {
         None
     };
@@ -672,7 +681,7 @@ where
     let buffers = unsafe { slice::from_raw_parts(arr.buffers, 2) };
     let data = unsafe { slice::from_raw_parts(buffers[1] as *const T, len) };
     let null_mask = if !buffers[0].is_null() {
-        Some(unsafe { Bitmask::from_slice(buffers[0], len) })
+        Some(unsafe { Bitmask::from_raw_slice(buffers[0], len) })
     } else {
         None
     };
@@ -691,7 +700,7 @@ unsafe fn import_boolean(arr: &ArrowArray) -> Arc<Array> {
     let data_vec = unsafe { Vec64::from_raw_parts(data_ptr as *mut u8, data_len, data_len) };
     let bool_mask = Bitmask::new(data_vec, len);
     let null_mask = if !buffers[0].is_null() {
-        Some(unsafe { Bitmask::from_slice(buffers[0], len) })
+        Some(unsafe { Bitmask::from_raw_slice(buffers[0], len) })
     } else {
         None
     };
@@ -731,7 +740,7 @@ unsafe fn import_utf8<T: Integer>(arr: &ArrowArray) -> Arc<Array> {
 
     // Null mask
     let null_mask = if !null_ptr.is_null() {
-        Some(unsafe { Bitmask::from_slice(null_ptr, len) })
+        Some(unsafe { Bitmask::from_raw_slice(null_ptr, len) })
     } else {
         None
     };
@@ -780,7 +789,7 @@ unsafe fn import_categorical(
         _ => panic!("Expected String32 dictionary"),
     };
     let null_mask = if !null_ptr.is_null() {
-        Some(unsafe { Bitmask::from_slice(null_ptr, len) })
+        Some(unsafe { Bitmask::from_raw_slice(null_ptr, len) })
     } else {
         None
     };
@@ -826,7 +835,7 @@ unsafe fn import_datetime<T: Integer>(arr: &ArrowArray, unit: crate::TimeUnit) -
     let buffers = unsafe { std::slice::from_raw_parts(arr.buffers, 2) };
     let data = unsafe { std::slice::from_raw_parts(buffers[1] as *const T, len) };
     let null_mask = if !buffers[0].is_null() {
-        Some(unsafe { Bitmask::from_slice(buffers[0], len) })
+        Some(unsafe { Bitmask::from_raw_slice(buffers[0], len) })
     } else {
         None
     };

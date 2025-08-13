@@ -1,3 +1,5 @@
+//! # Matrix Module
+//! 
 //! Dense column-major matrix type for high-performance linear algebra.
 //! BLAS/LAPACK compatible with built-inconversions from `Table` data.
 
@@ -13,8 +15,11 @@ use crate::{FloatArray, Vec64};
 // Global counter for unnamed matrix instances
 static UNNAMED_MATRIX_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
+/// # Matrix
+/// 
 /// Column-major dense matrix.
 ///
+/// ### Description
 /// This struct is compatible with Arrow, LAPACK, BLAS, and all
 /// column-major numeric routines. 
 ///
@@ -32,6 +37,7 @@ static UNNAMED_MATRIX_COUNTER: AtomicUsize = AtomicUsize::new(1);
 /// - However this is not always reliable, as a single *NaN* can affect vectorised
 /// calculations when integrating with various frameworks.
 /// 
+/// ### Under Development
 /// ⚠️ **Unstable API and WIP: expect future development. Breaking changes will be minimised,
 /// but avoid using this in production unless you are ready to wear API adjustments**.
 /// Specifically, we are considering whether to make a 'logical columns' matrix for easy

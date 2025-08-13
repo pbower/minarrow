@@ -1,3 +1,19 @@
+//! # Bitmask Module
+//!
+//! Arrow-compatible, packed validity/boolean bitmask with 64-byte alignment.
+//!
+//! ## Purpose
+//! - Validity (null) masks for all array types (1 = valid, 0 = null).
+//! - Backing storage for `BooleanArray`.
+//!
+//! ## Behaviour
+//! - LSB corresponds to the first logical element.
+//! - Zero-copy windowing via [`BitmaskV`] (`to_window`, `slice`).
+//! - Trailing padding bits are always masked off for Arrow spec compliance.
+//!
+//! ## Interop
+//! - Memory layout matches Arrow, and is safe to pass over the Arrow C Data Interface.
+
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::ops::{BitAnd, BitOr, Deref, DerefMut, Index, Not};
 
@@ -6,12 +22,30 @@ use crate::{BitmaskV, Buffer, Length, Offset};
 
 /// TODO: Move bitmask kernels here
 
+/// # Bitmask
+/// 
 /// 64-byte–aligned packed bitmask.
 ///
 /// ### Description
 /// - Used for `BooleanArray` data and as the validity/null mask for all datatypes.
 /// - Arrow-compatible: LSB = first element, 1 = set/valid, 0 = cleared/null.
 /// - Automatically enforced alignment enables efficient bitwise filtering on SIMD targets.
+/// 
+/// # Example
+/// ```rust
+/// use minarrow::Bitmask;
+///
+/// // Start with 10 cleared bits, flip 2 on
+/// let mut m = Bitmask::new_set_all(10, false);
+/// m.set(3, true);
+/// m.set(7, true);
+/// assert!(m.get(3) && m.get(7));
+///
+/// // Create a zero-copy window over [2..8)
+/// let v = m.to_window(2, 6);
+/// assert_eq!(v.len(), 6);
+/// assert_eq!(v.get(1), true); // corresponds to original bit 3
+/// ```
 #[repr(C, align(64))]
 #[derive(Clone, PartialEq, Default)]
 pub struct Bitmask {
@@ -69,7 +103,7 @@ impl Bitmask {
     /// # Safety
     /// - Caller must ensure `ptr` points to at least `(len + 7) / 8` bytes.
     /// - The contents must be valid for the entire bitmask.
-    pub unsafe fn from_slice(ptr: *const u8, len: usize) -> Self {
+    pub unsafe fn from_raw_slice(ptr: *const u8, len: usize) -> Self {
         if ptr.is_null() || len == 0 {
             return Bitmask::default();
         }

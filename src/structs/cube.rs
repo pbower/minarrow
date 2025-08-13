@@ -1,3 +1,26 @@
+//! # Cube Module
+//!
+//! An optional collection type that groups multiple
+//! row-aligned [`Table`]s into a logical 3rd dimension (e.g., **time snapshots**
+//! or a **category** axis). Gated behind the `cube` feature.
+//!
+//! ## Purpose
+//! - Compare tables at the same schema/grain without aggregating away detail.
+//! - Organize sequences of tables for sliding windows, diffs, or rollups.
+//!
+//! ## Behaviour
+//! - All tables must share the **same schema** (names and Arrow dtypes).
+//! - `n_rows` is tracked per table; helpers to add/remove tables/columns.
+//! - Zero-copy windowing via views when `views` feature is enabled.
+//! - Optional parallel iteration with `parallel_proc`.
+//!
+//! ## Interop
+//! - Uses the project’s [`Table`], [`FieldArray`], and (optionally) [`TableV`] / `CubeV`.
+//! - Arrow interop is inherited from the underlying arrays/fields.
+//!
+//! ## Status
+//! Feature-gated and **WIP/unstable**. APIs may evolve.
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,15 +40,21 @@ use crate::TableV;
 static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 
-/// Cube object
+/// # Cube
 /// 
-/// **This is an optional extra enabled by the `cube` feature, 
-/// and is not part of the *`Apache Arrow`* framework**.
+/// Holds a vector of tables unified by some value, often `Time`,
+/// for special indexing. Useful for data analysis.
 /// 
+/// ## Purpose
 /// Useful when the tables represent discrete time snapshots,
 /// or a category dimension. This enables comparing data without losing
 /// the underlying grain through aggregation, whilst still supporting that.
 /// 
+/// ## Description
+/// **This is an optional extra enabled by the `cube` feature, 
+/// and is not part of the *`Apache Arrow`* framework**.
+/// 
+/// ### Under Development
 /// ⚠️ **Unstable API and WIP: expect future development. Breaking changes will be minimised,
 /// but avoid using this in production unless you are ready to wear API adjustments**.
 #[repr(C, align(64))]

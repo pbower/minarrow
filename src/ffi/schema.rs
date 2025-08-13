@@ -1,14 +1,34 @@
+//! # Schema Module
+//!
+//! Contains the `Schema` type for Arrow FFI compatibility.
+//!
+//! ## Overview
+//! - Stores a list of `Field` definitions and optional metadata.
+//! - Used when constructing `RecordBatch` for Arrow C-FFI.
+//! - In Minarrow, `FieldArray` is preferred for typical usage since it holds the `Field` directly.
+//!
+//! ## Design
+//! - Exists only in the FFI module to support external Arrow interoperability.
+//! - The `Table` structure embeds field definitions directly to avoid additional indirection.
+//!
+//! ## Usage
+//! - Construct directly with `Schema::new(fields, metadata)`.
+//! - Or convert from `Vec<Field>` using `Schema::from`.
+
 use std::collections::BTreeMap;
 
 use crate::Field;
 
+/// # Schema
+/// 
 /// Schema struct supporting `RecordBatch` construction for Arrow FFI compatibility only.
 ///
-/// In `Minarrow`, prefer `FieldArray` for typical use, as it holds `Field` directly.
-///
-/// This type resides in the FFI module. A dedicated schema abstraction is otherwise
+/// ## Usage
+/// - In `Minarrow`, prefer `FieldArray` for typical use, as it holds `Field` directly.
+/// - This type usage resides in the FFI module. A dedicated schema abstraction is otherwise
 /// not utilised within this crate, as the same field definitions are embedded
 /// within the `Table` structure, to avoid layered indirection.
+/// - You can construct it manually for custom FFI scenarios: see *examples/apache_arrow_ffi*.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Schema {
     pub fields: Vec<Field>,

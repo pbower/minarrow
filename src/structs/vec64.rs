@@ -1,3 +1,14 @@
+//! # Vec64
+//!
+//! 64-byte aligned vector type backed by a custom allocator (`Alloc64`).
+//!
+//! Provides the same API as `Vec`, but guarantees the starting address
+//! of the allocation is 64-byte aligned for SIMD, cache line, and
+//! low-level hardware optimisations.
+//!
+//! Used internally for all data buffers in Minarrow, 
+//! whilst remaining interoperable with standard `Vec` where required.
+
 use std::borrow::{Borrow, BorrowMut};
 use std::fmt::{Debug, Display, Formatter, Result};
 use std::mem;
@@ -11,36 +22,39 @@ use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 use crate::structs::allocator::Alloc64;
 use crate::Buffer;
 
-/// 64-byte aligned vector.
+/// # Vec64
+/// 
+/// High-performance 64-byte aligned vector.
 ///
-/// A drop-in replacement for `Vec` that ensures 64-byte alignment of the starting pointer,
-/// using a custom `Alloc64` allocator. This alignment is required for efficient
-/// SIMD processing, cache line utilisation, and certain low-level hardware instructions.
-///
-/// ### Padding
+/// ## Purpose
+/// A drop-in replacement for `Vec` that ensures the starting pointer is aligned to a
+/// 64-byte boundary via a custom `Alloc64` allocator. This predominantly ensures
+/// compatibility with SIMD processing instruction extensions such as the AVX-512.
+/// These increase CPU throughput when using SIMD-friendly code like `std::simd`, or hand-rolled intrinsics.
+/// 
+/// Alignment can help avoid split loads/stores across cache lines and make hardware
+/// prefetch more predictable during sequential scans. However, gains are workload- and
+/// platform-dependent, and the Rust compiler may generate equally efficient code for
+/// ordinary `Vec` in some cases.
+/// 
+/// ## Behaviour – Padding
 /// This type does not add any padding to your data. Only the first element of the
-/// allocation is aligned. If you construct a buffer that mixes headers, metadata,
-/// and then Arrow data pages, and you plan to extract or process the Arrow portion
-/// with `Vec64::from_raw_parts` or SIMD at its offset, you must insert your own
+/// allocation is guaranteed to be aligned. If you construct a buffer that mixes headers,
+/// metadata, and then Arrow data pages, and you plan to extract or process the Arrow
+/// portion with `Vec64::from_raw_parts` or SIMD at its offset, you must insert your own
 /// zero-byte padding so that the Arrow section’s start falls on a 64-byte boundary.
 /// Without that manual padding, the middle of the buffer will not be aligned and
 /// unaligned access or unsafe reconstitution may fail or force a reallocation.
 ///
-/// All library code in `Minarrow` and related kernel code automatically handle padding,
-/// so this is only mentioned in case you want to work this type explicitly.
+/// All library code in `Minarrow` and related kernel code automatically handles such
+/// padding, and therefore this is only relevant if you leverage `Vec64` manually.
 ///
-/// ### Notes:
-/// - Use for data buffers that benefit from explicit alignment.
-/// - Not required for metadata structures such as schemas or fields.
-/// - `Alloc64` ensures initial allocations align to 64-byte boundaries 
-/// - All `Vec` APIs are still present - it's a tuple wrapper. Therefore, 
-/// in situations where `Vec` compatibility is required
-/// with external libraries, `myVec.0` helps bridge that gap. 
-/// 
-/// ### Safety
-/// - Avoid mixing `Vec` and `Vec64` - including with `from_raw_parts`, unless
-/// the original `Vec` also used `Alloc64`, as it is likely to induce undefined
-/// behaviour.
+/// ## Notes
+/// - All `Vec` APIs remain available—`Vec64` is a tuple wrapper over `Vec<T, Alloc64>`.
+/// - When passing to APIs expecting a `Vec`, use `.0` to extract the inner `Vec`.
+/// - Avoid mixing `Vec` and `Vec64` unless both use the same custom allocator (`Alloc64`).
+/// - Alignment helps with contiguous, stride-friendly access; it does not improve
+///   temporal locality or benefit random-access patterns.
 #[repr(transparent)]
 pub struct Vec64<T>(pub Vec<T, Alloc64>);
 

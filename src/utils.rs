@@ -1,3 +1,9 @@
+//! # Utilities
+//! 
+//! A small collection of internal utilities that support validation, parsing, and text conversion
+//! elsewhere within the crate.
+
+
 use std::{fmt::Display, sync::Arc};
 
 use crate::{Bitmask, Float, FloatArray, Integer, IntegerArray, StringArray, TextArray};

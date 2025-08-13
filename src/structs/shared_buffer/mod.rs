@@ -1,3 +1,10 @@
+//! # SharedBuffer Module
+//! 
+//! Zero-copy, reference-counted byte buffer with 64-byte SIMD alignment.
+//! 
+//! This is an internal module that backs the `Buffer` type supporting
+//! the typed Arrays in *Minarrow*.
+
 use core::ops::RangeBounds;
 use core::{ptr, slice};
 use std::borrow::Borrow;
@@ -18,13 +25,18 @@ mod internal {
     pub (crate) mod vtable;
 }
 
+// # SharedBuffer
+//
 // Zero-copy, reference-counted byte buffer with SIMD alignment support.
 //
-// Enables efficient reuse of bytes from network, memory-mapped files, and IPC
-// without copying data. Maintains 64-byte SIMD alignment across operations.
+// ## Purpose
+// This is an internal type that usually should not to be used directly.
+// It's primary purpose is to support the `Buffer` type in zero-copy IO cases,
+// enabling efficient reuse of bytes from network, memory-mapped files, and IPC
+// without copying data, whilst maintaining 64-byte SIMD alignment during operations.
 //
 // ## Features
-// - O(1) cloning and slicing (pointer adjustment only)
+// - O(1) pointer-based cloning and slicing
 // - Multiple backend sources: `Vec<u8>`, `Vec64<u8>`, MMAP, `Arc<[u8]>`, static slices
 // - Zero-copy extraction to owned types when unique
 // - Thread-safe reference counting via compact vtables
@@ -47,7 +59,6 @@ pub struct SharedBuffer {
     vtable: &'static Vtable
 }
 
-// ---------- constructors ----------
 
 impl SharedBuffer {
     /// Constructs a new, empty `SharedBuffer`
@@ -115,8 +126,6 @@ impl SharedBuffer {
             vtable: &OWNED_VT
         }
     }
-
-    // ---------- basic access ----------
 
     /// Returns the number of bytes in this buffer.
     #[inline]
@@ -204,8 +213,6 @@ impl SharedBuffer {
         unsafe { (self.vtable.is_unique)(&self.data) }
     }
 }
-
-// ---------- Clone / Drop ----------
 
 impl Clone for SharedBuffer {
     /// Clones this buffer. Always O(1), increases refcount if needed.
