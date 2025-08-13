@@ -1,3 +1,5 @@
+//! **Numeric Traits Module** - *Contains *num-trait* wrappers that simplify Type Signature Ergonomics*
+//! 
 //! Numeric trait bounds used throughout Minarrow.
 //!
 //! This module defines small, crate-specific trait aliases over `num_traits`

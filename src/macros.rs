@@ -1,4 +1,4 @@
-//! # Macros — array plumbing & ergonomics
+//! # **Internal Macros** — *Automates boilerplate Array implementations*
 //!
 //! Utilities to remove boilerplate when building Minarrow array types, trait impls,
 //! and enum dispatch. These macros keep array definitions small and consistent.

@@ -1,4 +1,4 @@
-//! # ArrayView Module
+//! # **ArrayView Module** - *Windowed View over an Array*
 //!
 //! `ArrayV` is a **logical, read-only, zero-copy view** into a contiguous window
 //! `[offset .. offset + len)` of any [`Array`] variant.

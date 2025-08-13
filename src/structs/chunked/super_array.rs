@@ -1,4 +1,4 @@
-//! # SuperArray Module
+//! # **SuperArray** - *Holds multiple arrays for chunked data partitioning, streaming + fast memIO*
 //!
 //! Contains SuperArray, a higher-order container representing a logical column split into multiple immutable `FieldArray` chunks.
 //!

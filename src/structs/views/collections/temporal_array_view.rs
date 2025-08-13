@@ -1,4 +1,4 @@
-//! # TemporalArrayView Module
+//! # **TemporalArrayView Module** - *Windowed View over a TemporalArray*
 //!
 //! `TemporalArrayV` is a **read-only, windowed view** over a [`TemporalArray`].
 //! It exposes a zero-copy slice `[offset .. offset + len)` for fast, indexable

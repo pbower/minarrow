@@ -1,4 +1,4 @@
-//! # Cube Module
+//! # **Cube Module** - *3D Type for Advanced Analysis Use Cases*
 //!
 //! An optional collection type that groups multiple
 //! row-aligned [`Table`]s into a logical 3rd dimension (e.g., **time snapshots**
@@ -40,7 +40,7 @@ use crate::TableV;
 static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 
-/// # Cube
+/// # Cube - 3D Type for Advanced Analysis Use Cases
 /// 
 /// Holds a vector of tables unified by some value, often `Time`,
 /// for special indexing. Useful for data analysis.

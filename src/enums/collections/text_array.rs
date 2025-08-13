@@ -1,5 +1,5 @@
-//! # TextArray Module
-//! 
+//! # **TextArray Module** - *High-Level Text Array Type for Unified Signature Dispatch*
+//!
 //! TextArray unifies all string and categorical arrays into
 //! a single enum for standardised text operations.
 //!   
@@ -19,7 +19,7 @@ use crate::{Bitmask, CategoricalArray, MaskedArray, StringArray};
 
 /// # TextArray
 /// 
-/// Unifying Text array container
+/// Unified Text array container
 ///
 /// ## Purpose
 /// Exists to unify string and categorical operations, simplify API's and streamline user ergonomics.

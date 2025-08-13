@@ -1,4 +1,4 @@
-//! # Vec64
+//! # **Vec64** - *Special Vector with 64-Byte SIMD Alignment*
 //!
 //! 64-byte aligned vector type backed by a custom allocator (`Alloc64`).
 //!

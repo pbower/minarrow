@@ -1,3 +1,5 @@
+//! # **Internal module**
+//! 
 //! Static vtable implementations for SharedBuffer backends.
 //!
 //! Provides function tables for different buffer ownership models:

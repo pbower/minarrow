@@ -1,4 +1,4 @@
-//! # IntegerArray Module
+//! # **IntegerArray Module**- *Mid-Level, Inner Typed Integer Array* 
 //!
 //! Arrow-compatible, SIMD-aligned integer array optimized for analytical workloads.
 //!

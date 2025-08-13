@@ -1,4 +1,4 @@
-//! # Matrix Module
+//! # **Matrix Module** - *De-facto Matrix Memory Layout for BLAS/LAPACK ecosystem compatibility*
 //! 
 //! Dense column-major matrix type for high-performance linear algebra.
 //! BLAS/LAPACK compatible with built-inconversions from `Table` data.

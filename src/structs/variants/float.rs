@@ -1,4 +1,4 @@
-//! # FloatArray Module
+//! # **FloatArray Module** - *Mid-Level, Inner Typed Float Array* 
 //!
 //! Arrow-compatible, SIMD-aligned floating-point array optimised for analytical workloads.
 //!

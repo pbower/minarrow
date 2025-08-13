@@ -1,4 +1,4 @@
-//! # TableV Module
+//! # **TableV Module** - *Windowed View over a Table*
 //!
 //! `TableV` is a **row-aligned, zero-copy view** over a `Table`, holding the
 //! window `[offset .. offset+len)` across all columns.

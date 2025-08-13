@@ -1,5 +1,5 @@
-//! # Custom Value Trait Module
-//!
+//! # **Custom Value Trait Module** - *Makes all your Any+Send+Sync types automatically compatible with Minarrow*
+//! 
 //! Includes the [`CustomValue`] trait, enabling storage of arbitrary user-defined
 //! types inside [`enums::Value::Custom`] while maintaining a unified interface
 //! with scalars, arrays, and tables.

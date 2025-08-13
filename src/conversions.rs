@@ -1,4 +1,4 @@
-//! # Conversions & Views
+//! # **Conversions & Views** - *Most To/From Boilerplate Implements Here*
 //!
 //! Implementations that convert between Minarrow array types and wire them into the
 //! unified [`Array`] enum, plus `View` impls where the `views` feature is enabled.

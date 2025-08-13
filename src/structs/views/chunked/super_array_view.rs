@@ -1,4 +1,4 @@
-//! # SuperArrayView Module
+//! # **SuperArrayView Module** - *Chunked, Windowed View over 1:M Arrays*
 //!
 //! `SuperArrayV` is a **borrowed, chunked view** over a single logical array,
 //! exposing an arbitrary `[offset .. offset + len)` window that may span

@@ -1,12 +1,14 @@
-# Minarrow - _Apache Arrow Benefits without Baggage for HPC, Native Streaming, and Embedded workloads_
+# Minarrow - *Apache Arrow benefits without baggage for HPC, Native Streaming, and Embedded*
 
-## Introduction
+***⚡ Own that latency. 🏆 Win the performance. 🚀 Keep your velocity.***
+
+## Intro
 
 _Welcome to Minarrow_.
 
 Minarrow is a from-scratch columnar library built for real-time and systems workloads in Rust.  
 It keeps the surface small, makes types explicit, compiles fast, and aligns data for predictable SIMD performance.  
-It speaks Arrow when you need to interchange — but the core stays lean.  
+It speaks Arrow when you need to talk interchange — but the core stays lean.  
 
 ## Design Focus
 
@@ -15,11 +17,11 @@ It speaks Arrow when you need to interchange — but the core stays lean.
 - **Fast iteration** – Minimal dependencies, sub-1.5 s clean builds, <0.15 s rebuilds  
 - **Interoperability on demand** – Convert to and from Arrow at the boundary  
 
-## Why This Exists
+## Why I built Minarrow
 
-The Arrow format is a powerful standard for columnar data.  
-Apache Arrow has driven an entire ecosystem forward, with zero-copy interchange, multi-language support, and extensive integration.  
-Minarrow complements that ecosystem by focusing on Rust-first ergonomics, predictable SIMD behaviour, and extremely low build-time friction.
+- The **Arrow** format is a powerful standard for columnar data. ***Apache Arrow*** has driven an entire ecosystem forward, with zero-copy interchange, multi-language support, and extensive integration.  
+- ***Minarrow*** complements that ecosystem by focusing on Rust-first ergonomics, predictable SIMD behaviour, and extremely low build-time friction.
+- It's **easy, fast, and simple** — built to deliver extreme performance without sacrificing ergonomics.
 
 ## Key Features
 
@@ -133,9 +135,9 @@ Lightstream *(planned Aug ’25)* enables IPC streaming in Tokio async contexts 
 
 ## Benchmarks
 
-***Sum of 1 billion sequential integers starting at 0.***
-
 Intel(R) Core(TM) Ultra 7 155H | x86_64 | 22 CPUs  
+
+***Sum of 1,000 sequential integers starting at 0.***
 Averaged over 1,000 runs (release).  
 
 ### No SIMD 
@@ -178,14 +180,16 @@ Averaged over 1,000 runs (release).
 
 ### SIMD + Rayon
 
-***(n=1000, lanes=4, iters=1000)***
+***Sum of 1 billion sequential integers starting at 0.***
+
+***(n=1,000,000,000, lanes=4)***
 
 | Case                                    | Time (ms)   |
 |-----------------------------------------|-------------|
 | SIMD + Rayon `IntegerArray<i64>`        | 113.874     |
 | SIMD + Rayon `FloatArray<f64>`          | 114.095     |
 
-### Other factors
+### Other factors (SIMD + No SIMD Benchmarks)
 Vec<i64> construction (generating + allocating 1000 elements - avg): 87 ns  
 Vec64<i64> construction (avg): 84 ns  
 
@@ -234,7 +238,7 @@ This project is licensed under the `MIT License`. See _LICENSE_ for details.
 
 ## Acknowledgments
 
-Special thanks to the Apache Arrow community and all contributors to the Arrow ecosystem. Minarrow is inspired by the excellent work and standards established by these projects.
+Special thanks to the `Apache Arrow` community and all contributors to the Arrow ecosystem. Special call out also to `Arrow2` and `Polars`. Minarrow is inspired by the consistently great work and standards driven by these projects.
 
 ## Feedback
 

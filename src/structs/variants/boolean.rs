@@ -1,4 +1,4 @@
-//! # BooleanArray Module
+//! # **BooleanArray Module** - *Mid-Level, Inner Typed Boolean Array*
 //!
 //! BooleanArray is an Arrow-compatible, bit-packed boolean array implementation with optional null-mask
 //! support, 64-byte alignment, and efficient memory layout for analytical workloads.

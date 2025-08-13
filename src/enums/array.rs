@@ -1,4 +1,4 @@
-//! # Array Module
+//! # **Array Module** - *Main High-Level Array Type*
 //! 
 //! `Array` is the primary unified container for all array types in Minarrow.
 //!   

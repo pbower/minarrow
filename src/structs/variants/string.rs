@@ -1,4 +1,4 @@
-//! # StringArray Module
+//! # **StringArray Module** - *Mid-Level, Inner Typed String Array* 
 //!
 //! Arrow-compatible UTF-8, variable-length string array backed by a compact
 //! `offsets + data (+ optional null_mask)` layout.

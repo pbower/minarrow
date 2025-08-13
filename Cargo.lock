@@ -1498,7 +1498,7 @@ dependencies = [
 
 [[package]]
 name = "minarrow"
-version = "0.1.3"
+version = "0.1.6"
 dependencies = [
  "arrow",
  "arrow-schema",

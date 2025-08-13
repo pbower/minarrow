@@ -1,4 +1,5 @@
-//! # TemporalArray Module
+//! # **TemporalArray Module** - *High-Level DateTimes Array Type for Unified Signature Dispatch*
+//!
 //! TemporalArray unifies all datetime-based arrays into a single enum for
 //! standardised temporal operations.
 //!   
@@ -17,7 +18,7 @@ use crate::{Bitmask, DatetimeArray, MaskedArray};
 
 /// Temporal Array
 /// 
-/// Unifying datetime array container
+/// Unified datetime array container
 /// 
 /// ## Purpose
 /// Exists to unify datetime operations,

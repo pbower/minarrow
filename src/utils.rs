@@ -1,4 +1,4 @@
-//! # Utilities
+//! # **Utilities** - *Internal Helper Utilities*
 //! 
 //! A small collection of internal utilities that support validation, parsing, and text conversion
 //! elsewhere within the crate.
