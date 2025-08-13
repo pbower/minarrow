@@ -1,3 +1,46 @@
+//! # FloatArray Module
+//!
+//! Arrow-compatible, SIMD-aligned floating-point array optimised for analytical workloads.
+//!
+//! ## Overview
+//! - Logical type: fixed-width floats (`T: Float`).
+//! - Physical storage: `Buffer<T>` (backed by `Vec64<T>` for 64-byte alignment) plus optional
+//!   Arrow-style validity mask (`Bitmask`).
+//! - Usable standalone or as the floating-point arm of higher-level enums (`NumericArray`, `Array`).
+//! - Supports both explicit null masks and NaN-as-null semantics (at the caller’s discretion).
+//! - Zero-copy compatible with standard `Vec` and slice types.
+//!
+//! ## Features
+//! - **Construction** from slices, `Vec`, or `Vec64`, with or without a null mask.
+//! - **Mutation**: push/set, bulk null insertion, resize.
+//! - **Iteration**: safe and (optionally) parallel via the `MaskedArray` trait surface.
+//! - **Display**: formatted preview with numeric formatting helpers.
+//!
+//! ## Null Semantics
+//! - **Explicit mask**: Arrow-compatible null representation (`1 = valid`, `0 = null`).
+//! - **NaN-based**: one also has the option to skip the mask entirely and use `NaN` as a sentinel for missing values
+//!   (similar to Pandas/NumPy conventions), but this is not recommended as it is not a supported pattern in this
+//! library suite and therefore may yield unexpected results.
+//!
+//! ## Performance Benchmarks
+//! Benchmarks under `examples/hotloop_benchmark_std` compare construction + sum over 1000 elems,
+//! averaged across 1000 runs on a 2024 Intel(R) Core(TM) Ultra 7 155H (22 logical CPUs, 32 GB RAM).
+//!
+//! **Build note:** use `--release` for representative numbers; debug builds distort results.
+//!
+//! **Averaged Results (1000 runs, size = 1000)**
+//! - `Vec<f64>` (raw):                        avg = 0.632 µs
+//! - `FloatArray` (minarrow, direct):         avg = 0.636 µs
+//! - `Float64Array` (arrow-rs, struct):       avg = 0.798 µs
+//! - `FloatArray` (minarrow, enum):           avg = 1.047 µs
+//! - `Float64Array` (arrow-rs, dynamic trait): avg = 1.255 µs
+//!
+//! **Takeaways**
+//! - Direct `FloatArray` matches raw `Vec<f64>` performance while adding SIMD alignment + Arrow interop.
+//! - NaN-based null handling eliminates mask overhead in NaN-tolerant workflows.
+//! - Enum wrapping adds small overhead but remains faster than arrow-rs dynamic dispatch.
+//! - For latency-critical workloads, use direct `FloatArray`; otherwise differences are negligible.
+//!
 use std::fmt::{Display, Formatter};
 
 use crate::structs::vec64::Vec64;
@@ -8,64 +51,44 @@ use crate::{
     impl_from_vec_primitive, impl_masked_array, impl_numeric_array_constructors
 };
 
-/// Arrow-compatible Float array with 64-byte SIMD alignment.
+/// # FloatArray
 ///
-/// This can be used as a standalone array type, or as part of the unified `NumericArray`
-/// and/or `Array` abstractions.
+/// Arrow-compatible, 64-byte aligned floating-point array with optional null mask.
 ///
-/// ### Features
-/// - A null mask for flagging missing values.
-/// - A backing data buffer, typically wrapping `Vec64`, which uses a custom allocator
-///   (`Alloc64`) to store standard Rust values. `Buffer` implements `Deref`, so in most
-///   cases it behaves like a standard `Vec`.
+/// ## Role
+/// - Many will prefer the higher level `Array` type, which dispatches to this when
+/// necessary. 
+/// - Can be used as a standalone array or as the numeric arm of `NumericArray` / `Array`.
+/// 
+/// ## Description
+/// - Stores floating-point values in a contiguous `Buffer<T>` (`Vec64<T>` under the hood).
+/// - Optional Arrow-style validity bitmap (`1 = valid`, `0 = null`) via `Bitmask`.
+/// - Can omit null mask entirely and represent missing values with `NaN` where acceptable.
+/// - Implements [`MaskedArray`] for consistent nullable array behaviour and interop with
+///   higher-level containers/enums.
+/// - Can be used as a standalone numeric buffer or as the float arm of `NumericArray` / `Array`.
 ///
 /// ### Fields
-/// - `data`: Backing buffer containing float values.
-/// - `null_mask`: Optional bit-packed validity bitmap (1 = valid, 0 = null).
+/// - `data`: backing buffer of float values (`Buffer<T>`).
+/// - `null_mask`: optional bit-packed validity bitmap.
 ///
-/// ### Null Mask Handling
-/// The null mask can be omitted in favour of using standard `NaN` values,
-/// similar to conventions in libraries like *Pandas* and *NumPy*.
-/// However, the `Apache Arrow` framework defines nullability using an explicit bitmask.
+/// ## Example
+/// ```rust
+/// use minarrow::{FloatArray, MaskedArray};
 ///
-/// ### Usage Tips
-/// When working with inner types such as `FloatArray<T>` rather than the
-/// unified `Array` type or mid-level variants, it is often preferable to
-/// define functions that accept slices (e.g. `&[f64]` or `&[T]`, where `T`
-/// implements traits like `Float`, `Numeric`, or `Primitive` from
-/// [`crate::traits::type_unions`]). This approach promotes compatibility with:
-/// - This library’s array types
-/// - Enum representations
-/// - Standard `Vec` and slice types (zero-copy compatible)
+/// // Dense, no nulls
+/// let arr = FloatArray::<f64>::from_slice(&[1.1, 2.2, 3.3]);
+/// assert_eq!(arr.len(), 3);
+/// assert_eq!(arr.get(1), Some(2.2));
 ///
-/// ### Performance Benchmarks
-/// Benchmarks under `examples/hotloop_benchmark_std` show the performance of various
-/// array representations. The tests were run 1000 times on a 2024 Intel(R) Core(TM)
-/// Ultra 7 155H (22 logical CPUs, x86_64, 2 threads per core, 32 GB RAM).
-///
-/// Each test measured the time taken from buffer construction to summing 1000 float values.
-///
-/// **Important**: Run benchmarks in `--release` mode for meaningful results. Debug mode
-/// may inaccurately portray performance (especially for `arrow-rs`).
-///
-/// #### Averaged Results (1000 runs, size = 1000)
-/// - `Vec<f64>` (raw):                            avg = 0.632 µs
-/// - `FloatArray` (minarrow, direct):            avg = 0.636 µs
-/// - `Float64Array` (arrow-rs, struct):          avg = 0.798 µs
-/// - `FloatArray` (minarrow, enum):              avg = 1.047 µs
-/// - `Float64Array` (arrow-rs, dynamic trait):   avg = 1.255 µs
-///
-/// ### Key Takeaways
-/// - `FloatArray` incurs negligible overhead relative to raw `Vec<f64>`, while enabling
-///   SIMD-aligned memory compatible with AVX-512.
-/// - In most practical scenarios (excluding live trading, defence, etc.), performance
-///   differences are minimal.
-/// - `minarrow` is marginally faster than `arrow-rs` at the time of testing, due to
-///   avoiding indirection via `ArrayData` and downcasting.
-/// - Enum wrapping introduces slightly less overhead than dynamic trait dispatch in `arrow-rs`.
-/// - For latency-critical applications, prefer inner types like `FloatArray` directly.
-/// - In non-critical contexts, performance differences are typically insignificant
-///   compared to the actual computations being performed.
+/// // With nulls
+/// let mut arr = FloatArray::<f32>::with_capacity(3, true);
+/// arr.push(10.0);
+/// arr.push_null();
+/// arr.push(30.5);
+/// assert_eq!(arr.get(1), None);
+/// assert_eq!(arr.null_count(), 1);
+/// ```
 #[repr(C, align(64))]
 #[derive(PartialEq, Clone, Debug, Default)]
 pub struct FloatArray<T> {

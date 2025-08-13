@@ -1,14 +1,29 @@
+//! # TemporalArray Module
+//! TemporalArray unifies all datetime-based arrays into a single enum for
+//! standardised temporal operations.
+//!   
+//! ## Features:
+//! - direct variant access
+//! - zero-cost casts when the type is known
+//! - lossless conversions between 32-bit and 64-bit datetime types.  
+//! - simplifies function signatures by accepting `impl Into<TemporalArray>`
+//! - centralises dispatch
+//! - preserves SIMD-aligned buffers across all temporal variants.
+
 use std::{fmt::{Display, Formatter}, sync::Arc};
 
 use crate::enums::error::MinarrowError;
 use crate::{Bitmask, DatetimeArray, MaskedArray};
 
+/// Temporal Array
+/// 
 /// Unifying datetime array container
 /// 
-/// This exists to unify datetime operations,
+/// ## Purpose
+/// Exists to unify datetime operations,
 /// simplify API's and streamline user ergonomics.
 /// 
-/// ### Usage:
+/// ## Usage:
 /// - It is accessible from `Array` using `.dt()`,
 /// and provides typed variant access via for e.g.,
 /// `.dt32()`, so one can drill down to the required

@@ -1,15 +1,30 @@
+//! # TextArray Module
+//! 
+//! TextArray unifies all string and categorical arrays into
+//! a single enum for standardised text operations.
+//!   
+//! ## Features
+//! - direct variant access
+//! - zero-cost casts when the type is known
+//! - lossless conversions between string and categorical types.  
+//! - simplifies function signatures by accepting `impl Into<TextArray>`
+//! - centralises dispatch
+//! - preserves SIMD-aligned buffers across all text variants.
+
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use crate::enums::error::MinarrowError;
 use crate::{Bitmask, CategoricalArray, MaskedArray, StringArray};
 
+/// # TextArray
+/// 
 /// Unifying Text array container
 ///
-/// This exists to unify string and categorical
-///  operations, simplify API's and streamline user ergonomics.
+/// ## Purpose
+/// Exists to unify string and categorical operations, simplify API's and streamline user ergonomics.
 ///
-/// ### Usage:
+/// ## Usage:
 /// - It is accessible from `Array` using `.str()`,
 /// and provides typed variant access via for e.g.,
 /// `.str64()`, so one can drill down to the required

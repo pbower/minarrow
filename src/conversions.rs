@@ -1,3 +1,44 @@
+//! # Conversions & Views
+//!
+//! Implementations that convert between Minarrow array types and wire them into the
+//! unified [`Array`] enum, plus `View` impls where the `views` feature is enabled.
+//!
+//! ## What’s included
+//! - **Numeric ↔ Numeric**
+//!   - *Widening* `From<&IntegerArray<S>> for IntegerArray<D>` and `From<&IntegerArray<S>> for FloatArray<D>`.
+//!   - *Narrowing / signedness changes* via `TryFrom<&IntegerArray<S>> for IntegerArray<D>` with
+//!     [`MinarrowError::Overflow`] on out-of-range values.
+//! - **Float ↔ Integer**
+//!   - `TryFrom<&FloatArray<F>> for IntegerArray<I>` with strict checks (finite + exact truncation);
+////!     returns [`MinarrowError::LossyCast`] if fidelity is lost.
+//! - **Booleans ↔ Primitives**
+//!   - `From<&BooleanArray<u8>>` to integer/float (true→1/1.0, false→0/0.0).
+//!   - `From<&IntegerArray<T>>` / `From<&FloatArray<T>>` to `BooleanArray<u8>` (non-zero → true).
+//! - **Numerics/Booleans → Strings**
+//!   - `From<&IntegerArray<T>>`, `From<&FloatArray<T>>`, and `From<&BooleanArray<u8>>` to
+//!     `StringArray<u32>` (UTF-8), preserving null masks.
+//! - **Strings ↔ Categoricals**
+//!   - `TryFrom<&StringArray<Off>> for CategoricalArray<Idx>` builds a dictionary with stable codes.
+//!   - `TryFrom<&CategoricalArray<Idx>> for StringArray<Off>` materialises codes back to UTF-8.
+//!   - Widening/narrowing categorical index conversions (`From`/`TryFrom`) with overflow checks.
+//! - **String offset width changes**
+//!   - `From<&StringArray<u32>> for StringArray<u64>` and `TryFrom<&StringArray<u64>> for StringArray<u32>`.
+//! - **Datetime conversions** *(feature `datetime`)*
+//!   - Integer view of datetimes and width changes between `DatetimeArray<i32>` and `DatetimeArray<i64>`.
+//! - **Into [`Array`] enum**
+//!   - `From<Arc<...>> for Array` and `From<...> for Array` for all core variants,
+//!     using cheap `Arc` clones for zero-copy wrapping.
+//! - **`View` trait impls** *(feature `views`)*
+//!   - Provides `BufferT` for owned and `Arc` array variants so you can call `.view(...)` / `.tuple_view(...)`.
+//!
+//! ## Null masks & semantics
+//! Unless noted, conversions **preserve the source null mask**. Errors are explicit:
+//! overflows use [`MinarrowError::Overflow`]; inexact float→int casts use [`MinarrowError::LossyCast`].
+//!
+//! ## Feature gates
+//! Some conversions are available only with `extended_numeric_types`, `extended_categorical`,
+//! `large_string`, `datetime`, or `views`. Enable the features you need in `Cargo.toml`.
+
 use std::marker::PhantomData;
 use std::convert::{TryFrom, From};
 use std::collections::HashMap;

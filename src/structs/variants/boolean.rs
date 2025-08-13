@@ -1,3 +1,36 @@
+//! # BooleanArray Module
+//!
+//! BooleanArray is an Arrow-compatible, bit-packed boolean array implementation with optional null-mask
+//! support, 64-byte alignment, and efficient memory layout for analytical workloads.
+//!
+//! ## Overview
+//! - Logical type: boolean values (`true` / `false`) with optional `null` state.
+//! - Physical storage: bit-packed `Bitmask` for values, optional `Bitmask` for validity.
+//! - Backed by `Vec64<u8>`-aligned buffers for CPU-friendly operations.
+//! - Integrates with Arrow FFI and MaskedArray trait for schema-agnostic use.
+//!
+//! ## Features
+//! - **Construction** from raw bitmasks, byte buffers, or boolean slices.
+//! - **Mutation**: bulk bit writes, per-element set, push, null insertion.
+//! - **Iteration**: sequential and parallel (with `parallel_proc` feature).
+//! - **Null handling**: optional validity mask with auto-growth and validation.
+//! - **Slicing**: zero-copy tuple views or cloned logical slices.
+//!
+//! ## Intended Use Cases
+//! - High-performance analytical pipelines requiring dense boolean representation.
+//! - Interop with Apache Arrow or other columnar formats.
+//! - Streaming or batch ingestion with incremental append.
+//!
+//! ## Performance Notes
+//! - Bulk operations (`set_bits_chunk`, `push_bits`) are preferred over per-element writes.
+//! - Avoid `get` in tight loops when null-free; use iterators or `get_unchecked`.
+//! - Parallel iteration requires the `parallel_proc` feature.
+//!
+//! ## Related Types
+//! - [`Bitmask`]: underlying storage type for values and nulls.
+//! - [`MaskedArray`]: trait defining the nullable array API.
+//! - [`Vec64`]: heap storage type for 64-byte aligned vectors.
+
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, Not, Range};
@@ -14,20 +47,46 @@ use crate::traits::print::MAX_PREVIEW;
 use crate::utils::validate_null_mask_len;
 use crate::{Length, Offset, Vec64, impl_arc_masked_array};
 
-/// Arrow-compatible bit-packed Boolean array with 64-byte alignment (LSB = first value).
+/// # BooleanArray
 ///
-/// - Values are bit-packed for memory efficiency.
-/// The first value is stored in the least significant bit.
-/// - Indexing this structure yields standard `bool` values, as does `.get()`
-/// and `.get_unchecked()`.
-/// - The `len` attribute is the number of logical boolean elements,
-/// rather than the length of the backing (*u8*) `Bitmask`.
+/// Arrow-compatible, bit-packed boolean array with 64-byte alignment.
 ///
-/// ### Fields:
-/// - `data`: bit-packed Boolean values.
-/// - `null_mask`: optional bit-packed validity bitmap (1=valid, 0=null).
-/// - `len`: number of elements.
-/// - `_phantom`: marker for generic type `T`.
+/// ## Role
+/// Many will prefer the higher level `Array` type, which dispatches to this when
+/// necessary. However, in nanosecond/microsecond critical situations, or where only a single 
+/// buffer type is needed, one may prefer to use this directly.
+/// 
+/// ## Description
+/// - Stores boolean values in a compact `Bitmask` for memory efficiency.
+///   The first value is stored in the least significant bit (LSB).
+/// - Optional `null_mask` stores validity bits (`1 = valid`, `0 = null`).
+/// - The `len` field tracks the number of logical elements, not the byte length of the backing buffer.
+/// - Provides both safe (`get`) and unsafe (`get_unchecked`) element access.
+/// - Implements [`MaskedArray`] for consistent inner array behaviour.
+///
+/// ### Fields
+/// - `data`: bit-packed boolean values.
+/// - `null_mask`: optional bit-packed validity bitmap.
+/// - `len`: number of logical elements.
+/// - `_phantom`: marker for generic type `T` (unused at runtime).
+///
+/// ## Example
+/// ```rust
+/// use minarrow::{Bitmask, BooleanArray, MaskedArray};
+///
+/// // Create from a slice (no nulls)
+/// let arr = BooleanArray::from_slice(&[true, false, true]);
+/// assert_eq!(arr.len(), 3);
+/// assert_eq!(arr.get(0), Some(true));
+///
+/// // Create with nulls
+/// let mask = Bitmask::from_bools(&[true, false, true]);
+/// let arr_with_nulls = BooleanArray::new(
+///     Bitmask::from_bools(&[true, false, true]),
+///     Some(mask)
+/// );
+/// assert_eq!(arr_with_nulls.get(1), None);
+/// ```
 #[repr(C, align(64))]
 #[derive(PartialEq, Clone, Debug)]
 pub struct BooleanArray<T> {

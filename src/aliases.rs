@@ -1,15 +1,50 @@
-use crate::{
-    Array, Bitmask, BooleanArray, CategoricalArray, Field, FieldArray, FloatArray, IntegerArray, StringArray, Table
-};
-#[cfg(all(feature = "cube", feature = "views"))]
-use crate::TableV;
+//! # Aliases & View Tuples
+//!
+//! Aliases for convenience and lightweight *view tuple* types used across the crate.
+//!
+//! ## What’s here
+//! - **Record batch names:** `RecordBatch` -> [`Table`], `ChunkedTable` -> [`SuperTable`].
+//! - **Window metadata:** [`Offset`] and [`Length`] for logical row ranges; plus helpers like
+//!   [`DictLength`] and [`BytesLength`] for dictionary and string buffers.
+//! - **Zero-copy views:** Compact `(..., Offset, Length)` View-Tuple (*VT*) tuples (e.g. [`ArrayVT`], [`BitmaskVT`],
+//!   [`StringAVT`]) that carry a reference to the source plus a window, without allocating.
+//! - **Ergonomic column aliases:** Short forms like [`IntArr`], [`FltArr`], [`StrArr`], etc.
+//! for those such inclined.
+//!
+//! ## Why it exists
+//! Many APIs only need “where to look” (offset/len) and “what to look at” (a reference).
+//! These aliases centralise the naming and keep signatures short, while remaining zero-copy.
+//!
+//! ## Picking a view
+//! - Use **`ArrayV`** (full view struct) when you want methods (typed access, null counts, etc.).
+//! - Use **VT tuples** (e.g. `(&Array, Offset, Length)`) for the lightest possible window with
+//!   no extra behavior. For inner array types, only the Array View Tuples (*AVT*) are provided
+//! to avoid lots of boilerplate redundancy polluting the main library and binary size.
+//! - For fixed-width primitives you can often use native slices (`&[T]`) directly; VT types are
+//!   provided for consistency where needed.
+//!
+//! ## Feature gates
+//! Some aliases are enabled only when relevant features are on (e.g. `datetime`, `views`, `cube`, `chunked`).
+//!
+//! ## Notes
+//! All offsets/lengths are **logical row counts** unless specified otherwise (e.g. `BytesLength`).
+//! These helpers do not copy data and are safe to clone cheaply.
+
 #[cfg(feature = "datetime")]
 use crate::DatetimeArray;
+#[cfg(all(feature = "cube", feature = "views"))]
+use crate::TableV;
+use crate::{
+    Array, Bitmask, BooleanArray, CategoricalArray, Field, FieldArray, FloatArray, IntegerArray,
+    StringArray, Table,
+};
 
 #[cfg(feature = "chunked")]
 use crate::SuperTable;
 
-/// Standard Arrow `Record Batch`
+/// # RecordBatch
+/// 
+/// Standard Arrow `Record Batch`. Alias of *Minarrow* `Table`.
 ///
 /// # Description
 /// - Standard columnar table batch with named columns (`FieldArray`),
@@ -17,7 +52,7 @@ use crate::SuperTable;
 /// - All columns are required to be equal length and have consistent schema.
 /// - Supports zero-copy slicing, efficient iteration, and bulk operations.
 /// - Equivalent to the `RecordBatch` in *Apache Arrow*.
-/// 
+///
 /// # Structure
 /// - `cols`: A vector of `FieldArray`, each representing a column with metadata and data.
 /// - `n_rows`: The logical number of rows (guaranteed equal for all columns).
@@ -31,7 +66,7 @@ use crate::SuperTable;
 /// # Notes
 /// - Table instances are typically lightweight to clone and pass by value.
 /// - For mutation, construct a new table or replace individual columns as needed.
-/// 
+///
 /// # Example
 /// ```rust
 /// use minarrow::{arr_i32, arr_str32, FieldArray, Print, vec64, aliases::RecordBatch};
@@ -44,6 +79,8 @@ use crate::SuperTable;
 /// ```
 pub type RecordBatch = Table;
 
+/// # ChunkedTable
+/// 
 /// Batched (windowed/chunked) table - collection of `Tables`.
 ///
 /// ### Data structure
@@ -91,7 +128,7 @@ pub type BytesLength = usize;
 
 // Top-level type
 
-/// Windowed ***V**iew **T**uple* for Array, when one isn't using the 
+/// Windowed ***V**iew **T**uple* for Array, when one isn't using the
 /// full `ArrayView` abstraction, doesn't want to use it, couple a
 /// function signature to it or doesn't have that feature enabled.
 pub type ArrayVT<'a> = (&'a Array, Offset, Length);
@@ -100,7 +137,7 @@ pub type ArrayVT<'a> = (&'a Array, Offset, Length);
 pub type BitmaskVT<'a> = (&'a Bitmask, Offset, Length);
 
 /// Subset per respective table within the cube
-/// 
+///
 /// Respects the means in which each table is windowed,
 /// e.g., if offsets and lengths are different due to category lengths,
 /// time windows etc.

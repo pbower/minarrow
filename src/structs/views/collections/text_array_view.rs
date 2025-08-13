@@ -1,31 +1,56 @@
+//! # TextArrayView Module
+//!
+//! `TextArrayV` is a **read-only, zero-copy view** into a `[offset .. offset + len)`
+//! slice of a [`TextArray`].
+//!
+//! ## Purpose
+//! - Provides windowed access to UTF-8 string data without copying buffers.
+//! - Unifies handling for `StringArray` and `CategoricalArray` under the `TextArray` enum.
+//! - Allows null counts to be cached per view for faster repeated operations.
+//!
+//! ## Behaviour
+//! - Fully supports both string and dictionary-encoded text variants.
+//! - Enables lightweight sub-ranges for use in downstream computations, filtering, or previews.
+//! - Creating a view does **not** allocate; slicing is zero-copy.
+//!
+//! ## Threading
+//! - Not thread-safe due to `Cell` for cached null counts.
+//! - For multi-threaded code, create per-thread clones via [`slice`](TextArrayV::slice).
+//!
+//! ## Interop
+//! - Convert back to a full `TextArray` via [`to_text_array`](TextArrayV::to_text_array).
+//! - Promote to `Array` via [`as_array`](TextArrayV::as_array) for unified API calls.
+//!
+//! ## Invariants
+//! - `offset + len <= array.len()`
+//! - `len` is the logical number of text elements in the view.
+
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::traits::print::MAX_PREVIEW;
 use crate::{Array, ArrayV, BitmaskV, TextArray};
 
-/// Read-only, windowed view over a `TextArray`.
+/// # TextArrayView
 ///
-/// ### Purpose
-/// This is used to return an indexable view over a subset of the array.
-/// Additionally, it can be used to cache null counts for those regions,
-/// which can be used to speed up calculations.
+/// Borrowed, indexable view into a `[offset .. offset + len)` window of a
+/// [`TextArray`].
 ///
-/// ### Behaviour
-/// - Supports both `StringArray` and `CategoricalArray` variants.
-/// - Provides access to UTF-8 string values.
-/// - Useful when functions operate on any text array variant and require
-///   windowed access without copying data.
+/// ## Purpose
+/// - Zero-copy access to contiguous UTF-8 values in either `StringArray`
+///   or `CategoricalArray` form.
+/// - Allows null counts for the view to be cached to speed up scans.
 ///
-/// ### Usage
-/// Enables APIs to accept either full arrays or windowed views.
-/// For example, a function taking `Into<TextArrayView>` can support both:
-/// - A full `TextArray`, treated as offset `0` and length `self.len()`.
-/// - A `TextArrayView` representing a subrange of the array.
+/// ## Fields
+/// - `array`: the backing [`TextArray`].
+/// - `offset`: starting index of the view.
+/// - `len`: number of logical elements in the view.
+/// - `null_count`: cached `Option<usize>` of nulls for this range.
 ///
-/// ### Safety
-/// This struct is not thread-safe due to its use of `Cell` for caching the null count.
-/// For multi-threaded use, create separate arc-clone views per thread using `slice`.
+/// ## Notes
+/// - `TextArrayV` is not thread-safe due to its use of `Cell` for caching the null count.
+/// - Use [`slice`](Self::slice) to derive smaller views from this one.
+/// - Use [`to_text_array`](Self::to_text_array) to materialise the data.
 #[derive(Clone, PartialEq)]
 pub struct TextArrayV {
     pub array: TextArray,

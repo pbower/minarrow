@@ -1,3 +1,16 @@
+//! Numeric trait bounds used throughout Minarrow.
+//!
+//! This module defines small, crate-specific trait aliases over `num_traits`
+//! to keep generic signatures concise and consistent across arrays/kernels:
+//! - `Float`: `f32`, `f64` (wrapper over `num_traits::Float`).
+//! - `Integer`: integer types that also support lossless casts to/from `usize`
+//!   (implemented via `impl_usize_conversions!`), useful for offsets/indices.
+//! - `Numeric`: all supported number types (`ints` + `floats`) for math kernels.
+//! - `Primitive`: scalars (`ints`, `floats`, `bool`) used in low-level paths.
+//!
+//! Use these in APIs like `fn foo<T: Numeric>()` or `fn bar<I: Integer>()` to
+//! express intent and rely on a single source of truth for allowed scalar types.
+
 use std::fmt::Debug;
 
 use num_traits::{Float as NumFloat, Num, NumCast, PrimInt, ToPrimitive};

@@ -1,3 +1,32 @@
+//! # StringArray Module
+//!
+//! Arrow-compatible UTF-8, variable-length string array backed by a compact
+//! `offsets + data (+ optional null_mask)` layout.
+//!
+//! ## Overview
+//! - Supports Arrow’s `String` (`u32` offsets) and `LargeString` (`u64` offsets).
+//! - Storage:
+//!   - **offsets**: length = `len + 1`; i-th string = `data[offsets[i]..offsets[i+1]]`
+//!   - **data**: concatenated UTF-8 bytes
+//!   - **null_mask** *(optional)*: `Bitmask` where `1 = valid`, `0 = null`
+//! - Zero-copy friendly and interops with the Arrow C Data Interface.
+//! - Append-oriented API with reserve/resize helpers and fast conversions
+//!   (e.g., to `CategoricalArray`).
+//!
+//! ## Features
+//! - Builders: `from_slice`, `from_vec`, `from_vec64`, `from_parts`.
+//! - Mutation: `push_str`, `set_str`, `push_null`, `push_nulls`, `reserve`, `resize`.
+//! - Iteration: `iter_str*` (by value), optional parallel iterators behind `parallel_proc`.
+//! - Conversions: `to_categorical_array()`.
+//!
+//! ## When to use
+//! Use for variable-length UTF-8 text with Arrow interop, compact memory layout,
+//! and high-throughput append/scan workloads.
+//!
+//! ## Safety note
+//! Trait methods from `MaskedArray` that return `&'static str` are for trait
+//! compatibility only—the data actually borrows from `self`. Prefer the `*_str`
+//! methods in this module for correct lifetime management.
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::mem::transmute;
@@ -13,11 +42,24 @@ use crate::traits::print::MAX_PREVIEW;
 use crate::traits::type_unions::Integer;
 use crate::utils::validate_null_mask_len;
 use crate::{
-    Bitmask, Buffer, CategoricalArray, Length, Offset, StringAVT, impl_arc_masked_array, vec64
+    Bitmask, Buffer, CategoricalArray, Length, Offset, StringAVT, impl_arc_masked_array, vec64,
 };
 
+/// # StringArray
+///
 /// UTF-8 encoded, variable-length Arrow-compatible string array
 ///
+/// ## Role
+/// - Many will prefer the higher level `Array` type, which dispatches to this when
+/// necessary.
+/// - Can be used as a standalone array or as the text arm of `TextArray` / `Array`.
+///
+/// ## Fields
+/// - **Offsets**: indices into the `data` buffer. The i-th string is at `data[offsets[i]..offsets[i+1]]`.
+/// - **Data**: concatenated UTF-8 encoded bytes for all strings.
+/// - **Null mask**: optional bit-packed validity bitmap (1=valid, 0=null).
+///
+/// ## Arrow compatibility
 /// The `Apache Arrow` framework defines two string types:
 /// - `String`: uses 32-bit offsets (`u32`)
 /// - `LargeString`: uses 64-bit offsets (`u64`)
@@ -26,10 +68,21 @@ use crate::{
 /// Arrow type. Doing so maintains a memory layout compatible with Arrow, enabling
 /// zero-copy data transfer between this structure and Arrow arrays.
 ///
-/// This type is append-only and stores:
-/// - **Offsets**: indices into the `data` buffer. The i-th string is at `data[offsets[i]..offsets[i+1]]`.
-/// - **Data**: concatenated UTF-8 encoded bytes for all strings.
-/// - **Null mask**: optional bit-packed validity bitmap (1=valid, 0=null).
+/// ## Example
+/// ```rust
+/// use minarrow::{StringArray, MaskedArray, vec64};
+///
+/// let arr = StringArray::<u32>::from_vec64(vec64![
+///     "alpha",
+///     "beta",
+///     "gamma"
+/// ], None);
+///
+/// assert_eq!(arr.len(), 3);
+/// assert_eq!(arr.get_str(0), Some("alpha"));
+/// assert_eq!(arr.get_str(1), Some("beta"));
+/// assert_eq!(arr.get_str(2), Some("gamma"));
+/// ```
 #[repr(C, align(64))]
 #[derive(PartialEq, Clone, Debug)]
 pub struct StringArray<T> {
@@ -40,7 +93,7 @@ pub struct StringArray<T> {
     pub data: Buffer<u8>,
 
     /// Optional null mask (bit-packed; 1=valid, 0=null).
-    pub null_mask: Option<Bitmask>
+    pub null_mask: Option<Bitmask>,
 }
 
 impl<T: Integer> StringArray<T> {
@@ -49,12 +102,16 @@ impl<T: Integer> StringArray<T> {
     pub fn new(
         data: impl Into<Buffer<u8>>,
         null_mask: Option<Bitmask>,
-        offsets: impl Into<Buffer<T>>
+        offsets: impl Into<Buffer<T>>,
     ) -> Self {
         let data: Buffer<u8> = data.into();
         let offsets: Buffer<T> = offsets.into();
         validate_null_mask_len(offsets.len() - 1, &null_mask);
-        Self { data, null_mask, offsets }
+        Self {
+            data,
+            null_mask,
+            offsets,
+        }
     }
 
     /// Constructs a dense StringArray from a slice of string slices (no nulls).
@@ -71,7 +128,7 @@ impl<T: Integer> StringArray<T> {
         Self {
             offsets: offsets.into(),
             data: data.into(),
-            null_mask: None
+            null_mask: None,
         }
     }
 
@@ -83,7 +140,11 @@ impl<T: Integer> StringArray<T> {
         Self {
             offsets: offsets.into(),
             data: Vec64::with_capacity(values_cap).into(),
-            null_mask: if null_mask { Some(Bitmask::with_capacity(n_strings)) } else { None }
+            null_mask: if null_mask {
+                Some(Bitmask::with_capacity(n_strings))
+            } else {
+                None
+            },
         }
     }
 
@@ -108,7 +169,7 @@ impl<T: Integer> StringArray<T> {
         Self {
             offsets: offsets.into(),
             data: data.into(),
-            null_mask
+            null_mask,
         }
     }
 
@@ -131,7 +192,7 @@ impl<T: Integer> StringArray<T> {
         Self {
             offsets: offsets.into(),
             data: data.into(),
-            null_mask
+            null_mask,
         }
     }
 
@@ -151,7 +212,7 @@ impl<T: Integer> StringArray<T> {
         Self {
             offsets: offsets.into(),
             data: data.into(),
-            null_mask
+            null_mask,
         }
     }
 
@@ -318,7 +379,7 @@ impl<T: Integer> StringArray<T> {
     pub fn iter_str_opt_range(
         &self,
         offset: usize,
-        len: usize
+        len: usize,
     ) -> impl Iterator<Item = Option<&str>> + '_ {
         (offset..offset + len).map(move |i| {
             if self.is_null(i) {
@@ -386,7 +447,7 @@ impl<T: Integer> StringArray<T> {
         CategoricalArray {
             data: indices.into(),
             unique_values: uniques.into(),
-            null_mask: self.null_mask.clone()
+            null_mask: self.null_mask.clone(),
         }
     }
 
@@ -488,7 +549,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
 
         Some(unsafe {
             std::mem::transmute::<&str, &'static str>(std::str::from_utf8_unchecked(
-                &self.data[start..end]
+                &self.data[start..end],
             ))
         })
     }
@@ -557,7 +618,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
         let end = unsafe { self.offsets.get_unchecked(idx + 1).to_usize().unwrap() };
         Some(unsafe {
             std::mem::transmute::<&str, &'static str>(std::str::from_utf8_unchecked(
-                &self.data[start..end]
+                &self.data[start..end],
             ))
         })
     }
@@ -609,7 +670,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
             let end = self.offsets[i + 1].to_usize();
             unsafe {
                 transmute::<&str, &'static str>(std::str::from_utf8_unchecked(
-                    &self.data[start..end]
+                    &self.data[start..end],
                 ))
             }
         })
@@ -632,7 +693,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
                 let end = self.offsets[i + 1].to_usize();
                 Some(unsafe {
                     transmute::<&str, &'static str>(std::str::from_utf8_unchecked(
-                        &self.data[start..end]
+                        &self.data[start..end],
                     ))
                 })
             }
@@ -649,7 +710,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
             let end = self.offsets[i + 1].to_usize();
             unsafe {
                 std::mem::transmute::<&str, &'static str>(std::str::from_utf8_unchecked(
-                    &self.data[start..end]
+                    &self.data[start..end],
                 ))
             }
         })
@@ -662,7 +723,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     fn iter_opt_range(
         &self,
         offset: usize,
-        len: usize
+        len: usize,
     ) -> impl Iterator<Item = Option<&'static str>> + '_ {
         (offset..offset + len).map(move |i| {
             if self.is_null(i) {
@@ -672,7 +733,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
                 let end = self.offsets[i + 1].to_usize();
                 Some(unsafe {
                     std::mem::transmute::<&str, &'static str>(std::str::from_utf8_unchecked(
-                        &self.data[start..end]
+                        &self.data[start..end],
                     ))
                 })
             }
@@ -716,7 +777,10 @@ impl<T: Integer> MaskedArray for StringArray<T> {
 
     /// Returns the total number of nulls.
     fn null_count(&self) -> usize {
-        self.null_mask.as_ref().map(|mask| mask.null_count()).unwrap_or(0)
+        self.null_mask
+            .as_ref()
+            .map(|mask| mask.null_count())
+            .unwrap_or(0)
     }
 
     /// Returns a logical slice of the string array, as a new `StringArray` object,
@@ -737,11 +801,14 @@ impl<T: Integer> MaskedArray for StringArray<T> {
             let relative = self.offsets[offset + i].to_usize() - base;
             sliced_offsets.push(T::from(relative).unwrap());
         }
-        let sliced_mask = self.null_mask.as_ref().map(|mask| mask.slice_clone(offset, len));
+        let sliced_mask = self
+            .null_mask
+            .as_ref()
+            .map(|mask| mask.slice_clone(offset, len));
         StringArray {
             offsets: sliced_offsets.into(),
             data: sliced_data.into(),
-            null_mask: sliced_mask
+            null_mask: sliced_mask,
         }
     }
 
@@ -769,8 +836,11 @@ impl<T: Integer> MaskedArray for StringArray<T> {
         let value_bytes = value.as_bytes();
         let value_len = value_bytes.len();
 
-        let mut current_offset =
-            if let Some(last) = self.offsets.last() { last.to_usize().unwrap() } else { 0 };
+        let mut current_offset = if let Some(last) = self.offsets.last() {
+            last.to_usize().unwrap()
+        } else {
+            0
+        };
 
         if n > current_len {
             self.offsets.reserve(n - current_len);
@@ -910,8 +980,10 @@ impl<T: Integer> MaskedArray for StringArray<T> {
         // 1. Append data
         self.data.extend_from_slice(&other.data);
 
-        let prev_last_offset =
-            *self.offsets.last().expect("StringArray must have at least one offset");
+        let prev_last_offset = *self
+            .offsets
+            .last()
+            .expect("StringArray must have at least one offset");
         for off in other.offsets.iter().skip(1) {
             let new_offset = prev_last_offset + (*off - other.offsets[0]);
             self.offsets.push(new_offset);
@@ -970,7 +1042,7 @@ impl<T: Integer + Send + Sync> StringArray<T> {
     pub fn par_iter_range(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl ParallelIterator<Item = &str> + '_ {
         use rayon::prelude::*;
         let data = &self.data;
@@ -993,7 +1065,7 @@ impl<T: Integer + Send + Sync> StringArray<T> {
     pub fn par_iter_range_opt(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl ParallelIterator<Item = Option<&str>> + '_ {
         use rayon::prelude::*;
         let data = &self.data;
@@ -1016,7 +1088,7 @@ impl<T: Integer + Send + Sync> StringArray<T> {
     pub unsafe fn par_iter_range_unchecked(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl rayon::prelude::ParallelIterator<Item = &str> + '_ {
         use rayon::prelude::*;
         let data = &self.data;
@@ -1038,7 +1110,7 @@ impl<T: Integer + Send + Sync> StringArray<T> {
     pub unsafe fn par_iter_range_opt_unchecked(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl rayon::prelude::ParallelIterator<Item = Option<&str>> + '_ {
         use rayon::prelude::*;
         let data = &self.data;
@@ -1072,7 +1144,7 @@ impl<T: Zero> Default for StringArray<T> {
         Self {
             offsets: vec64![T::zero()].into(),
             data: Vec64::new().into(),
-            null_mask: None
+            null_mask: None,
         }
     }
 }
@@ -1136,13 +1208,17 @@ impl<T: crate::traits::type_unions::Integer> Index<Range<usize>> for StringArray
 
 impl<T> Display for StringArray<T>
 where
-    T: Integer
+    T: Integer,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let len = self.len();
         let nulls = self.null_count();
 
-        writeln!(f, "StringArray [{} values]s] (dtype: string, nulls: {})", len, nulls)?;
+        writeln!(
+            f,
+            "StringArray [{} values]s] (dtype: string, nulls: {})",
+            len, nulls
+        )?;
 
         write!(f, "[")?;
 
@@ -1153,7 +1229,7 @@ where
 
             match self.get_str(i) {
                 Some(s) => write!(f, "\"{}\"", s)?,
-                None => write!(f, "null")?
+                None => write!(f, "null")?,
             }
         }
 
@@ -1502,7 +1578,10 @@ mod parallel_tests {
         // After append: ["ab", "c", "de", None, "fgh"]
         assert_eq!(arr1.len(), 5);
         let values: Vec<Option<&str>> = (0..5).map(|i| arr1.get_str(i)).collect();
-        assert_eq!(values, vec![Some("ab"), Some("c"), Some("de"), None, Some("fgh"),]);
+        assert_eq!(
+            values,
+            vec![Some("ab"), Some("c"), Some("de"), None, Some("fgh"),]
+        );
 
         // Validate offset rebasing (each offset should be increasing, last == data.len())
         let last_offset = arr1.offsets.last().cloned().unwrap();

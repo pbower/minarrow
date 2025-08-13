@@ -1,15 +1,64 @@
+//! Zero-copy array view abstractions for `MinArrow`.
+//!
+//! This module defines the [`View`] trait, which provides a unified interface
+//! for creating lightweight, zero-copy “windows” into arrays without duplicating
+//! their underlying buffers.  
+//!
+//! It supports three main access patterns:
+//! - **Native slices** – direct `&[T]` or `&[u8]` access for fixed- and variable-width types.
+//! - **ArrayView** – a typed, windowed view backed by `Arc`-cloned array data.
+//! - **TupleView** – a minimal `(&Array, offset, length)` form for maximum performance.
+//!
+//! These views allow efficient subsetting, iteration, and type-specific access
+//! (`.num()`, `.text()`, `.dt()`, `.bool()`), while preserving the semantics of
+//! the original array type.
+//!
+//! Unlike Apache Arrow’s trait-based array references, `MinArrow` stores its arrays
+//! in a concrete [`Array`] type already holding an `Arc` to its inner buffers.
+//! This means `ArrayView` only needs to enforce logical offset/length constraints,
+//! avoiding additional indirection or ref-counting overhead.
+//!
+//! Use these abstractions in pipelines, joins, and analytic operations where you
+//! need read-only views over subsets of arrays without copying or reallocation.
+
 use crate::{Array, ArrayV, Length, MaskedArray, Offset};
 
-// Zero-copy sliced views into arrays with multiple abstraction levels.
-///
-/// Provides three view types:
-/// - **Native Rust Slice**: `&[T]` for fixed-width types, `&[u8]` for variable-width types
-/// - **ArrayView**: Zero-copy `Arc`-cloned reference with simplified windowed indexing
-/// - **TupleView**: Minimal `(&Array, offset, length)` tuple for maximum performance
-///
-/// `ArrayView` provides semantic type variants (`.num()`, `.text()`, `.dt()`, `.bool()`) 
-/// enabling `impl Into<NumericalArrayView>` function signatures that accept both full arrays 
-/// and views with zero-copy conversion between compatible types.
+/// # View trait
+/// 
+/// Zero-copy, windowed access to array data with multiple abstraction levels.
+/// 
+/// ## Description
+/// The [`View`] trait provides a unified interface for creating logical subviews
+/// into arrays without duplicating their underlying buffers. It is implemented by
+/// all [`MaskedArray`] types and supports three main access patterns:
+/// 
+/// - **Native slice access** – direct `&[T]` or `&[u8]` for fixed- and variable-width data.
+/// - **ArrayView** – an `Arc`-cloned, type-aware view with safe windowing and typed accessors.
+/// - **TupleView** – a minimal `(&Array, offset, length)` form for maximum performance.
+/// 
+/// ## Purpose
+/// This trait indirectly supports pipelines, joins, and analytics that need read-only
+/// subsets of arrays without the cost of copying or reallocating.
+/// 
+/// ### Ownership Semantics
+/// - When called on an `Arc`-wrapped array (e.g., [`Array`]), `.view()` consumes the `Arc`.
+///   Clone the `Arc` first if you need to retain the original.
+/// - When called on a direct array variant, `.view()` consumes ownership.
+///   Wrap in `Array` first if you need continued access.
+/// 
+/// ### Behaviour
+/// - Views enforce logical offset/length constraints.
+/// - Access methods such as `.num()`, `.text()`, `.dt()`, `.bool()` return typed view variants.
+/// - Always zero-copy: only offset and length metadata change, not the backing buffers.
+/// 
+/// ### Compared to Apache Arrow
+/// Arrow arrays are lightweight views over reference-counted buffers
+/// *(the view + buffers are separate types)*. In **MinArrow**, an [`Array`]
+/// already owns an `Arc` to its inner buffers; a `View` (e.g., [`ArrayV`])
+/// simply adds window (offset/length) metadata on top of that same Arc’d data.
+/// In both designs there’s effectively one layer of ref counting; the key
+/// difference is that **Apache Arrow** bakes “view-ness” into the array type itself,
+/// whereas **MinArrow** keeps arrays concrete and layers windowing as a separate view.
 pub trait View: MaskedArray + Into<Array> + Clone
 where
     <Self as MaskedArray>::Container: AsRef<[Self::BufferT]>,

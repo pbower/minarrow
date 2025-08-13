@@ -1,4 +1,26 @@
+//! # SuperTable Module
+//!
+//! SuperTable groups multiple `Table` batches under a shared schema.
+//!
+//! ## Purpose
+//! - Treats an ordered sequence of `Table` batches as one dataset.
+//! - Preserves per-batch independence while allowing unified export over Arrow FFI.
+//! - Enables both bounded and unbounded (Live / streaming) workflows.
+//!
+//! ## Behaviour
+//! - All batches must have identical column definitions (`Field` metadata).
+//! - Row counts may differ between batches, but not between inner arrays.
+//! - When sent via Arrow FFI, exposed as a single logical table.
+//! - Supports concatenation into a materialised `Table` on demand.
+//!
+//! ## Typical Uses
+//! - Partitioned storage readers (e.g., multiple Arrow IPC files).
+//! - Streaming ingestion into append-only datasets.
+//! - Windowed or mini-batch analytics.
+//! - Incremental build-up of tables for later unification.
+
 use std::fmt::{Display, Formatter};
+
 use std::iter::FromIterator;
 use std::sync::Arc;
 
@@ -8,30 +30,29 @@ use crate::structs::table::Table;
 #[cfg(feature = "views")]
 use crate::{SuperTableV, TableV};
 
-/// Batched (windowed/chunked) table - collection of `Tables`.
+/// # SuperTable
 ///
-/// ### Data structure
-/// Each Table represents a record batch with schema consistency enforced.
-/// Windows/row-chunks are tracked as Vec<Table>.
+/// Higher-order container representing a sequence of `Table` batches with consistent schema.
 ///
-/// - `batches`: Ordered record batches.
-/// - `schema`: schema of the first batch, cached for fast access.
-/// - `n_rows`: total number of rows across all batches.
-/// - `name`: logical group name.
+/// ## Overview
+/// - Each batch is a `Table` (record batch) with identical column metadata.
+/// - Stored as `Vec<Arc<Table>>`, preserving order and schema consistency.
+/// - Row counts per batch may vary, but are consistent across all Table columns.
+/// - When exported via Arrow FFI, the batches are viewed as a single logical table.
+/// - Useful for open-ended streams, partitioned datasets, or
+///   other scenarios where batches are processed independently.
 ///
-/// ### Use cases
-/// Useful for cases such as :
-///     1. Streaming *(and mini-batch processing)*
-///     2. Reading from multiple memory mapped arrow files from disk
-///     3. In-memory analytics, where chunks can be used as a source for
-///     parallelism, or windowing, etc., depending on use case semantics.
+/// ## Fields
+/// - `batches`: ordered collection of `Table` batches.
+/// - `schema`: cached schema from the first batch for fast access.
+/// - `n_rows`: total row count across all batches.
+/// - `name`: super table name.
 ///
-/// # Naming Rationale
-/// *Apache Arrow*'s "Table" represents a single logical dataset with chunked columns internally.
-/// `SuperTable` explicitly indicates this is a collection of separate record batches (Tables),
-/// each maintaining independent column buffers whilst sharing schema consistency.
-/// The "Super" prefix distinguishes it as a higher-order container rather than a single flat table,
-/// and the fact that it's epic. A `ChunkedTable` alias is available for alternative preference.
+/// ## Use cases
+/// - Streaming and mini-batch processing.
+/// - Reading multiple Arrow IPC/memory-mapped files as one dataset.
+/// - Parallel or windowed in-memory analytics.
+/// - Incremental table construction where batches arrive over time.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SuperTable {
     pub batches: Vec<Arc<Table>>,

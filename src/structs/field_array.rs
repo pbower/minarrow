@@ -1,3 +1,14 @@
+//! # FieldArray
+//!
+//! Couples a `Field` (array-level schema metadata) with an immutable `Array` of values.
+//!
+//! Used as the primary column representation in `Minarrow` tables, ensuring
+//! schema and data remain consistent.  
+//!
+//! Supports creation from raw components or by inferring schema from arrays,
+//! and is the unit transferred over Arrow FFI or to external libraries
+//! such as Apache Arrow or Polars.
+
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
@@ -12,14 +23,56 @@ use crate::aliases::FieldAVT;
 use crate::ffi::arrow_dtype::ArrowType;
 use crate::{Array, Field};
 
+
+/// # FieldArray
+/// 
 /// Named and typed data column with associated array values.
 ///
-/// Combines a `Field` with an immutable `Array` instance.
-///
-/// `FieldArray` integrates naturally into a `Table`, where immutability enforces row-length guarantees.
+/// ## Role
+/// - Combines a `Field` with an immutable `Array` instance.
+/// - `FieldArray` integrates naturally into a `Table`, where immutability enforces row-length guarantees.
 /// It can also serve as a self-documenting array and is required when sending `Minarrow` data
 /// over FFI to `Apache Arrow`. In such cases, it's worth ensuring the correct logical `Datetime` Arrow type
 /// is built when constructing the `Field`, as this determines the `Arrow` type on the receiving side.
+/// 
+/// ##  
+/// ```rust
+/// use minarrow::{Array, Field, FieldArray, MaskedArray};
+/// use minarrow::structs::field_array::{field_array};
+/// use minarrow::ffi::arrow_dtype::ArrowType;
+/// use minarrow::structs::variants::integer::IntegerArray;
+///
+/// // Build a typed array
+/// let mut ints = IntegerArray::<i32>::default();
+/// ints.push(1);
+/// ints.push(2);
+/// let arr = Array::from_int32(ints);
+///
+/// // Fast constructor - infers type/nullability
+/// let fa = field_array("id", arr.clone());
+///
+/// assert_eq!(fa.field.name, "id");
+/// assert_eq!(fa.arrow_type(), ArrowType::Int32);
+/// assert_eq!(fa.len(), 2);
+///
+/// // Take an owned slice [offset..offset+len)
+/// let sub = fa.slice_clone(0, 1);
+/// assert_eq!(sub.len(), 1);
+/// 
+/// // Standard constructor 
+/// 
+/// // Describe it with a Field and wrap as FieldArray
+/// let field = Field::new("id", ArrowType::Int32, false, None);
+/// let fa = FieldArray::new(field, arr);
+///
+/// assert_eq!(fa.field.name, "id");
+/// assert_eq!(fa.arrow_type(), ArrowType::Int32);
+/// assert_eq!(fa.len(), 2);
+///
+/// // Take an owned slice [offset..offset+len)
+/// let sub = fa.slice_clone(0, 1);
+/// assert_eq!(sub.len(), 1);
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldArray {
     /// Array metadata

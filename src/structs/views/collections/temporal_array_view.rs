@@ -1,23 +1,63 @@
+//! # TemporalArrayView Module
+//!
+//! `TemporalArrayV` is a **read-only, windowed view** over a [`TemporalArray`].
+//! It exposes a zero-copy slice `[offset .. offset + len)` for fast, indexable
+//! access to datetime/timestamp data.
+//!
+//! ## Role
+//! - Let APIs accept either a full `TemporalArray` or a pre-sliced view.
+//! - Avoid deep copies while enabling per-window operations and previews.
+//! - Optionally cache per-window null counts to speed up repeated scans.
+//!
+//! ## Behaviour
+//! - Works with 32-bit and 64-bit datetime variants behind `TemporalArray`.
+//! - Accessors - [`get_i64`](TemporalArrayV::get_i64) and
+//!   [`get_i32`](TemporalArrayV::get_i32) (the latter returns `None` for 64-bit).
+//! - Slicing yields another borrowed view; buffers are not cloned.
+//!
+//! ## Threading
+//! - Not thread-safe: uses `Cell` to cache the window’s null count.
+//! - For parallel use, create per-thread views via [`slice`](TemporalArrayV::slice).
+//!
+//! ## Interop
+//! - Convert to an owned `TemporalArray` of the window with
+//!   [`to_temporal_array`](TemporalArrayV::to_temporal_array).
+//! - Lift to `Array` with [`as_array`](TemporalArrayV::as_array) for enum-level APIs.
+//!
+//! ## Invariants
+//! - `offset + len <= array.len()`
+//! - `len` is the logical element count of this view.
+
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::traits::print::MAX_PREVIEW;
 use crate::{Array, ArrayV, BitmaskV, MaskedArray, TemporalArray};
 
-/// Read-only, windowed view over a `TemporalArray`.
+/// # TemporalArrayView
 ///
-/// ### Purpose
-/// This is used to return an indexable view over a subset of the array.
-/// Additionally, it can be used to cache null counts for those regions,
-/// which can be used to speed up calculations.
+/// Read-only, zero-copy view over a `[offset .. offset + len)` window of a
+/// [`TemporalArray`].
 ///
-/// ### Behaviour
-/// - Provides access to datetime array data without copying.
-/// - Supports efficient windowed operations over temporal columns.
+/// ## Purpose
+/// - Return an indexable subrange without cloning buffers.
+/// - Optionally cache per-window null counts for faster repeated passes.
 ///
-/// ### Safety
-/// This struct is not thread-safe due to its use of `Cell` for caching the null count.
-/// For multi-threaded use, create separate arc-clone views per thread using `slice`.
+/// ## Behaviour
+/// - Supports 32-bit and 64-bit datetime storage behind `TemporalArray`.
+/// - Provides upcast helpers - [`get_i64`](Self::get_i64) and
+///   [`get_i32`](Self::get_i32).
+/// - Further slicing yields another borrowed view.
+///
+/// ## Fields
+/// - `array`: backing [`TemporalArray`] (enum over temporal types).
+/// - `offset`: starting index into the backing array.
+/// - `len`: logical number of elements in the view.
+/// - `null_count`: cached `Option<usize>` for this window (internal).
+///
+/// ## Notes
+/// - Not thread-safe due to `Cell`. Create per-thread views with [`slice`](Self::slice).
+/// - Use [`to_temporal_array`](Self::to_temporal_array) to materialise the window.
 #[derive(Clone, PartialEq)]
 pub struct TemporalArrayV {
     pub array: TemporalArray,

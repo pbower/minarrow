@@ -1,5 +1,8 @@
+//! # Allocator64 Module
+//! 
 //! 64-byte-aligned allocator for AVX-512 / Arrow buffers.
 //!
+//! ## Purpose
 //! Integrates with `Vec64<T>` and overrides allocations
 //! to ensure 64-byte alignment, consistent
 //! with the Apache Arrow specification and for compatibility
@@ -13,8 +16,11 @@ use std::ptr::slice_from_raw_parts_mut;
 
 const ALIGN_64: usize = 64;
 
+/// # Alloc64
+/// 
 /// Global, zero-sized allocator that enforces 64-bit alignment.
-///
+/// 
+/// ## Behaviour
 /// Hooks into Vec64<T>. Behind the scenes, Vec64<T, Vec64>:
 ///
 /// - Calls Vec64::allocate() when allocating new memory.
@@ -22,13 +28,14 @@ const ALIGN_64: usize = 64;
 /// - Calls Vec64::deallocate() when the vector is dropped. etc,
 /// ensuring these calls go through the alignment-enforcing logic.
 ///
+/// ## Purpose
 /// Guarantees starting pointer alignment for all allocations it manages
 /// including allocations due to growth, mutation, extension,
 /// and insertion—in all scenarios except for zero-sized types (ZSTs)
 /// and capacity 0.
-///
+/// 
 /// ### Padding
-/// This allocator does ***not* pad data automatically** - it's here to ensure
+/// This allocator does ***not* pad data automatically** - it's purpose is to ensure
 /// starting alignment for the memory allocation. When 'flatbuffering'
 /// multiple buffers, e.g., over the network, or as part of framed payloads,
 /// that you later plan to "steal", for zero-copy memory access, keep in mind

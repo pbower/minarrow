@@ -7,16 +7,8 @@ use crate::Vec64;
 use crate::structs::shared_buffer::SharedBuffer;
 use crate::traits::print::MAX_PREVIEW;
 
-/// Memory ownership tracking
-enum Storage<T> {
-    Owned(Vec64<T>),
-    Shared {
-        owner: SharedBuffer,
-        offset: usize, // element index (not bytes)
-        len: usize     // element count
-    }
-}
-
+/// # Buffer
+/// 
 /// Data buffer abstraction that blends the standard 64-byte aligned Vec data buffer,
 /// with an externally backed and borrowed source such as memory-mapped files
 /// or network streams.
@@ -25,6 +17,7 @@ enum Storage<T> {
 /// 1. **Filesystem IO** (e.g., memory-mapped IPC files, datasets on disk)
 /// 2. **Network IO** (e.g., `WebTransport`, `Websockets`, `gRPC` *(without Protobuf)*, etc.)
 ///
+/// ## Purpose
 /// At the cost of a layer of abstraction, it enables working with external data
 /// in-place and without additional copy overhead, directly at the source.
 ///
@@ -51,6 +44,17 @@ enum Storage<T> {
 /// - The Arrow specification confirms both are valid, with 64-byte being the optimal format for SIMD.
 pub struct Buffer<T> {
     storage: Storage<T>
+}
+
+/// Internal memory ownership tracking store
+/// for `Buffer`
+enum Storage<T> {
+    Owned(Vec64<T>),
+    Shared {
+        owner: SharedBuffer,
+        offset: usize, // element index (not bytes)
+        len: usize     // element count
+    }
 }
 
 impl<T: Clone> Buffer<T> {

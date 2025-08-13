@@ -1,3 +1,13 @@
+//! # Error Module
+//! 
+//! Defines the unified error type for Minarrow.
+//! 
+//! ## Features 
+//! - Covers array length mismatches, overflow, lossy casts, null handling,
+//! type incompatibility, and invalid conversions.  
+//! - Implements `Display` for readable output and `Error` for integration
+//! with standard Rust error handling.
+
 use std::fmt;
 use std::error::Error;
 
