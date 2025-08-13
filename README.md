@@ -1,7 +1,5 @@
 # Minarrow - *Apache Arrow benefits without baggage for HPC, Native Streaming, and Embedded*
 
-***⚡ Own that latency. 🏆 Win the performance. 🚀 Keep your velocity.***
-
 ## Intro
 
 _Welcome to Minarrow_.
