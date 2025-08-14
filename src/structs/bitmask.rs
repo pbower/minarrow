@@ -416,7 +416,7 @@ impl Bitmask {
 
         let dst = self.bits.as_mut_slice();
 
-        // Fast path: both self and src are byte-aligned
+        // Fast path - both self and src are byte-aligned
         if (start & 7) == 0 {
             // dst is byte-aligned; copy whole bytes first, then tail
             let dst_byte = start >> 3;

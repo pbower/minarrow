@@ -1,4 +1,4 @@
-# Minarrow - *Apache Arrow benefits without baggage for HPC, Native Streaming, and Embedded*
+# Minarrow - *Apache Arrow tuned for HPC, Native Streaming, and Embedded*
 
 ## Intro
 
@@ -7,6 +7,8 @@ _Welcome to Minarrow_.
 Minarrow is a from-scratch columnar library built for real-time and systems workloads in Rust.  
 It keeps the surface small, makes types explicit, compiles fast, and aligns data for predictable SIMD performance.  
 It speaks Arrow when you need to talk interchange — but the core stays lean.  
+
+Minarrow is the base layer of several related projects that expand on it to deliver a full set of SIMD-accelerated Kernels, Tokio streamable buffers, and a full-scale engine.
 
 ## Design Focus
 

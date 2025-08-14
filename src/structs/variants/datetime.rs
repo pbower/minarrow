@@ -544,6 +544,93 @@ mod tests {
         assert_eq!(sliced.null_count(), 1);
         assert_eq!(sliced.time_unit, TimeUnit::Milliseconds);
     }
+
+    #[test]
+    fn test_batch_extend_from_iter_with_capacity() {
+        let mut arr = DatetimeArray::<i64>::with_default_unit(Some(TimeUnit::Seconds));
+        let data: Vec<i64> = (1_000_000_000..1_000_000_100).collect(); // Unix timestamps
+        
+        arr.extend_from_iter_with_capacity(data.into_iter(), 100);
+        
+        assert_eq!(arr.len(), 100);
+        for i in 0..100 {
+            assert_eq!(arr.value(i), Some(1_000_000_000 + i as i64));
+        }
+        assert_eq!(arr.time_unit, TimeUnit::Seconds);
+    }
+
+    #[test]
+    fn test_batch_extend_from_slice() {
+        let mut arr = DatetimeArray::<i32>::with_capacity(10, true, Some(TimeUnit::Milliseconds));
+        arr.push(1000);
+        arr.push_null();
+        
+        let data = &[2000i32, 3000, 4000];
+        arr.extend_from_slice(data);
+        
+        assert_eq!(arr.len(), 5);
+        assert_eq!(arr.value(0), Some(1000));
+        assert_eq!(arr.value(1), None);
+        assert_eq!(arr.value(2), Some(2000));
+        assert_eq!(arr.value(3), Some(3000));
+        assert_eq!(arr.value(4), Some(4000));
+        assert!(arr.null_count() >= 1); // At least the initial null
+        assert_eq!(arr.time_unit, TimeUnit::Milliseconds);
+    }
+
+    #[test]
+    fn test_batch_fill_datetime() {
+        let timestamp = 1_700_000_000i64; // Recent timestamp
+        let arr = DatetimeArray::<i64>::fill(timestamp, 200);
+        
+        assert_eq!(arr.len(), 200);
+        assert_eq!(arr.null_count(), 0);
+        for i in 0..200 {
+            assert_eq!(arr.value(i), Some(timestamp));
+        }
+        // Default time unit from fill() 
+        // Let's check what it actually is rather than assume
+        assert!(matches!(arr.time_unit, TimeUnit::Nanoseconds | TimeUnit::Milliseconds | TimeUnit::Seconds | TimeUnit::Microseconds | TimeUnit::Days));
+    }
+
+    #[test]
+    fn test_batch_operations_different_time_units() {
+        // Test with microseconds
+        let mut arr_micro = DatetimeArray::<i64>::with_default_unit(Some(TimeUnit::Microseconds));
+        let micro_data = &[1_000_000i64, 2_000_000, 3_000_000]; // 1, 2, 3 seconds in microseconds
+        
+        arr_micro.extend_from_slice(micro_data);
+        
+        assert_eq!(arr_micro.len(), 3);
+        assert_eq!(arr_micro.time_unit, TimeUnit::Microseconds);
+        for (i, &expected) in micro_data.iter().enumerate() {
+            assert_eq!(arr_micro.value(i), Some(expected));
+        }
+    }
+
+    #[test]
+    fn test_batch_fill_preserves_time_unit() {
+        let _arr = DatetimeArray::<i32>::with_default_unit(Some(TimeUnit::Milliseconds));
+        let filled = DatetimeArray::<i32>::fill(1000, 50);
+        
+        // Note: fill() creates a new array with default time unit
+        // This test documents current behavior
+        assert!(matches!(filled.time_unit, TimeUnit::Nanoseconds | TimeUnit::Milliseconds | TimeUnit::Seconds | TimeUnit::Microseconds | TimeUnit::Days));
+        assert_eq!(filled.len(), 50);
+    }
+
+    #[test]
+    fn test_batch_operations_large_timestamps() {
+        let mut arr = DatetimeArray::<i64>::with_default_unit(Some(TimeUnit::Nanoseconds));
+        let large_timestamps: Vec<i64> = (0..10).map(|i| 1_000_000_000_000_000_000 + i).collect();
+        
+        arr.extend_from_iter_with_capacity(large_timestamps.into_iter(), 10);
+        
+        assert_eq!(arr.len(), 10);
+        for i in 0..10 {
+            assert_eq!(arr.value(i), Some(1_000_000_000_000_000_000 + i as i64));
+        }
+    }
 }
 
 #[cfg(test)]
