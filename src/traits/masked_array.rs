@@ -273,4 +273,26 @@ pub trait MaskedArray {
     /// is an alternative option.
     fn append_array(&mut self, other: &Self);
 
+    /// Extends the array from an iterator with pre-allocated capacity.
+    /// 
+    /// Pre-allocates the specified additional capacity to avoid reallocations during bulk insertion,
+    /// providing optimal performance for large datasets where the final size is known in advance.
+    fn extend_from_iter_with_capacity<I>(&mut self, iter: I, additional_capacity: usize)
+    where
+        I: Iterator<Item = Self::LogicalType>;
+
+    /// Extends the array from a slice of values.
+    /// 
+    /// More efficient than individual `push` operations as it pre-allocates capacity
+    /// and can use bulk copy operations for compatible data types. For variable-length
+    /// types like strings, calculates total byte requirements upfront.
+    fn extend_from_slice(&mut self, slice: &[Self::LogicalType]);
+
+    /// Creates a new array filled with the specified value repeated `count` times.
+    /// 
+    /// Pre-allocates exact capacity to avoid reallocations and uses 
+    /// efficient bulk operations where possible. For string types,
+    /// calculates total byte requirements to minimise memory overhead.
+    fn fill(value: Self::LogicalType, count: usize) -> Self;
+
 }

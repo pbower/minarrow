@@ -289,6 +289,56 @@ mod tests {
         assert_eq!(sliced.get(2), Some(4.5));
         assert_eq!(sliced.null_count(), 1);
     }
+
+    #[test]
+    fn test_batch_extend_from_iter_with_capacity() {
+        let mut arr = FloatArray::<f64>::default();
+        let data: Vec<f64> = (0..100).map(|i| i as f64 * 0.5).collect();
+        
+        arr.extend_from_iter_with_capacity(data.into_iter(), 100);
+        
+        assert_eq!(arr.len(), 100);
+        for i in 0..100 {
+            assert_eq!(arr.get(i), Some(i as f64 * 0.5));
+        }
+    }
+
+    #[test]
+    fn test_batch_extend_from_slice() {
+        let mut arr = FloatArray::<f32>::with_capacity(5, true);
+        arr.push(1.1);
+        arr.push_null();
+        
+        let data = &[2.2f32, 3.3, 4.4];
+        arr.extend_from_slice(data);
+        
+        assert_eq!(arr.len(), 5);
+        assert_eq!(arr.get(0), Some(1.1));
+        assert_eq!(arr.get(1), None);
+        assert_eq!(arr.get(2), Some(2.2));
+        assert_eq!(arr.get(3), Some(3.3));
+        assert_eq!(arr.get(4), Some(4.4));
+    }
+
+    #[test]
+    fn test_batch_fill_with_special_values() {
+        let arr = FloatArray::<f64>::fill(f64::NAN, 10);
+        
+        assert_eq!(arr.len(), 10);
+        for i in 0..10 {
+            assert!(arr.get(i).unwrap().is_nan());
+        }
+    }
+
+    #[test]
+    fn test_batch_fill_infinity() {
+        let arr = FloatArray::<f32>::fill(f32::INFINITY, 5);
+        
+        assert_eq!(arr.len(), 5);
+        for i in 0..5 {
+            assert_eq!(arr.get(i), Some(f32::INFINITY));
+        }
+    }
 }
 
 #[cfg(test)]
