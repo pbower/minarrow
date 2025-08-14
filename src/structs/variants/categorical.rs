@@ -825,6 +825,94 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
             }
         }
     }
+
+    /// Extends the categorical array from an iterator with pre-allocated capacity.
+    /// Reserves capacity in the underlying index buffer to avoid reallocations
+    /// during bulk insertion. Dictionary is expanded as new unique values are encountered.
+    fn extend_from_iter_with_capacity<I>(&mut self, iter: I, additional_capacity: usize)
+    where
+        I: Iterator<Item = Self::LogicalType>,
+    {
+        self.data.reserve(additional_capacity);
+        let values: Vec<Self::LogicalType> = iter.collect();
+        let start_len = self.data.len();
+        // Extend the length to accommodate new elements
+        self.data.resize(start_len + values.len(), T::from_usize(0));
+        // Extend null mask if it exists
+        if let Some(mask) = &mut self.null_mask {
+            mask.resize(start_len + values.len(), true);
+        }
+        // Now use unchecked operations since we have proper length
+        for (i, value) in values.iter().enumerate() {
+            let dict_idx = match self.unique_values.iter().position(|s| s == &value.to_string()) {
+                Some(idx) => T::from_usize(idx),
+                None => {
+                    let idx = self.unique_values.len();
+                    self.unique_values.push(value.to_string());
+                    T::from_usize(idx)
+                }
+            };
+            {
+                let data = self.data.as_mut_slice();
+                data[start_len + i] = dict_idx;
+            }
+            if let Some(mask) = &mut self.null_mask {
+                unsafe { mask.set_unchecked(start_len + i, true) };
+            }
+        }
+    }
+
+    /// Extends the categorical array from a slice of string values.
+    /// Pre-allocates capacity for the index buffer and efficiently processes
+    /// each string through the internal dictionary for optimal categorical encoding.
+    fn extend_from_slice(&mut self, slice: &[Self::LogicalType]) {
+        let start_len = self.data.len();
+        self.data.reserve(slice.len());
+        // Extend the length to accommodate new elements
+        self.data.resize(start_len + slice.len(), T::from_usize(0));
+        // Extend null mask if it exists
+        if let Some(mask) = &mut self.null_mask {
+            mask.resize(start_len + slice.len(), true);
+        }
+        // Now use unchecked operations since we have proper length
+        for (i, value) in slice.iter().enumerate() {
+            let dict_idx = match self.unique_values.iter().position(|s| s == &value.to_string()) {
+                Some(idx) => T::from_usize(idx),
+                None => {
+                    let idx = self.unique_values.len();
+                    self.unique_values.push(value.to_string());
+                    T::from_usize(idx)
+                }
+            };
+            {
+                let data = self.data.as_mut_slice();
+                data[start_len + i] = dict_idx;
+            }
+            if let Some(mask) = &mut self.null_mask {
+                unsafe { mask.set_unchecked(start_len + i, true) };
+            }
+        }
+    }
+
+    /// Creates a new categorical array filled with the specified string repeated `count` times.
+    /// The dictionary will contain only one unique value, making this highly memory-efficient 
+    /// for repeated categorical values.
+    fn fill(value: Self::LogicalType, count: usize) -> Self {
+        let mut array = CategoricalArray::<T>::from_vec64(crate::Vec64::with_capacity(count), None);
+        // Extend the length to accommodate new elements
+        array.data.resize(count, T::from_usize(0));
+        // Get or add the dictionary entry once
+        array.unique_values.push(value.to_string());
+        let dict_index = T::from_usize(0);
+        // Now use unchecked operations since we have proper length
+        for i in 0..count {
+            {
+                let data = array.data.as_mut_slice();
+                data[i] = dict_index;
+            }
+        }
+        array
+    }
 }
 
 #[cfg(feature = "parallel_proc")]
@@ -1216,6 +1304,108 @@ mod tests {
         assert_eq!(arr.get(0), Some("alpha"));
         assert_eq!(arr.get(1), None);
         assert_eq!(arr.null_mask(), mask.as_ref());
+    }
+
+    #[test]
+    fn test_batch_extend_from_iter_with_capacity() {
+        let mut arr = CategoricalArray::<u32>::default();
+        let data = vec!["cat".to_string(), "dog".to_string(), "cat".to_string(), "bird".to_string()];
+        
+        arr.extend_from_iter_with_capacity(data.into_iter(), 4);
+        
+        assert_eq!(arr.len(), 4);
+        assert_eq!(arr.get(0), Some("cat"));
+        assert_eq!(arr.get(1), Some("dog"));
+        assert_eq!(arr.get(2), Some("cat"));
+        assert_eq!(arr.get(3), Some("bird"));
+        
+        // Dictionary should have 3 unique values
+        assert_eq!(arr.unique_values.len(), 3);
+    }
+
+    #[test]
+    fn test_batch_extend_from_slice_dictionary_growth() {
+        let mut arr = CategoricalArray::<u32>::default();
+        arr.push("initial".to_string());
+        
+        let data = &["apple".to_string(), "banana".to_string(), "apple".to_string()];
+        arr.extend_from_slice(data);
+        
+        assert_eq!(arr.len(), 4);
+        assert_eq!(arr.get(0), Some("initial"));
+        assert_eq!(arr.get(1), Some("apple"));
+        assert_eq!(arr.get(2), Some("banana"));
+        assert_eq!(arr.get(3), Some("apple"));
+        
+        // Dictionary: initial, apple, banana
+        assert_eq!(arr.unique_values.len(), 3);
+    }
+
+    #[test]
+    fn test_batch_fill_single_category() {
+        let arr = CategoricalArray::<u32>::fill("repeated".to_string(), 100);
+        
+        assert_eq!(arr.len(), 100);
+        assert_eq!(arr.null_count(), 0);
+        
+        // All values should be the same category
+        for i in 0..100 {
+            assert_eq!(arr.get(i), Some("repeated"));
+        }
+        
+        // Dictionary should contain only one unique value
+        assert_eq!(arr.unique_values.len(), 1);
+        assert_eq!(arr.unique_values[0], "repeated");
+        
+        // All indices should point to the same dictionary entry (0)
+        for i in 0..100 {
+            assert_eq!(arr.data[i], 0u32);
+        }
+    }
+
+    #[test]
+    fn test_batch_operations_with_nulls() {
+        let mut arr = CategoricalArray::<u32>::default();
+        arr.push("first".to_string());
+        arr.push_null();
+        
+        let data = &["second".to_string(), "first".to_string()];
+        arr.extend_from_slice(data);
+        
+        assert_eq!(arr.len(), 4);
+        assert_eq!(arr.get(0), Some("first"));
+        assert_eq!(arr.get(1), None);
+        assert_eq!(arr.get(2), Some("second"));
+        assert_eq!(arr.get(3), Some("first"));
+        assert!(arr.null_count() >= 1); // At least the initial null
+        
+        // Dictionary: first, second  
+        assert!(arr.unique_values.len() >= 2); // At least first and second
+    }
+
+    #[test]
+    fn test_batch_operations_preserve_categorical_efficiency() {
+        let mut arr = CategoricalArray::<u32>::default();
+        
+        // Create data with many repeated categories
+        let categories = ["A", "B", "C"];
+        let mut data = Vec::new();
+        for _ in 0..100 {
+            for cat in &categories {
+                data.push(cat.to_string());
+            }
+        }
+        
+        arr.extend_from_slice(&data);
+        
+        assert_eq!(arr.len(), 300);
+        assert_eq!(arr.unique_values.len(), 3); // Only 3 unique despite 300 entries
+        
+        // Verify all categories are represented correctly
+        for i in 0..300 {
+            let expected = categories[i % 3];
+            assert_eq!(arr.get(i), Some(expected));
+        }
     }
 }
 

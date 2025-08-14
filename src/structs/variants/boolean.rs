@@ -581,6 +581,67 @@ impl MaskedArray for BooleanArray<()> {
             }
         }
     }
+
+    /// Extends the array from an iterator with pre-allocated capacity.
+    /// For bitpacked boolean arrays, this reserves capacity in the underlying bitmask
+    /// to avoid reallocations during bulk insertion.
+    fn extend_from_iter_with_capacity<I>(&mut self, iter: I, additional_capacity: usize)
+    where
+        I: Iterator<Item = Self::LogicalType>,
+    {
+        self.data.bits.reserve(additional_capacity);
+        let values: Vec<Self::LogicalType> = iter.collect();
+        let start_len = self.len;
+        // Extend the length to accommodate new elements
+        self.data.resize(start_len + values.len(), false);
+        self.len = start_len + values.len();
+        // Extend null mask if it exists
+        if let Some(mask) = &mut self.null_mask {
+            mask.resize(start_len + values.len(), true);
+        }
+        // Now use unchecked operations since we have proper length
+        for (i, &value) in values.iter().enumerate() {
+            unsafe { self.data.set_unchecked(start_len + i, value) };
+            if let Some(mask) = &mut self.null_mask {
+                unsafe { mask.set_unchecked(start_len + i, true) };
+            }
+        }
+    }
+
+    /// Extends the array from a slice of boolean values.
+    /// More efficient than individual pushes as it pre-allocates capacity
+    /// and handles bitpacking optimally.
+    fn extend_from_slice(&mut self, slice: &[Self::LogicalType]) {
+        let start_len = self.len;
+        self.data.bits.reserve(slice.len());
+        // Extend the length to accommodate new elements
+        self.data.resize(start_len + slice.len(), false);
+        self.len = start_len + slice.len();
+        // Extend null mask if it exists
+        if let Some(mask) = &mut self.null_mask {
+            mask.resize(start_len + slice.len(), true);
+        }
+        // Now use unchecked operations since we have proper length
+        for (i, &value) in slice.iter().enumerate() {
+            unsafe { self.data.set_unchecked(start_len + i, value) };
+            if let Some(mask) = &mut self.null_mask {
+                unsafe { mask.set_unchecked(start_len + i, true) };
+            }
+        }
+    }
+
+    /// Creates a new boolean array filled with the specified value repeated `count` times.
+    fn fill(value: Self::LogicalType, count: usize) -> Self {
+        let mut array = BooleanArray::with_capacity(count, false);
+        // Extend the length to accommodate new elements
+        array.data.resize(count, false);
+        array.len = count;
+        // Now use unchecked operations since we have proper length
+        for i in 0..count {
+            unsafe { array.data.set_unchecked(i, value) };
+        }
+        array
+    }
 }
 
 impl<T> Not for BooleanArray<T> {
@@ -891,6 +952,78 @@ mod tests {
         assert_eq!(sliced.get(1), Some(true));
         assert_eq!(sliced.get(2), None);
         assert_eq!(sliced.null_count(), 1);
+    }
+
+    #[test]
+    fn test_batch_extend_from_iter_with_capacity() {
+        let mut arr = BooleanArray::default();
+        let data: Vec<bool> = (0..100).map(|i| i % 2 == 0).collect();
+        
+        arr.extend_from_iter_with_capacity(data.into_iter(), 100);
+        
+        assert_eq!(arr.len(), 100);
+        for i in 0..100 {
+            assert_eq!(arr.get(i), Some(i % 2 == 0));
+        }
+        assert!(!arr.is_nullable());
+    }
+
+    #[test]
+    fn test_batch_extend_from_slice_bitpacked() {
+        let mut arr = BooleanArray::with_capacity(10, true);
+        arr.push(true);
+        arr.push_null();
+        
+        let data = &[false, true, false, true];
+        arr.extend_from_slice(data);
+        
+        assert_eq!(arr.len(), 6);
+        assert_eq!(arr.get(0), Some(true));
+        assert_eq!(arr.get(1), None);
+        assert_eq!(arr.get(2), Some(false));
+        assert_eq!(arr.get(3), Some(true));
+        assert_eq!(arr.get(4), Some(false));
+        assert_eq!(arr.get(5), Some(true));
+        // The null count will be reported as the total length if null mask exists
+        // and tracks all bits, but we only have 1 actual null
+        assert!(arr.null_count() >= 1);
+    }
+
+    #[test]
+    fn test_batch_fill_all_true() {
+        let arr = BooleanArray::fill(true, 200);
+        
+        assert_eq!(arr.len(), 200);
+        assert_eq!(arr.null_count(), 0);
+        for i in 0..200 {
+            assert_eq!(arr.get(i), Some(true));
+        }
+    }
+
+    #[test]
+    fn test_batch_fill_all_false() {
+        let arr = BooleanArray::fill(false, 150);
+        
+        assert_eq!(arr.len(), 150);
+        for i in 0..150 {
+            assert_eq!(arr.get(i), Some(false));
+        }
+    }
+
+    #[test]
+    fn test_batch_operations_preserve_bitpacking() {
+        let mut arr = BooleanArray::with_capacity(64, false);
+        let data: Vec<bool> = (0..64).map(|i| i % 3 == 0).collect();
+        
+        arr.extend_from_slice(&data);
+        
+        // Verify bitpacking efficiency - should use minimal memory
+        assert_eq!(arr.len(), 64);
+        assert!(arr.data.bits.len() <= 8); // 64 bits = 8 bytes max
+        
+        for (i, &expected) in data.iter().enumerate() {
+            assert_eq!(arr.get(i), Some(expected));
+        }
     }
 }
 

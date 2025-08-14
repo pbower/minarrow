@@ -1009,6 +1009,149 @@ impl<T: Integer> MaskedArray for StringArray<T> {
             }
         }
     }
+
+    /// Extends the string array from an iterator with pre-allocated capacity.
+    /// Reserves capacity for both the string data buffer and offset array to minimise reallocations.
+    fn extend_from_iter_with_capacity<I>(&mut self, iter: I, additional_capacity: usize)
+    where
+        I: Iterator<Item = Self::LogicalType>,
+    {
+        self.data.reserve(additional_capacity);
+        self.offsets.reserve(additional_capacity);
+        let values: Vec<Self::LogicalType> = iter.collect();
+        let start_len = self.len();
+        let total_bytes: usize = values.iter().map(|s| s.len()).sum();
+        
+        // Extend data and offsets to proper length
+        let current_data_len = self.data.len();
+        self.data.resize(current_data_len + total_bytes, 0);
+        self.offsets.resize(start_len + values.len() + 1, T::from_usize(0));
+        // Extend null mask if it exists
+        if let Some(mask) = &mut self.null_mask {
+            mask.resize(start_len + values.len(), true);
+        }
+        
+        // Now use unchecked operations since we have proper length
+        let mut byte_offset = current_data_len;
+        for (i, value) in values.iter().enumerate() {
+            let string_bytes = value.as_bytes();
+            let offset_idx = start_len + i;
+            
+            // Set the offset for this string
+            {
+                let offsets = self.offsets.as_mut_slice();
+                offsets[offset_idx] = T::from_usize(byte_offset);
+            }
+            
+            // Copy string bytes
+            {
+                let data = self.data.as_mut_slice();
+                data[byte_offset..byte_offset + string_bytes.len()].copy_from_slice(string_bytes);
+            }
+            
+            byte_offset += string_bytes.len();
+            
+            if let Some(mask) = &mut self.null_mask {
+                unsafe { mask.set_unchecked(offset_idx, true) };
+            }
+        }
+        
+        // Set final offset
+        {
+            let offsets = self.offsets.as_mut_slice();
+            offsets[start_len + values.len()] = T::from_usize(byte_offset);
+        }
+    }
+
+    /// Extends the string array from a slice of string values.
+    /// Calculates total byte requirements upfront for optimal memory allocation,
+    /// then adds each string maintaining offset array consistency.
+    fn extend_from_slice(&mut self, slice: &[Self::LogicalType]) {
+        let start_len = self.len();
+        let total_bytes: usize = slice.iter().map(|s| s.len()).sum();
+        self.data.reserve(total_bytes);
+        self.offsets.reserve(slice.len());
+        
+        // Extend data and offsets to proper length
+        let current_data_len = self.data.len();
+        self.data.resize(current_data_len + total_bytes, 0);
+        self.offsets.resize(start_len + slice.len() + 1, T::from_usize(0));
+        // Extend null mask if it exists
+        if let Some(mask) = &mut self.null_mask {
+            mask.resize(start_len + slice.len(), true);
+        }
+        
+        // Now use unchecked operations since we have proper length
+        let mut byte_offset = current_data_len;
+        for (i, value) in slice.iter().enumerate() {
+            let string_bytes = value.as_bytes();
+            let offset_idx = start_len + i;
+            
+            // Set the offset for this string
+            {
+                let offsets = self.offsets.as_mut_slice();
+                offsets[offset_idx] = T::from_usize(byte_offset);
+            }
+            
+            // Copy string bytes
+            {
+                let data = self.data.as_mut_slice();
+                data[byte_offset..byte_offset + string_bytes.len()].copy_from_slice(string_bytes);
+            }
+            
+            byte_offset += string_bytes.len();
+            
+            if let Some(mask) = &mut self.null_mask {
+                unsafe { mask.set_unchecked(offset_idx, true) };
+            }
+        }
+        
+        // Set final offset
+        {
+            let offsets = self.offsets.as_mut_slice();
+            offsets[start_len + slice.len()] = T::from_usize(byte_offset);
+        }
+    }
+
+    /// Creates a new string array filled with the specified string repeated `count` times.
+    /// Pre-calculates total byte requirements for efficient memory allocation
+    /// and builds the array with consistent offset spacing.
+    fn fill(value: Self::LogicalType, count: usize) -> Self {
+        let total_bytes = value.len() * count;
+        let mut array = StringArray::<T>::with_capacity(count, total_bytes, false);
+        
+        // Extend data and offsets to proper length
+        array.data.resize(total_bytes, 0);
+        array.offsets.resize(count + 1, T::from_usize(0));
+        
+        let string_bytes = value.as_bytes();
+        let string_len = string_bytes.len();
+        
+        // Now use unchecked operations since we have proper length
+        for i in 0..count {
+            let byte_offset = i * string_len;
+            
+            // Set the offset for this string
+            {
+                let offsets = array.offsets.as_mut_slice();
+                offsets[i] = T::from_usize(byte_offset);
+            }
+            
+            // Copy string bytes
+            {
+                let data = array.data.as_mut_slice();
+                data[byte_offset..byte_offset + string_len].copy_from_slice(string_bytes);
+            }
+        }
+        
+        // Set final offset
+        {
+            let offsets = array.offsets.as_mut_slice();
+            offsets[count] = T::from_usize(total_bytes);
+        }
+        
+        array
+    }
 }
 
 #[cfg(feature = "parallel_proc")]
@@ -1492,6 +1635,77 @@ mod tests {
         assert_eq!(arr.get(1), Some("hi"));
         assert_eq!(arr.offsets, offsets(&[0, 2, 4]));
         assert_eq!(arr.data, Vec64::from(b"hihi" as &[u8]));
+    }
+
+    #[test]
+    fn test_batch_extend_from_iter_with_capacity() {
+        let mut arr = StringArray::<u32>::default();
+        let data = vec!["hello".to_string(), "world".to_string(), "test".to_string()];
+        
+        arr.extend_from_iter_with_capacity(data.into_iter(), 20); // pre-allocate byte capacity
+        
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr.get(0), Some("hello"));
+        assert_eq!(arr.get(1), Some("world"));
+        assert_eq!(arr.get(2), Some("test"));
+    }
+
+    #[test]
+    fn test_batch_extend_from_slice_calculates_bytes() {
+        let mut arr = StringArray::<u32>::with_capacity(10, 50, true);
+        arr.push("start".to_string());
+        arr.push_null();
+        
+        let data = &["alpha".to_string(), "beta".to_string(), "gamma".to_string()];
+        arr.extend_from_slice(data);
+        
+        assert_eq!(arr.len(), 5);
+        assert_eq!(arr.get(0), Some("start"));
+        assert_eq!(arr.get(1), None);
+        assert_eq!(arr.get(2), Some("alpha"));
+        assert_eq!(arr.get(3), Some("beta"));
+        assert_eq!(arr.get(4), Some("gamma"));
+        assert!(arr.null_count() >= 1); // At least the initial null
+    }
+
+    #[test]
+    fn test_batch_fill_repeated_string() {
+        let arr = StringArray::<u32>::fill("repeated".to_string(), 50);
+        
+        assert_eq!(arr.len(), 50);
+        assert_eq!(arr.null_count(), 0);
+        for i in 0..50 {
+            assert_eq!(arr.get(i), Some("repeated"));
+        }
+        
+        // Verify efficient memory usage: 50 * "repeated".len() bytes + offsets
+        let expected_bytes = 50 * "repeated".len();
+        assert_eq!(arr.data.len(), expected_bytes);
+    }
+
+    #[test]
+    fn test_batch_operations_empty_strings() {
+        let mut arr = StringArray::<u32>::default();
+        let data = &["".to_string(), "non-empty".to_string(), "".to_string()];
+        
+        arr.extend_from_slice(data);
+        
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr.get(0), Some(""));
+        assert_eq!(arr.get(1), Some("non-empty"));
+        assert_eq!(arr.get(2), Some(""));
+    }
+
+    #[test]
+    fn test_batch_fill_large_strings() {
+        let large_string = "x".repeat(1000);
+        let arr = StringArray::<u32>::fill(large_string.clone(), 10);
+        
+        assert_eq!(arr.len(), 10);
+        for i in 0..10 {
+            assert_eq!(arr.get(i), Some(large_string.as_str()));
+        }
+        assert_eq!(arr.data.len(), 10000); // 10 * 1000 bytes
     }
 }
 

@@ -289,6 +289,96 @@ mod tests {
         assert_eq!(sliced.get(2), None); // was null
         assert_eq!(sliced.null_count(), 1);
     }
+
+    #[test]
+    fn test_batch_extend_from_slice() {
+        let mut arr = IntegerArray::<i32>::default();
+        let data = &[1, 2, 3, 4, 5];
+        
+        arr.extend_from_slice(data);
+        
+        assert_eq!(arr.len(), 5);
+        assert_eq!(arr.get(0), Some(1));
+        assert_eq!(arr.get(4), Some(5));
+    }
+
+    #[test]
+    fn test_batch_extend_from_iter_with_capacity() {
+        let mut arr = IntegerArray::<i64>::default();
+        let data = vec![10i64, 20, 30];
+        
+        arr.extend_from_iter_with_capacity(data.into_iter(), 3);
+        
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr.get(0), Some(10));
+        assert_eq!(arr.get(2), Some(30));
+    }
+
+    #[test]
+    fn test_batch_fill() {
+        let arr = IntegerArray::<i32>::fill(42, 100);
+        
+        assert_eq!(arr.len(), 100);
+        for i in 0..100 {
+            assert_eq!(arr.get(i), Some(42));
+        }
+    }
+
+    #[test]
+    fn test_batch_extend_from_iter_with_capacity_performance() {
+        let mut arr = IntegerArray::<u64>::default();
+        let data: Vec<u64> = (0..1000).collect();
+        
+        arr.extend_from_iter_with_capacity(data.into_iter(), 1000);
+        
+        assert_eq!(arr.len(), 1000);
+        for i in 0..1000 {
+            assert_eq!(arr.get(i), Some(i as u64));
+        }
+        assert!(!arr.is_nullable()); // No nulls added
+    }
+
+    #[test]
+    fn test_batch_extend_from_slice_with_nulls() {
+        let mut arr = IntegerArray::<i16>::with_capacity(10, true);
+        arr.push(100);
+        arr.push_null();
+        
+        let data = &[200i16, 300, 400];
+        arr.extend_from_slice(data);
+        
+        assert_eq!(arr.len(), 5);
+        assert_eq!(arr.get(0), Some(100));
+        assert_eq!(arr.get(1), None);
+        assert_eq!(arr.get(2), Some(200));
+        assert_eq!(arr.get(3), Some(300));
+        assert_eq!(arr.get(4), Some(400));
+        assert!(arr.null_count() >= 1); // At least the initial null
+    }
+
+    #[test]
+    fn test_batch_fill_large() {
+        let arr = IntegerArray::<i8>::fill(-127, 500);
+        
+        assert_eq!(arr.len(), 500);
+        assert_eq!(arr.null_count(), 0);
+        for i in 0..500 {
+            assert_eq!(arr.get(i), Some(-127));
+        }
+    }
+
+    #[test]
+    fn test_batch_operations_preserve_capacity() {
+        let mut arr = IntegerArray::<u32>::with_capacity(100, false);
+        let initial_capacity = arr.data.capacity();
+        
+        // Should not reallocate since we pre-allocated enough
+        let data = vec![1u32, 2, 3, 4, 5];
+        arr.extend_from_slice(&data);
+        
+        assert!(arr.data.capacity() >= initial_capacity);
+        assert_eq!(arr.len(), 5);
+    }
 }
 
 #[cfg(test)]

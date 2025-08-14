@@ -283,7 +283,7 @@ macro_rules! impl_masked_array {
                 let data = self.data_mut().as_mut_slice();
                 data[idx] = value;
                 if let Some(mask) = self.null_mask_mut() {
-                    mask.set(idx, true);
+                    unsafe { mask.set_unchecked(idx, true) };
                 }
             }
 
@@ -328,6 +328,49 @@ macro_rules! impl_masked_array {
                         // No mask in either: nothing to do.
                     }
                 }
+            }
+
+            /// Extends the array from an iterator with pre-allocated capacity.
+            /// Pre-allocates capacity in the underlying SIMD-aligned buffer to avoid reallocations.
+            fn extend_from_iter_with_capacity<I>(&mut self, iter: I, additional_capacity: usize)
+            where
+                I: Iterator<Item = Self::LogicalType>,
+            {
+                self.data.reserve(additional_capacity);
+                let values: Vec<Self::LogicalType> = iter.collect();
+                let start_len = self.len();
+                // Extend the length to accommodate new elements
+                self.data.resize(start_len + values.len(), Default::default());
+                // Now use unchecked operations since we have proper length
+                for (i, value) in values.iter().enumerate() {
+                    unsafe { self.set_unchecked(start_len + i, *value) };
+                }
+            }
+
+            /// Extends the array from a slice of values.
+            /// Pre-allocates capacity and uses bulk operations for optimal performance.
+            fn extend_from_slice(&mut self, slice: &[Self::LogicalType]) {
+                let start_len = self.len();
+                self.data.reserve(slice.len());
+                // Extend the length to accommodate new elements
+                self.data.resize(start_len + slice.len(), Default::default());
+                // Now use unchecked operations since we have proper length
+                for (i, value) in slice.iter().enumerate() {
+                    unsafe { self.set_unchecked(start_len + i, *value) };
+                }
+            }
+
+            /// Creates a new array filled with the specified value repeated `count` times.
+            fn fill(value: Self::LogicalType, count: usize) -> Self {
+                let mut array = Self::default();
+                array.data.reserve(count);
+                // Extend the length to accommodate new elements
+                array.data.resize(count, Default::default());
+                // Now use unchecked operations since we have proper length
+                for i in 0..count {
+                    unsafe { array.set_unchecked(i, value) };
+                }
+                array
             }
 
         }
@@ -740,6 +783,24 @@ macro_rules! impl_arc_masked_array {
             fn append_array(&mut self, other: &Self) {
                 ::std::sync::Arc::make_mut(self).append_array(&**other)
             }
+            /// Extends the array from an iterator with pre-allocated capacity.
+            /// Uses copy-on-write semantics - clones array data if Arc reference count > 1.
+            fn extend_from_iter_with_capacity<I>(&mut self, iter: I, additional_capacity: usize)
+            where
+                I: Iterator<Item = Self::LogicalType>,
+            {
+                ::std::sync::Arc::make_mut(self).extend_from_iter_with_capacity(iter, additional_capacity)
+            }
+            /// Extends the array from a slice of values.
+            /// Uses copy-on-write semantics - clones array data if Arc reference count > 1.
+            fn extend_from_slice(&mut self, slice: &[Self::LogicalType]) {
+                ::std::sync::Arc::make_mut(self).extend_from_slice(slice)
+            }
+            /// Creates a new Arc-wrapped array filled with the specified value repeated `count` times.
+            /// Returns a new Arc instance with optimally allocated and filled array data.
+            fn fill(value: Self::LogicalType, count: usize) -> Self {
+                ::std::sync::Arc::new($inner::<$T>::fill(value, count))
+            }
         }
     };
 
@@ -826,6 +887,24 @@ macro_rules! impl_arc_masked_array {
             }
             fn append_array(&mut self, other: &Self) {
                 ::std::sync::Arc::make_mut(self).append_array(&**other)
+            }
+            /// Extends the array from an iterator with pre-allocated capacity.
+            /// Uses copy-on-write semantics - clones array data if Arc reference count > 1.
+            fn extend_from_iter_with_capacity<I>(&mut self, iter: I, additional_capacity: usize)
+            where
+                I: Iterator<Item = Self::LogicalType>,
+            {
+                ::std::sync::Arc::make_mut(self).extend_from_iter_with_capacity(iter, additional_capacity)
+            }
+            /// Extends the array from a slice of values.
+            /// Uses copy-on-write semantics - clones array data if Arc reference count > 1.
+            fn extend_from_slice(&mut self, slice: &[Self::LogicalType]) {
+                ::std::sync::Arc::make_mut(self).extend_from_slice(slice)
+            }
+            /// Creates a new Arc-wrapped array filled with the specified value repeated `count` times.
+            /// Returns a new Arc instance with optimally allocated and filled array data.
+            fn fill(value: Self::LogicalType, count: usize) -> Self {
+                ::std::sync::Arc::new(<$inner>::fill(value, count))
             }
         }
     };
