@@ -173,6 +173,40 @@ impl FieldArray {
         }
     }
 
+    /// Updates the cached null_count from the underlying array.
+    /// Should be called after any mutation of the array that could change null count.
+    #[inline]
+    pub fn refresh_null_count(&mut self) {
+        self.null_count = self.array.null_count();
+    }
+
+    /// Returns the cached null count.
+    /// This is kept in sync with the underlying array via refresh_null_count().
+    #[inline]
+    pub fn null_count(&self) -> usize {
+        self.null_count
+    }
+
+    /// Concatenates another FieldArray's data into this one using copy-on-write semantics.
+    /// If this FieldArray's array has Arc reference count > 1, the data is cloned first.
+    /// Both FieldArrays must have compatible types. Updates the cached null_count.
+    pub fn concat_field_array(&mut self, other: &FieldArray) {
+        self.array.concat_array(&other.array);
+        self.refresh_null_count();
+    }
+
+    /// Provides mutable access to the underlying array with automatic null_count refresh.
+    /// Uses copy-on-write semantics - clones array data if Arc reference count > 1.
+    /// Use this for operations that may change the null count.
+    pub fn with_array_mut<F, R>(&mut self, f: F) -> R 
+    where
+        F: FnOnce(&mut Array) -> R,
+    {
+        let result = f(&mut self.array);
+        self.refresh_null_count();
+        result
+    }
+
     /// Export this field+array over FFI and import into arrow-rs.
     #[cfg(feature = "cast_arrow")]
     #[inline]
@@ -264,5 +298,73 @@ mod tests {
         assert_eq!(view.0.1, 1);
         assert_eq!(view.0.2, 2);
         assert_eq!(view.0.0.len(), 3);
+    }
+
+    #[test]
+    fn test_null_count_cache_sync_concat() {
+        // Create first FieldArray with nulls
+        let mut arr1 = IntegerArray::<i32>::default();
+        arr1.push(1);
+        arr1.push_null();
+        arr1.push(3);
+        let mut fa1 = field_array("test", Array::from_int32(arr1));
+        assert_eq!(fa1.null_count(), 1);
+
+        // Create second FieldArray with nulls
+        let mut arr2 = IntegerArray::<i32>::default();
+        arr2.push_null();
+        arr2.push(5);
+        let fa2 = field_array("test", Array::from_int32(arr2));
+        assert_eq!(fa2.null_count(), 1);
+
+        // Concatenate and verify null_count cache is updated
+        fa1.concat_field_array(&fa2);
+        assert_eq!(fa1.len(), 5);
+        assert_eq!(fa1.null_count(), 2); // Should be 2 nulls total
+    }
+
+    #[test]
+    fn test_null_count_cache_sync_with_array_mut() {
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(1);
+        arr.push(2);
+        let mut fa = field_array("test", Array::from_int32(arr));
+        assert_eq!(fa.null_count(), 0);
+
+        // Mutate through with_array_mut to add nulls
+        fa.with_array_mut(|array| {
+            array.concat_array(&Array::from_int32({
+                let mut new_arr = IntegerArray::<i32>::default();
+                new_arr.push_null();
+                new_arr.push_null();
+                new_arr
+            }));
+        });
+
+        assert_eq!(fa.len(), 4);
+        assert_eq!(fa.null_count(), 2); // Cache should be refreshed automatically
+    }
+
+    #[test]
+    fn test_refresh_null_count() {
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(1);
+        arr.push(2);
+        let mut fa = field_array("test", Array::from_int32(arr));
+        assert_eq!(fa.null_count(), 0);
+
+        // Manually mutate underlying array (simulating external mutation)
+        if let Array::NumericArray(crate::NumericArray::Int32(int_arr)) = &mut fa.array {
+            use crate::traits::masked_array::MaskedArray;
+            std::sync::Arc::make_mut(int_arr).push_null();
+        }
+
+        // Cache is now stale
+        assert_eq!(fa.null_count, 0); // Cached value still 0
+        assert_eq!(fa.array.null_count(), 1); // Actual value is 1
+
+        // Refresh the cache
+        fa.refresh_null_count();
+        assert_eq!(fa.null_count(), 1); // Cache now updated
     }
 }
