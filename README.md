@@ -8,6 +8,8 @@ Minarrow is a from-scratch columnar library built for real-time and systems work
 It keeps the surface small, makes types explicit, compiles fast, and aligns data for predictable SIMD performance.  
 It speaks Arrow when you need to talk interchange — but the core stays lean.  
 
+Minarrow is the base layer of several other projects that expand on it to deliver SIMD Kernels, Tokio streamable buffers, and a full-scale engine. Watch this space.
+
 ## Design Focus
 
 - **Typed, direct access** – No downcasting chains  
