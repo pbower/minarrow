@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
@@ -55,7 +55,7 @@ cc = { version = "1", optional = true }
 # Adds parallel iterators via `Rayon`
 parallel_proc = ["rayon"]
 
-# Adds roundtrip FFI tests. Leave off if you don't need it 
+# Adds roundtrip FFI tests. Leave off if you don't need it
 # in your build pipeline, as it's mostly C-code.
 c_ffi_tests = ['cc']
 
@@ -89,12 +89,12 @@ scalar_type = []
 
 # Adds a unified value enum, that can be used for engine-level orchestration or any situation
 # where a catch-all, unified encompassing type is required to satisfy the compiler.
-# It includes roundtrip `From` and `TryFrom` for each inner type so that signatures do 
-# not need to couple to it directly. Recommend leaving off if you don't need it. 
+# It includes roundtrip `From` and `TryFrom` for each inner type so that signatures do
+# not need to couple to it directly. Recommend leaving off if you don't need it.
 value_type = []
 
 # `ChunkedArray` and `ChunkedTable` objects that support iterating
-# over multiple inner objects of the same type, for memory-mapped streaming etc. 
+# over multiple inner objects of the same type, for memory-mapped streaming etc.
 chunked = []
 
 # Int64-based string
@@ -102,13 +102,13 @@ large_string = []
 
 # Provides windowed collection views for Numeric, String, and Temporal types.
 # Often, everything can be done with only the `ArrayView` abstraction, or,
-# the `ArrayViewT` (&Array, Offset, Length) tuple from aliases. 
+# the `ArrayViewT` (&Array, Offset, Length) tuple from aliases.
 # These are for the cases where they fall short, e.g., you
 # have numeric or text specific functions, and want to streamline type management.
 # In those cases, these abstractions provide the equivalent of `Into<NumericArrayView>`
 # for several types, and accept both the original and windowed view variants. Therefore,
 # one can unify numeric entry points through here enabling a flexible API, at the cost
-# of more surface complexity. 
+# of more surface complexity.
 views = []
 
 # Adds a 2D matrix that uses a flat buffer in the format compatible with BLAS and LAPACK Fortan and C kernels.
@@ -139,9 +139,9 @@ datetime = []
 
 # Adds `as_datetime` outputs for easy conversion.
 # Also, formats datetime values as dates since unix epoch 1970-01-01 .
-# Without this, they are raw values that can either represent 
+# Without this, they are raw values that can either represent
 # since epoch, or just be a standalone length, depending on your
-# requirements, and the `ArrowType` you can store in `Field` and/or `FieldArray` 
+# requirements, and the `ArrowType` you can store in `Field` and/or `FieldArray`
 # tags this accurately for each use case, along with any optional metadata.
 chrono = ["dep:chrono", "datetime"]
 
