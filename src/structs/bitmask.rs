@@ -181,7 +181,7 @@ impl Bitmask {
             return false;
         }
         // SAFETY: idx / 8 is within the slice.
-        let byte = unsafe { *self.bits.get_unchecked(idx >> 3) };
+        let byte = unsafe { self.bits.get_unchecked(idx >> 3) };
         (byte >> (idx & 7)) & 1 != 0
     }
 
