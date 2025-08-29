@@ -1498,16 +1498,20 @@ dependencies = [
 
 [[package]]
 name = "minarrow"
-version = "0.1.8"
+version = "0.2.0"
 dependencies = [
+ "ahash",
  "arrow",
  "arrow-schema",
  "cc",
  "chrono",
+ "memchr",
  "num-traits",
  "polars",
  "polars-arrow",
  "rayon",
+ "regex",
+ "ryu",
  "snappy",
  "zstd",
 ]

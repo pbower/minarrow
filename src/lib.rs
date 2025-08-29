@@ -82,6 +82,7 @@
 
 #![feature(allocator_api)]
 #![feature(slice_ptr_get)]
+#![feature(portable_simd)]
 
 /// **Array**, **TextArray**, **NumericArray**...- *All the *High-Level Array containers* are here.*
 pub mod enums {
@@ -98,6 +99,16 @@ pub mod enums {
         #[cfg(feature = "datetime")]
         pub mod temporal_array;
     }
+    pub mod operators;
+}
+
+/// Contains SIMD-accelerated kernels for the 'essentials' that are highly coupled to this crate
+/// The extensive set is available downstream in the simd-kernels crate, including a full
+/// set of univariate distributions.
+pub mod kernels {
+    pub mod arithmetic;
+    pub mod bitmask;
+    pub mod string;
 }
 
 /// **Table**, **IntegerArray**, **FloatArray**, **Vec64** - *All the **Low-Level Control**, **Tables** and **Views***.

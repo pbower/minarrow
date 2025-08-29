@@ -1,5 +1,5 @@
 //! # **Scalar Module** - *Single Value Container*
-//! 
+//!
 //! Contains the Scalar type for holding a single value.
 //!
 //! ## Purpose
@@ -9,6 +9,9 @@
 
 use std::convert::From;
 
+#[cfg(feature = "scalar_type")]
+use num_traits::Pow;
+
 #[cfg(feature = "datetime")]
 #[cfg(feature = "scalar_type")]
 use crate::DatetimeArray;
@@ -16,9 +19,9 @@ use crate::DatetimeArray;
 use crate::{Array, Bitmask, BooleanArray, FloatArray, IntegerArray, MaskedArray, StringArray};
 
 /// # Scalar
-/// 
+///
 /// Scalar literals (single values) covering all supported types.
-/// 
+///
 /// ## Description
 /// - Useful when unifying type signatures.
 /// - Includes accessor methods to avoid needing to match to a known type.
@@ -56,24 +59,23 @@ pub enum Scalar {
     #[cfg(feature = "datetime")]
     Datetime64(i64),
     #[cfg(feature = "datetime")]
-    Interval
+    Interval,
 }
 
 #[cfg(feature = "scalar_type")]
 impl Scalar {
-
     /// Casts the value to a bool
-    /// 
+    ///
     /// # Behaviour:
     ///  - any non-zero value becomes True
     ///  - strings convert `true`, `t`, `1`, `false`, `f`, and `0` to bool
     /// on a case insensitive basis
     /// - Unsuccessful casts return None
-    /// 
+    ///
     /// # Safety
-    /// - Panics on failure. 
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
-    /// 
+    ///
     #[inline]
     pub fn bool(&self) -> bool {
         match self {
@@ -127,13 +129,13 @@ impl Scalar {
             #[cfg(feature = "extended_numeric_types")]
             Scalar::UInt8(v) => *v != 0,
             #[cfg(feature = "extended_numeric_types")]
-            Scalar::UInt16(v) => *v != 0
+            Scalar::UInt16(v) => *v != 0,
         }
     }
 
     /// Converts the scalar to an `i8` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[cfg(feature = "extended_numeric_types")]
     #[inline]
@@ -170,8 +172,8 @@ impl Scalar {
     }
 
     /// Converts the scalar to an `i16` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[cfg(feature = "extended_numeric_types")]
     #[inline]
@@ -208,8 +210,8 @@ impl Scalar {
     }
 
     /// Converts the scalar to an `i32` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[inline]
     pub fn i32(&self) -> i32 {
@@ -249,8 +251,8 @@ impl Scalar {
     }
 
     /// Converts the scalar to an `i64` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[inline]
     pub fn i64(&self) -> i64 {
@@ -296,8 +298,8 @@ impl Scalar {
     }
 
     /// Converts the scalar to an `u8` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[inline]
     pub fn u8(&self) -> u8 {
@@ -337,8 +339,8 @@ impl Scalar {
     }
 
     /// Converts the scalar to an `u16` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[inline]
     pub fn u16(&self) -> u16 {
@@ -378,8 +380,8 @@ impl Scalar {
     }
 
     /// Converts the scalar to an `u32` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[inline]
     pub fn u32(&self) -> u32 {
@@ -419,8 +421,8 @@ impl Scalar {
     }
 
     /// Converts the scalar to an `u64` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[inline]
     pub fn u64(&self) -> u64 {
@@ -496,8 +498,8 @@ impl Scalar {
     }
 
     /// Converts the scalar to an `f32` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[inline]
     pub fn f32(&self) -> f32 {
@@ -532,13 +534,13 @@ impl Scalar {
             #[cfg(feature = "datetime")]
             Scalar::Datetime64(v) => *v as f32,
             #[cfg(feature = "datetime")]
-            Scalar::Interval => panic!("Cannot convert Interval to f32")
+            Scalar::Interval => panic!("Cannot convert Interval to f32"),
         }
     }
 
     /// Converts the scalar to a `float` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[inline]
     pub fn f64(&self) -> f64 {
@@ -573,13 +575,13 @@ impl Scalar {
             #[cfg(feature = "datetime")]
             Scalar::Datetime64(v) => *v as f64,
             #[cfg(feature = "datetime")]
-            Scalar::Interval => panic!("Cannot convert Interval to f64")
+            Scalar::Interval => panic!("Cannot convert Interval to f64"),
         }
     }
 
     /// Converts the scalar to a `String` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[inline]
     pub fn str(&self) -> String {
@@ -608,13 +610,13 @@ impl Scalar {
             #[cfg(feature = "datetime")]
             Scalar::Datetime64(v) => v.to_string(),
             #[cfg(feature = "datetime")]
-            Scalar::Interval => panic!("Cannot convert Interval to String")
+            Scalar::Interval => panic!("Cannot convert Interval to String"),
         }
     }
 
     /// Converts the scalar to an `u32` representing time since epoch
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[cfg(feature = "datetime")]
     #[inline]
@@ -701,13 +703,13 @@ impl Scalar {
             #[cfg(feature = "extended_numeric_types")]
             Scalar::UInt8(v) => *v as u32,
             #[cfg(feature = "extended_numeric_types")]
-            Scalar::UInt16(v) => *v as u32
+            Scalar::UInt16(v) => *v as u32,
         }
     }
 
     /// Converts the scalar to an `u64` value
-    /// 
-    /// - Panics on failure. 
+    ///
+    /// - Panics on failure.
     /// - Consider the try variant for a safe alternative
     #[cfg(feature = "datetime")]
     #[inline]
@@ -782,7 +784,7 @@ impl Scalar {
             #[cfg(feature = "extended_numeric_types")]
             Scalar::UInt8(v) => *v as u64,
             #[cfg(feature = "extended_numeric_types")]
-            Scalar::UInt16(v) => *v as u64
+            Scalar::UInt16(v) => *v as u64,
         }
     }
 
@@ -840,7 +842,7 @@ impl Scalar {
             #[cfg(feature = "extended_numeric_types")]
             Scalar::UInt8(v) => Some(*v != 0),
             #[cfg(feature = "extended_numeric_types")]
-            Scalar::UInt16(v) => Some(*v != 0)
+            Scalar::UInt16(v) => Some(*v != 0),
         }
     }
 
@@ -869,7 +871,7 @@ impl Scalar {
             Scalar::Datetime64(v) => i8::try_from(*v).ok(),
             #[cfg(feature = "datetime")]
             Scalar::Interval => None,
-            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 })
+            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 }),
         }
     }
 
@@ -898,7 +900,7 @@ impl Scalar {
             Scalar::Datetime64(v) => i16::try_from(*v).ok(),
             #[cfg(feature = "datetime")]
             Scalar::Interval => None,
-            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 })
+            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 }),
         }
     }
 
@@ -930,7 +932,7 @@ impl Scalar {
             Scalar::Datetime64(v) => i32::try_from(*v).ok(),
             #[cfg(feature = "datetime")]
             Scalar::Interval => None,
-            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 })
+            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 }),
         }
     }
 
@@ -968,7 +970,7 @@ impl Scalar {
             Scalar::Datetime64(v) => i64::try_from(*v).ok(),
             #[cfg(feature = "datetime")]
             Scalar::Interval => None,
-            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 })
+            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 }),
         }
     }
 
@@ -1000,7 +1002,7 @@ impl Scalar {
             Scalar::Datetime64(v) => u8::try_from(*v).ok(),
             #[cfg(feature = "datetime")]
             Scalar::Interval => None,
-            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 })
+            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 }),
         }
     }
 
@@ -1032,7 +1034,7 @@ impl Scalar {
             Scalar::Datetime64(v) => u16::try_from(*v).ok(),
             #[cfg(feature = "datetime")]
             Scalar::Interval => None,
-            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 })
+            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 }),
         }
     }
 
@@ -1064,7 +1066,7 @@ impl Scalar {
             Scalar::Datetime64(v) => u32::try_from(*v).ok(),
             #[cfg(feature = "datetime")]
             Scalar::Interval => None,
-            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 })
+            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 }),
         }
     }
 
@@ -1144,7 +1146,7 @@ impl Scalar {
             }
             #[cfg(feature = "datetime")]
             Scalar::Interval => None,
-            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 })
+            Scalar::Boolean(b) => Some(if *b { 1 } else { 0 }),
         }
     }
 
@@ -1176,7 +1178,7 @@ impl Scalar {
             #[cfg(feature = "datetime")]
             Scalar::Datetime64(v) => Some(*v as f32),
             #[cfg(feature = "datetime")]
-            Scalar::Interval => None
+            Scalar::Interval => None,
         }
     }
 
@@ -1208,7 +1210,7 @@ impl Scalar {
             #[cfg(feature = "datetime")]
             Scalar::Datetime64(v) => Some(*v as f64),
             #[cfg(feature = "datetime")]
-            Scalar::Interval => None
+            Scalar::Interval => None,
         }
     }
 
@@ -1240,7 +1242,7 @@ impl Scalar {
             #[cfg(feature = "datetime")]
             Scalar::Datetime64(v) => Some(v.to_string()),
             #[cfg(feature = "datetime")]
-            Scalar::Interval => None
+            Scalar::Interval => None,
         }
     }
 
@@ -1324,7 +1326,7 @@ impl Scalar {
             #[cfg(feature = "extended_numeric_types")]
             Scalar::UInt8(v) => Some(*v as u32),
             #[cfg(feature = "extended_numeric_types")]
-            Scalar::UInt16(v) => Some(*v as u32)
+            Scalar::UInt16(v) => Some(*v as u32),
         }
     }
 
@@ -1396,7 +1398,7 @@ impl Scalar {
             #[cfg(feature = "extended_numeric_types")]
             Scalar::UInt8(v) => Some(*v as u64),
             #[cfg(feature = "extended_numeric_types")]
-            Scalar::UInt16(v) => Some(*v as u64)
+            Scalar::UInt16(v) => Some(*v as u64),
         }
     }
 
@@ -1507,7 +1509,7 @@ impl Scalar {
                     data: Bitmask::new_set_all(len, false),
                     null_mask: Some(Bitmask::new_set_all(len, false)),
                     len,
-                    _phantom: std::marker::PhantomData
+                    _phantom: std::marker::PhantomData,
                 };
                 Array::from_bool(arr)
             }
@@ -1528,7 +1530,7 @@ impl Scalar {
                 Array::from_datetime_i64(arr)
             }
             #[cfg(feature = "datetime")]
-            Scalar::Interval => unimplemented!()
+            Scalar::Interval => unimplemented!(),
         }
     }
 }
@@ -1606,12 +1608,399 @@ impl From<&str> for Scalar {
     }
 }
 
-// TODO: Figure out something reasonable for datetime here
+#[cfg(feature = "scalar_type")]
+use std::ops::{Add, Mul, Sub};
+
+#[cfg(feature = "scalar_type")]
+impl Add for Scalar {
+    type Output = Scalar;
+
+    fn add(self, rhs: Scalar) -> Scalar {
+        use Scalar::*;
+
+        match (self, rhs) {
+            // Nulls propagate
+            (Null, _) | (_, Null) => Null,
+
+            // Float promotion
+            (Float64(a), b) => Float64(a + b.f64()),
+            (a, Float64(b)) => Float64(a.f64() + b),
+            (Float32(a), b) => Float32(a + b.f32()),
+            (a, Float32(b)) => Float32(a.f32() + b),
+
+            // Int64 handling
+            (Int64(a), b) => Int64(a + b.i64()),
+            (a, Int64(b)) => Int64(a.i64() + b),
+
+            // Int32 handling
+            (Int32(a), b) => Int32(a + b.i32()),
+            (a, Int32(b)) => Int32(a.i32() + b),
+
+            // UInt64 handling
+            (UInt64(a), b) => UInt64(a + b.u64()),
+            (a, UInt64(b)) => UInt64(a.u64() + b),
+
+            // UInt32 handling
+            (UInt32(a), b) => UInt32(a + b.u32()),
+            (a, UInt32(b)) => UInt32(a.u32() + b),
+
+            // Boolean as integers
+            (Boolean(a), b) => Int32((if a { 1 } else { 0 }) + b.i32()),
+            (a, Boolean(b)) => Int32(a.i32() + if b { 1 } else { 0 }),
+
+            // String concatenation
+            (String32(a), String32(b)) => String32(a + &b),
+            #[cfg(feature = "large_string")]
+            (String64(a), String64(b)) => String64(a + &b),
+
+            // String + number coercion
+            (String32(a), b) => String32(a + &b.str()),
+            (a, String32(b)) => String32(a.str() + &b),
+
+            // Datetime as arithmetic (int-based)
+            #[cfg(feature = "datetime")]
+            (Datetime32(a), b) => Datetime32(a + b.i32()),
+            #[cfg(feature = "datetime")]
+            (a, Datetime32(b)) => Datetime32(a.i32() + b),
+
+            #[cfg(feature = "datetime")]
+            (Datetime64(a), b) => Datetime64(a + b.i64()),
+            #[cfg(feature = "datetime")]
+            (a, Datetime64(b)) => Datetime64(a.i64() + b),
+
+            #[cfg(feature = "datetime")]
+            (Interval, _) | (_, Interval) => panic!("Cannot add Interval"),
+
+            // Extended numeric types
+            #[cfg(feature = "extended_numeric_types")]
+            (Int8(a), b) => Int8(a.wrapping_add(b.i8())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, Int8(b)) => Int8(a.i8().wrapping_add(b)),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (Int16(a), b) => Int16(a.wrapping_add(b.i16())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, Int16(b)) => Int16(a.i16().wrapping_add(b)),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (UInt8(a), b) => UInt8(a.wrapping_add(b.u8())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, UInt8(b)) => UInt8(a.u8().wrapping_add(b)),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (UInt16(a), b) => UInt16(a.wrapping_add(b.u16())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, UInt16(b)) => UInt16(a.u16().wrapping_add(b)),
+        }
+    }
+}
+
+#[cfg(feature = "scalar_type")]
+impl Sub for Scalar {
+    type Output = Scalar;
+
+    fn sub(self, rhs: Scalar) -> Scalar {
+        use Scalar::*;
+
+        match (self, rhs) {
+            (Null, _) | (_, Null) => Null,
+
+            (Float64(a), b) => Float64(a - b.f64()),
+            (a, Float64(b)) => Float64(a.f64() - b),
+            (Float32(a), b) => Float32(a - b.f32()),
+            (a, Float32(b)) => Float32(a.f32() - b),
+
+            (Int64(a), b) => Int64(a - b.i64()),
+            (a, Int64(b)) => Int64(a.i64() - b),
+            (Int32(a), b) => Int32(a - b.i32()),
+            (a, Int32(b)) => Int32(a.i32() - b),
+
+            (UInt64(a), b) => UInt64(a - b.u64()),
+            (a, UInt64(b)) => UInt64(a.u64() - b),
+            (UInt32(a), b) => UInt32(a - b.u32()),
+            (a, UInt32(b)) => UInt32(a.u32() - b),
+
+            (Boolean(a), b) => Int32((if a { 1 } else { 0 }) - b.i32()),
+            (a, Boolean(b)) => Int32(a.i32() - if b { 1 } else { 0 }),
+
+            #[cfg(feature = "datetime")]
+            (Datetime32(a), b) => Datetime32(a - b.i32()),
+            #[cfg(feature = "datetime")]
+            (a, Datetime32(b)) => Datetime32(a.i32() - b),
+            #[cfg(feature = "datetime")]
+            (Datetime64(a), b) => Datetime64(a - b.i64()),
+            #[cfg(feature = "datetime")]
+            (a, Datetime64(b)) => Datetime64(a.i64() - b),
+            #[cfg(feature = "datetime")]
+            (Interval, _) | (_, Interval) => panic!("Cannot subtract Interval"),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (Int8(a), b) => Int8(a.wrapping_sub(b.i8())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, Int8(b)) => Int8(a.i8().wrapping_sub(b)),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (Int16(a), b) => Int16(a.wrapping_sub(b.i16())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, Int16(b)) => Int16(a.i16().wrapping_sub(b)),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (UInt8(a), b) => UInt8(a.wrapping_sub(b.u8())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, UInt8(b)) => UInt8(a.u8().wrapping_sub(b)),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (UInt16(a), b) => UInt16(a.wrapping_sub(b.u16())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, UInt16(b)) => UInt16(a.u16().wrapping_sub(b)),
+
+            // String subtraction - removes first instance from lhs
+            (String32(lhs), String32(rhs)) => String32(lhs.replacen(&rhs, "", 1)),
+            #[cfg(feature = "large_string")]
+            (String64(lhs), String64(rhs)) => String64(lhs.replacen(&rhs, "", 1)),
+            #[cfg(feature = "large_string")]
+            (String32(lhs), String64(rhs)) => String64(lhs.replacen(&rhs, "", 1)),
+            #[cfg(feature = "large_string")]
+            (String64(lhs), String32(rhs)) => String64(lhs.replacen(&rhs, "", 1)),
+        }
+    }
+}
+
+#[cfg(feature = "scalar_type")]
+impl Mul for Scalar {
+    type Output = Scalar;
+
+    fn mul(self, rhs: Scalar) -> Scalar {
+        use Scalar::*;
+
+        match (self, rhs) {
+            (Null, _) | (_, Null) => Null,
+
+            (Float64(a), b) => Float64(a * b.f64()),
+            (a, Float64(b)) => Float64(a.f64() * b),
+            (Float32(a), b) => Float32(a * b.f32()),
+            (a, Float32(b)) => Float32(a.f32() * b),
+
+            (Int64(a), b) => Int64(a * b.i64()),
+            (a, Int64(b)) => Int64(a.i64() * b),
+            (Int32(a), b) => Int32(a * b.i32()),
+            (a, Int32(b)) => Int32(a.i32() * b),
+
+            (UInt64(a), b) => UInt64(a * b.u64()),
+            (a, UInt64(b)) => UInt64(a.u64() * b),
+            (UInt32(a), b) => UInt32(a * b.u32()),
+            (a, UInt32(b)) => UInt32(a.u32() * b),
+
+            (Boolean(a), b) => Int32((if a { 1 } else { 0 }) * b.i32()),
+            (a, Boolean(b)) => Int32(a.i32() * if b { 1 } else { 0 }),
+
+            #[cfg(feature = "datetime")]
+            (Datetime32(_), _) | (_, Datetime32(_)) => panic!("Cannot multiply datetimes"),
+            #[cfg(feature = "datetime")]
+            (Datetime64(_), _) | (_, Datetime64(_)) => panic!("Cannot multiply datetimes"),
+            #[cfg(feature = "datetime")]
+            (Interval, _) | (_, Interval) => panic!("Cannot multiply Interval"),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (Int8(a), b) => Int8(a.wrapping_mul(b.i8())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, Int8(b)) => Int8(a.i8().wrapping_mul(b)),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (Int16(a), b) => Int16(a.wrapping_mul(b.i16())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, Int16(b)) => Int16(a.i16().wrapping_mul(b)),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (UInt8(a), b) => UInt8(a.wrapping_mul(b.u8())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, UInt8(b)) => UInt8(a.u8().wrapping_mul(b)),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (UInt16(a), b) => UInt16(a.wrapping_mul(b.u16())),
+            #[cfg(feature = "extended_numeric_types")]
+            (a, UInt16(b)) => UInt16(a.u16().wrapping_mul(b)),
+
+            // String handling - Adds the rhs string to every line of lhs
+            (String32(a), String32(b)) => {
+                let appended = a
+                    .lines()
+                    .map(|line| format!("{line}{b}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                String32(appended)
+            }
+            #[cfg(feature = "large_string")]
+            (String64(a), String64(b)) => {
+                let appended = a
+                    .lines()
+                    .map(|line| format!("{line}{b}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                String64(appended)
+            }
+
+            #[cfg(feature = "large_string")]
+            (String32(a), String64(b)) => {
+                let appended = a
+                    .lines()
+                    .map(|line| format!("{line}{b}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                String64(appended)
+            }
+
+            #[cfg(feature = "large_string")]
+            (String64(a), String32(b)) => {
+                let appended = a
+                    .lines()
+                    .map(|line| format!("{line}{b}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                String64(appended)
+            }
+        }
+    }
+}
+
+#[cfg(feature = "scalar_type")]
+impl Pow<Scalar> for Scalar {
+    type Output = Scalar;
+
+    fn pow(self, rhs: Scalar) -> Scalar {
+        use Scalar::*;
+
+        match (self, rhs) {
+            // Nulls propagate
+            (Null, _) | (_, Null) => Null,
+
+            #[cfg(feature = "datetime")]
+            (Interval, _) => panic!("Cannot exponentiate Interval"),
+            #[cfg(feature = "datetime")]
+            (_, Interval) => panic!("Cannot exponentiate Interval"),
+
+            // Datetime — explicitly panic for all
+            #[cfg(feature = "datetime")]
+            (Datetime32(_), _) => panic!("Cannot exponentiate datetimes"),
+            #[cfg(feature = "datetime")]
+            (_, Datetime32(_)) => panic!("Cannot exponentiate datetimes"),
+            #[cfg(feature = "datetime")]
+            (Datetime64(_), _) => panic!("Cannot exponentiate datetimes"),
+            #[cfg(feature = "datetime")]
+            (_, Datetime64(_)) => panic!("Cannot exponentiate datetimes"),
+
+            // Boolean
+            (Boolean(a), b) => {
+                let base = if a { 1 } else { 0 };
+                Int32(base.pow(b.u32()))
+            }
+            (a, Boolean(b)) => {
+                let exp = if b { 1 } else { 0 };
+                Int32(a.i32().pow(exp))
+            }
+
+            // String + String - append rhs to each word in lhs
+            (String32(a), String32(b)) => {
+                let appended = a
+                    .split_whitespace()
+                    .map(|word| format!("{word}{b}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                String32(appended)
+            }
+
+            #[cfg(feature = "large_string")]
+            (String64(a), String64(b)) => {
+                let appended = a
+                    .split_whitespace()
+                    .map(|word| format!("{word}{b}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                String64(appended)
+            }
+
+            #[cfg(feature = "large_string")]
+            (String32(a), String64(b)) => {
+                let appended = a
+                    .split_whitespace()
+                    .map(|word| format!("{word}{b}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                String64(appended)
+            }
+
+            #[cfg(feature = "large_string")]
+            (String64(a), String32(b)) => {
+                let appended = a
+                    .split_whitespace()
+                    .map(|word| format!("{word}{b}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                String64(appended)
+            }
+
+            // Attempt to parse string as f64
+            (String32(a), b) => {
+                let base = Scalar::Float64(
+                    a.parse::<f64>()
+                        .expect("Exponent: Cannot parse string as f64 base"),
+                );
+                base.pow(b)
+            }
+            (String64(a), b) => {
+                let base = Scalar::Float64(
+                    a.parse::<f64>()
+                        .expect("Exponent: Cannot parse string as f64 base"),
+                );
+                base.pow(b)
+            }
+            (a, String32(b)) => {
+                let exp = Scalar::Float64(
+                    b.parse::<f64>()
+                        .expect("Exponent: Cannot parse string as f64 exponent"),
+                );
+                a.pow(exp)
+            }
+            (a, String64(b)) => {
+                let exp = Scalar::Float64(
+                    b.parse::<f64>()
+                        .expect("Exponent: Cannot parse string as f64 exponent"),
+                );
+                a.pow(exp)
+            }
+
+            // Floats
+            (Float64(a), b) => Float64(a.powf(b.f64())),
+            (a, Float64(b)) => Float64(a.f64().powf(b)),
+            (Float32(a), b) => Float32(a.powf(b.f32())),
+            (a, Float32(b)) => Float32(a.f32().powf(b)),
+
+            // Signed integers
+            (Int64(a), b) => Int64(a.pow(b.u32())),
+            (Int32(a), b) => Int32(a.pow(b.u32())),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (Int8(a), b) => Int8(a.wrapping_pow(b.u32())),
+            #[cfg(feature = "extended_numeric_types")]
+            (Int16(a), b) => Int16(a.wrapping_pow(b.u32())),
+
+            // Unsigned integers
+            (UInt64(a), b) => UInt64(a.pow(b.u32())),
+            (UInt32(a), b) => UInt32(a.pow(b.u32())),
+
+            #[cfg(feature = "extended_numeric_types")]
+            (UInt8(a), b) => UInt8(a.wrapping_pow(b.u32())),
+            #[cfg(feature = "extended_numeric_types")]
+            (UInt16(a), b) => UInt16(a.wrapping_pow(b.u32())),
+        }
+    }
+}
 
 #[cfg(feature = "scalar_type")]
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Scalar::{Float32, Float64, Int32, String32, String64};
 
     #[test]
     fn test_bool() {
@@ -2152,7 +2541,10 @@ mod tests {
 
         #[test]
         fn test_try_str() {
-            assert_eq!(Scalar::String32("foo".into()).try_str(), Some("foo".to_string()));
+            assert_eq!(
+                Scalar::String32("foo".into()).try_str(),
+                Some("foo".to_string())
+            );
             assert_eq!(Scalar::Boolean(true).try_str(), Some("true".to_string()));
             assert_eq!(Scalar::Float32(1.0).try_str(), Some("1".to_string()));
             assert_eq!(Scalar::Int64(-5).try_str(), Some("-5".to_string()));
@@ -2170,7 +2562,10 @@ mod tests {
             }
             #[cfg(feature = "large_string")]
             {
-                assert_eq!(Scalar::String64("bar".into()).try_str(), Some("bar".to_string()));
+                assert_eq!(
+                    Scalar::String64("bar".into()).try_str(),
+                    Some("bar".to_string())
+                );
             }
         }
 
@@ -2251,5 +2646,130 @@ mod tests {
                 assert_eq!(Scalar::String64("notnum".into()).try_dt64(), None);
             }
         }
+    }
+
+    #[test]
+    fn test_add_strings() {
+        assert_eq!(
+            String32("foo".into()) + String32("bar".into()),
+            String32("foobar".into())
+        );
+    }
+
+    #[cfg(feature = "large_string")]
+    #[test]
+    fn test_add_string32_and_string64() {
+        assert_eq!(
+            String32("abc".into()) + String64("123".into()),
+            String32("abc123".into())
+        );
+        assert_eq!(
+            String32("xyz".into()) + String32("789".into()),
+            String32("xyz789".into())
+        );
+    }
+
+    #[test]
+    fn test_sub_string_first_instance() {
+        assert_eq!(
+            String32("hello world world".into()) - String32("world".into()),
+            String32("hello  world".into())
+        );
+    }
+
+    #[cfg(feature = "large_string")]
+    #[test]
+    fn test_sub_string_mixed_variants() {
+        assert_eq!(
+            String32("foo bar bar".into()) - String64("bar".into()),
+            String64("foo  bar".into())
+        );
+        assert_eq!(
+            String64("bar bar bar".into()) - String32("bar".into()),
+            String64(" bar bar".into())
+        );
+    }
+
+    #[test]
+    fn test_mul_append_to_each_line() {
+        let lhs = "a\nb\nc";
+        let rhs = "#";
+        let expected = "a#\nb#\nc#";
+
+        assert_eq!(
+            String32(lhs.into()) * String32(rhs.into()),
+            String32(expected.into())
+        );
+    }
+
+    #[cfg(feature = "large_string")]
+    #[test]
+    fn test_mul_string64_append_to_each_line() {
+        let lhs = "x\ny\nz";
+        let rhs = "@";
+        let expected = "x@\ny@\nz@";
+
+        assert_eq!(
+            String64(lhs.into()) * String64(rhs.into()),
+            String64(expected.into())
+        );
+    }
+
+    #[test]
+    fn test_pow_append_to_each_word() {
+        let lhs = "a b c";
+        let rhs = "!";
+
+        assert_eq!(
+            String32(lhs.into()).pow(String32(rhs.into())),
+            String32("a! b! c!".into())
+        );
+    }
+
+    #[cfg(feature = "large_string")]
+    #[test]
+    fn test_pow_string64_append_to_each_word() {
+        let lhs = "one two";
+        let rhs = "+";
+
+        assert_eq!(
+            String64(lhs.into()).pow(String64(rhs.into())),
+            String64("one+ two+".into())
+        );
+    }
+
+    #[cfg(feature = "large_string")]
+    #[test]
+    fn test_pow_mixed_string32_string64() {
+        let lhs = "hi there";
+        let rhs = "?";
+
+        assert_eq!(
+            String32(lhs.into()).pow(String64(rhs.into())),
+            String64("hi? there?".into())
+        );
+
+        assert_eq!(
+            String64(lhs.into()).pow(String32(rhs.into())),
+            String64("hi? there?".into())
+        );
+    }
+
+    #[test]
+    fn test_pow_parse_string_as_float() {
+        assert_eq!(String32("9.0".into()).pow(Float32(0.5)), Float64(3.0));
+        assert_eq!(Float64(16.0).pow(String32("0.25".into())), Float64(2.0));
+    }
+
+    #[test]
+    #[should_panic(expected = "Exponent: Cannot parse string as f64")]
+    fn test_pow_parse_invalid_string_base() {
+        let _ = String32("abc".into()).pow(Int32(2));
+    }
+
+    #[test]
+    #[should_panic(expected = "Exponent: Cannot parse string as f64")]
+    fn test_pow_parse_invalid_string_exponent() {
+        let _ = Int32(2).pow(String32("notanumber".into()));
     }
 }

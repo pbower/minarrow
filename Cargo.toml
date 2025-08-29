@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.1.8"
+version = "0.2.0"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
@@ -46,6 +46,10 @@ num-traits = "0.2.19"
 rayon = { version = "1.10.0", optional = true }
 snappy = { version = "0.4.0", optional = true }
 zstd = { version = "0.13.3", optional = true }
+ryu = { version = "1.0.20", optional = true }
+memchr = { version = "2.7.5", optional = true }
+ahash = { version = "0.8.12", optional = true }
+regex = { version = "1.11.1", optional = true }
 
 [build-dependencies]
 cc = { version = "1", optional = true }
@@ -137,6 +141,10 @@ cast_polars = ["polars", "polars-arrow", "large_string"]
 # Adds `Datetime` array types.
 datetime = []
 
+# Adds SIMD for the Bitmask and Arithmetic kernels
+# A much more extensive set of kernels is available under the downstream simd-kernels crate.
+simd = []
+
 # Adds `as_datetime` outputs for easy conversion.
 # Also, formats datetime values as dates since unix epoch 1970-01-01 .
 # Without this, they are raw values that can either represent
@@ -144,6 +152,19 @@ datetime = []
 # requirements, and the `ArrowType` you can store in `Field` and/or `FieldArray`
 # tags this accurately for each use case, along with any optional metadata.
 chrono = ["dep:chrono", "datetime"]
+
+# Adds string arithmetic kernels
+# Includes (small) external dependencies, and supports
+# str concatenation with floats for the arithmetic kernels 
+# e.g., "Hello" + 1.0 = "Hello1", etc.
+# Also overloads std::ops::Add, Mul, Sub, Div, Pow
+# with best-case String equivalents (e.g., '+' concatenates),
+# for type unification rather than panicking.
+str_arithmetic = ["ryu", "memchr"]
+
+# Replaces all hashmaps and hashsets used for count distinct operations
+# and categorical dictionary interning with the faster ahash.
+fast_hash = ["dep:ahash"]
 
 default = [
     "views",
@@ -154,6 +175,7 @@ default = [
     "cube",
     "datetime",
     "extended_categorical",
+    "simd"
 ]
 
 [package.metadata.cargo-all-features]

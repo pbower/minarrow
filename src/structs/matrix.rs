@@ -10,8 +10,6 @@ use crate::Table;
 use crate::enums::error::MinarrowError;
 use crate::{FloatArray, Vec64};
 
-// TODO: Leave out of the prod version
-
 // Global counter for unnamed matrix instances
 static UNNAMED_MATRIX_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
