@@ -125,7 +125,7 @@ where
     ///
     /// # Returns
     /// Tuple containing array reference, offset, and length.
-    fn tuple_view(self, offset: usize, len: usize) -> (Array, usize, usize) {
+    fn view_tuple(self, offset: usize, len: usize) -> (Array, usize, usize) {
         self.view(offset, len).as_tuple()
     }
 }

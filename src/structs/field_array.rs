@@ -158,7 +158,7 @@ impl FieldArray {
     /// is a once-off we avoid recommending.
     #[cfg(feature = "views")]
     #[inline]
-    pub fn to_window(&self, offset: usize, len: usize) -> FieldAVT {
+    pub fn view(&self, offset: usize, len: usize) -> FieldAVT {
         ((&self.array, offset, len), &self.field)
     }
 
@@ -292,7 +292,7 @@ mod tests {
         arr.push(30);
 
         let fa = field_array("x", Array::from_int32(arr));
-        let view = fa.to_window(1, 2);
+        let view = fa.view(1, 2);
         assert_eq!(view.1.name, "x");
         assert_eq!(view.0.2, 2);
         assert_eq!(view.0.1, 1);

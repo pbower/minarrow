@@ -188,7 +188,7 @@ impl TemporalArrayV {
             return count;
         }
         let count = match self.array.null_mask() {
-            Some(mask) => mask.to_window(self.offset, self.len).count_zeros(),
+            Some(mask) => mask.view(self.offset, self.len).count_zeros(),
             None => 0
         };
         self.null_count.set(Some(count));
@@ -198,7 +198,7 @@ impl TemporalArrayV {
     /// Returns the null mask as a windowed `BitmaskView`.
     #[inline]
     pub fn null_mask_view(&self) -> Option<BitmaskV> {
-        self.array.null_mask().map(|mask| mask.to_window(self.offset, self.len))
+        self.array.null_mask().map(|mask| mask.view(self.offset, self.len))
     }
 
     /// Sets the cached null count for the view.

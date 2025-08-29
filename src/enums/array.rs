@@ -743,7 +743,7 @@ impl Array {
     ///
     /// Panics if out of bounds.
     #[cfg(feature = "views")]
-    pub fn to_window(&self, offset: usize, len: usize) -> ArrayV {
+    pub fn view(&self, offset: usize, len: usize) -> ArrayV {
         assert!(offset <= self.len(), "offset out of bounds");
         assert!(offset + len <= self.len(), "slice window out of bounds");
         ArrayV::new(self.clone(), offset, len)
@@ -755,7 +755,7 @@ impl Array {
     ///
     /// Panics if out of bounds.
     #[cfg(feature = "views")]
-    pub fn to_window_tuple(&self, offset: usize, len: usize) -> ArrayVT {
+    pub fn view_tuple(&self, offset: usize, len: usize) -> ArrayVT {
         assert!(offset <= self.len(), "offset out of bounds");
         assert!(offset + len <= self.len(), "slice window out of bounds");
         (self, offset, len)

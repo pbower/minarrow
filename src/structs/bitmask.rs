@@ -8,7 +8,7 @@
 //!
 //! ## Behaviour
 //! - LSB corresponds to the first logical element.
-//! - Zero-copy windowing via [`BitmaskV`] (`to_window`, `slice`).
+//! - Zero-copy windowing via [`BitmaskV`] (`view`, `slice`).
 //! - Trailing padding bits are always masked off for Arrow spec compliance.
 //!
 //! ## Interop
@@ -42,7 +42,7 @@ use crate::{BitmaskV, Buffer, Length, Offset};
 /// assert!(m.get(3) && m.get(7));
 ///
 /// // Create a zero-copy window over [2..8)
-/// let v = m.to_window(2, 6);
+/// let v = m.view(2, 6);
 /// assert_eq!(v.len(), 6);
 /// assert_eq!(v.get(1), true); // corresponds to original bit 3
 /// ```
@@ -494,7 +494,7 @@ impl Bitmask {
     ///
     /// `Offset` and `Length` are semantic `usize` aliases.
     #[inline(always)]
-    pub fn to_window(&self, offset: Offset, len: Length) -> BitmaskV {
+    pub fn view(&self, offset: Offset, len: Length) -> BitmaskV {
         BitmaskV::new(self.clone(), offset, len)
     }
 

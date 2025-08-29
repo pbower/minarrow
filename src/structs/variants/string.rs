@@ -461,7 +461,7 @@ impl<T: Integer> StringArray<T> {
     /// as a &[u8] slice, whilst retaining those parameters for any
     /// downstream reconstruction.
     ///
-    /// As this slices raw bytes one may prefer `to_window` which carries
+    /// As this slices raw bytes one may prefer `view` which carries
     /// a reference to the whole object, but is not pre-sliced.
     pub fn slice_tuple(&self, offset: usize, len: usize) -> (&[u8], Offset, Length) {
         (&self.data.as_ref()[offset..offset + len], offset, len)

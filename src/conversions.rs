@@ -29,7 +29,7 @@
 //!   - `From<Arc<...>> for Array` and `From<...> for Array` for all core variants,
 //!     using cheap `Arc` clones for zero-copy wrapping.
 //! - **`View` trait impls** *(feature `views`)*
-//!   - Provides `BufferT` for owned and `Arc` array variants so you can call `.view(...)` / `.tuple_view(...)`.
+//!   - Provides `BufferT` for owned and `Arc` array variants so you can call `.view(...)` / `.view_tuple(...)`.
 //!
 //! ## Null masks & semantics
 //! Unless noted, conversions **preserve the source null mask**. Errors are explicit:

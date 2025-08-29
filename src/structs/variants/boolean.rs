@@ -215,7 +215,7 @@ impl BooleanArray<()> {
     /// as a &[u8] slice, whilst retaining those parameters for any
     /// downstream reconstruction.
     ///
-    /// As this is bitpacked, one may prefer `to_window`
+    /// As this is bitpacked, one may prefer `view`
     /// which retains the `&BooleanArray`.
     pub fn slice_tuple(&self, offset: usize, len: usize) -> (&[u8], Offset, Length) {
         (&self.data.as_ref()[offset..offset + len], offset, len)
