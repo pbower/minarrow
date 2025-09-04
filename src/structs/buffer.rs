@@ -358,6 +358,19 @@ impl<T> Buffer<T> {
     pub fn is_shared(&self) -> bool {
         matches!(self.storage, Storage::Shared { .. })
     }
+
+    /// Creates an owned copy of the buffer data.
+    /// If the buffer is already owned, this clones the data.
+    /// If the buffer is shared, this copies the data into a new owned Vec64.
+    #[inline]
+    pub fn to_owned_copy(&self) -> Self
+    where
+        T: Clone,
+    {
+        // Always create a fresh owned copy
+        let vec: Vec64<T> = self.as_ref().iter().cloned().collect();
+        Buffer::from_vec64(vec)
+    }
 }
 
 impl<T: Clone> Buffer<T> {
@@ -592,6 +605,7 @@ impl<T: Display> Display for Buffer<T> {
         write!(f, "]")
     }
 }
+
 
 // SAFETY: Shared buffers are read-only and `Arc` ensures memory is valid.
 // `Owned` is already `Send + Sync` via `Vec64<T>`.

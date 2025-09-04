@@ -170,6 +170,17 @@ impl Bitmask {
         !self.all_set()
     }
 
+    /// Creates an owned copy of the bitmask.
+    /// Always creates a fresh owned copy, even if already owned.
+    #[inline]
+    pub fn to_owned_copy(&self) -> Self {
+        let owned_bits = self.bits.to_owned_copy();
+        Bitmask {
+            bits: owned_bits,
+            len: self.len,
+        }
+    }
+
     /// Returns bit *idx*.  
     /// - If `idx ≥ self.len` but still inside the physical buffer, returns `false`.  
     /// Panics only when `idx` exceeds the physical capacity.
@@ -719,6 +730,7 @@ impl Display for Bitmask {
         write!(f, "]")
     }
 }
+
 
 #[cfg(test)]
 mod tests {
