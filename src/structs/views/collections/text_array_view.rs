@@ -29,6 +29,8 @@ use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::traits::print::MAX_PREVIEW;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::{Array, ArrayV, BitmaskV, TextArray};
 
 /// # TextArrayView
@@ -284,6 +286,12 @@ impl Display for TextArrayV {
         }
 
         Ok(())
+    }
+}
+
+impl Shape for TextArrayV {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

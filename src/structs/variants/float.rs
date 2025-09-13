@@ -45,6 +45,8 @@ use std::fmt::{Display, Formatter};
 
 use crate::structs::vec64::Vec64;
 use crate::traits::print::{MAX_PREVIEW, format_float};
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::traits::type_unions::Float;
 use crate::{
     Bitmask, Buffer, Length, MaskedArray, Offset, impl_arc_masked_array, impl_array_ref_deref,
@@ -141,6 +143,12 @@ where
         }
 
         write!(f, "]")
+    }
+}
+
+impl<T: Float> Shape for FloatArray<T> {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

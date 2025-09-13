@@ -31,6 +31,8 @@ use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::traits::print::MAX_PREVIEW;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::{Array, BitmaskV, FieldArray, MaskedArray, TextArray};
 
 /// # ArrayView
@@ -345,6 +347,11 @@ impl Display for ArrayV {
     }
 }
 
+impl Shape for ArrayV {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
+    }
+}
 
 #[cfg(test)]
 mod tests {

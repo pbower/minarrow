@@ -26,6 +26,8 @@ use polars::prelude::Column;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use super::field_array::FieldArray;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::Field;
 #[cfg(feature = "views")]
 use crate::TableV;
@@ -329,6 +331,12 @@ impl IntoIterator for Table {
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.cols.into_iter()
+    }
+}
+
+impl Shape for Table {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank2 { rows: self.n_rows(), cols: self.n_cols() } 
     }
 }
 

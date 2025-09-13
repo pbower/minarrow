@@ -36,6 +36,8 @@
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 #[cfg(feature = "datetime")]
 use crate::Buffer;
 use crate::enums::time_units::TimeUnit;
@@ -355,6 +357,12 @@ where
         }
 
         write!(f, "]")
+    }
+}
+
+impl<T: Integer> Shape for DatetimeArray<T> {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

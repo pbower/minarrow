@@ -42,6 +42,8 @@ use std::fmt::{Display, Formatter};
 
 use crate::structs::vec64::Vec64;
 use crate::traits::print::MAX_PREVIEW;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::traits::type_unions::Integer;
 use crate::{
     Bitmask, Buffer, Length, MaskedArray, Offset, impl_arc_masked_array, impl_array_ref_deref,
@@ -136,6 +138,12 @@ where
         }
 
         write!(f, "]")
+    }
+}
+
+impl<T: Integer> Shape for IntegerArray<T> {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

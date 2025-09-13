@@ -44,6 +44,8 @@ use crate::aliases::BooleanAVT;
 use crate::structs::bitmask::Bitmask;
 use crate::traits::masked_array::MaskedArray;
 use crate::traits::print::MAX_PREVIEW;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::utils::validate_null_mask_len;
 use crate::{Length, Offset, Vec64, impl_arc_masked_array};
 
@@ -757,6 +759,12 @@ impl<T: Send + Sync> BooleanArray<T> {
             }
             Some(unsafe { self.data.get_unchecked(i) })
         })
+    }
+}
+
+impl Shape for BooleanArray<()> {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

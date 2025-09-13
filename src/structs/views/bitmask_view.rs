@@ -30,6 +30,8 @@ use std::ops::Index;
 use std::sync::Arc;
 
 use crate::traits::print::MAX_PREVIEW;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::{Bitmask, BitmaskVT};
 
 /// # BitmaskView
@@ -239,6 +241,12 @@ impl Display for BitmaskV {
         writeln!(f)?;
 
         Ok(())
+    }
+}
+
+impl Shape for BitmaskV {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

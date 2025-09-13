@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::Table;
 use crate::enums::error::MinarrowError;
 use crate::{FloatArray, Vec64};
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::shape::Shape;
 
 // Global counter for unnamed matrix instances
 static UNNAMED_MATRIX_COUNTER: AtomicUsize = AtomicUsize::new(1);
@@ -25,8 +27,8 @@ static UNNAMED_MATRIX_COUNTER: AtomicUsize = AtomicUsize::new(1);
 /// and is not part of the *`Apache Arrow`* framework**.
 /// 
 /// ### Properties
-/// - `nrows`: Number of rows.
-/// - `ncols`: Number of columns.
+/// - `n_rows`: Number of rows.
+/// - `n_cols`: Number of columns.
 /// - `data`: Flat buffer in column-major order.
 /// - `name`: Optional matrix name (used for debugging, diagnostics, or pretty printing).
 /// 
@@ -45,8 +47,8 @@ static UNNAMED_MATRIX_COUNTER: AtomicUsize = AtomicUsize::new(1);
 #[repr(C, align(64))]
 #[derive(Clone, PartialEq)]
 pub struct Matrix {
-    pub nrows: usize,
-    pub ncols: usize,
+    pub n_rows: usize,
+    pub n_cols: usize,
     pub data: Vec64<f64>,
     pub name: String
 }
@@ -54,48 +56,48 @@ pub struct Matrix {
 impl Matrix {
     /// Constructs a new dense Matrix with shape and optional name.
     /// Data buffer is zeroed.
-    pub fn new(nrows: usize, ncols: usize, name: Option<String>) -> Self {
-        let len = nrows * ncols;
+    pub fn new(n_rows: usize, n_cols: usize, name: Option<String>) -> Self {
+        let len = n_rows * n_cols;
         let mut data = Vec64::with_capacity(len);
         data.0.resize(len, 0.0);
         let name = name.unwrap_or_else(|| {
             let id = UNNAMED_MATRIX_COUNTER.fetch_add(1, Ordering::Relaxed);
             format!("UnnamedMatrix{}", id)
         });
-        Matrix { nrows, ncols, data, name }
+        Matrix { n_rows, n_cols, data, name }
     }
 
     /// Constructs a Matrix from a flat buffer (must be column-major order).
     /// Panics if data length does not match shape.
-    pub fn from_flat(data: Vec64<f64>, nrows: usize, ncols: usize, name: Option<String>) -> Self {
-        assert_eq!(data.len(), nrows * ncols, "Matrix shape does not match buffer length");
+    pub fn from_flat(data: Vec64<f64>, n_rows: usize, n_cols: usize, name: Option<String>) -> Self {
+        assert_eq!(data.len(), n_rows * n_cols, "Matrix shape does not match buffer length");
         let name = name.unwrap_or_else(|| {
             let id = UNNAMED_MATRIX_COUNTER.fetch_add(1, Ordering::Relaxed);
             format!("UnnamedMatrix{}", id)
         });
-        Matrix { nrows, ncols, data, name }
+        Matrix { n_rows, n_cols, data, name }
     }
 
     /// Returns the value at (row, col) (0-based). Panics if out of bounds.
     #[inline]
     pub fn get(&self, row: usize, col: usize) -> f64 {
-        debug_assert!(row < self.nrows, "Row out of bounds");
-        debug_assert!(col < self.ncols, "Col out of bounds");
-        self.data[col * self.nrows + row]
+        debug_assert!(row < self.n_rows, "Row out of bounds");
+        debug_assert!(col < self.n_cols, "Col out of bounds");
+        self.data[col * self.n_rows + row]
     }
 
     /// Sets the value at (row, col) (0-based). Panics if out of bounds.
     #[inline]
     pub fn set(&mut self, row: usize, col: usize, value: f64) {
-        debug_assert!(row < self.nrows, "Row out of bounds");
-        debug_assert!(col < self.ncols, "Col out of bounds");
-        self.data[col * self.nrows + row] = value;
+        debug_assert!(row < self.n_rows, "Row out of bounds");
+        debug_assert!(col < self.n_cols, "Col out of bounds");
+        self.data[col * self.n_rows + row] = value;
     }
 
     /// Returns true if the matrix is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.nrows == 0 || self.ncols == 0
+        self.n_rows == 0 || self.n_cols == 0
     }
 
     /// Returns the total number of elements.
@@ -118,26 +120,26 @@ impl Matrix {
 
     /// Returns a view of the matrix as a slice of columns.
     pub fn columns(&self) -> Vec<&[f64]> {
-        (0..self.ncols)
-            .map(|col| &self.data[(col * self.nrows)..((col + 1) * self.nrows)])
+        (0..self.n_cols)
+            .map(|col| &self.data[(col * self.n_rows)..((col + 1) * self.n_rows)])
             .collect()
     }
 
     /// Returns a vector of mutable slices, each corresponding to a column of the matrix.
     pub fn columns_mut(&mut self) -> Vec<&mut [f64]> {
-        let nrows = self.nrows;
-        let ncols = self.ncols;
+        let n_rows = self.n_rows;
+        let n_cols = self.n_cols;
         let ptr = self.data.as_mut_slice().as_mut_ptr();
-        let mut result = Vec::with_capacity(ncols);
+        let mut result = Vec::with_capacity(n_cols);
 
-        for col in 0..ncols {
-            let start = col * nrows;
+        for col in 0..n_cols {
+            let start = col * n_rows;
             // SAFETY:
             // - Each slice is within bounds and non-overlapping,
             // - We have exclusive &mut access to self.
             unsafe {
                 let col_ptr = ptr.add(start);
-                let slice = std::slice::from_raw_parts_mut(col_ptr, nrows);
+                let slice = std::slice::from_raw_parts_mut(col_ptr, n_rows);
                 result.push(slice);
             }
         }
@@ -147,22 +149,22 @@ impl Matrix {
     /// Returns a single column as a slice, panics if col out of bounds.
     #[inline]
     pub fn col(&self, col: usize) -> &[f64] {
-        debug_assert!(col < self.ncols, "Col out of bounds");
-        &self.data[(col * self.nrows)..((col + 1) * self.nrows)]
+        debug_assert!(col < self.n_cols, "Col out of bounds");
+        &self.data[(col * self.n_rows)..((col + 1) * self.n_rows)]
     }
 
     /// Returns a single column as a mutable slice, panics if col out of bounds.
     #[inline]
     pub fn col_mut(&mut self, col: usize) -> &mut [f64] {
-        debug_assert!(col < self.ncols, "Col out of bounds");
-        &mut self.data[(col * self.nrows)..((col + 1) * self.nrows)]
+        debug_assert!(col < self.n_cols, "Col out of bounds");
+        &mut self.data[(col * self.n_rows)..((col + 1) * self.n_rows)]
     }
 
     /// Returns a single row as an owned Vec.
     #[inline]
     pub fn row(&self, row: usize) -> Vec<f64> {
-        debug_assert!(row < self.nrows, "Row out of bounds");
-        (0..self.ncols).map(|col| self.get(row, col)).collect()
+        debug_assert!(row < self.n_rows, "Row out of bounds");
+        (0..self.n_cols).map(|col| self.get(row, col)).collect()
     }
 
     /// Renames the matrix
@@ -170,28 +172,45 @@ impl Matrix {
     pub fn set_name(&mut self, name: impl Into<String>) {
         self.name = name.into();
     }
+
+    /// Returns the number of columns.
+    pub fn n_cols(&self) -> usize {
+        self.n_cols
+    }
+
+    /// Returns the number of rows.
+    #[inline]
+    pub fn n_rows(&self) -> usize {
+        self.n_rows
+    }
+}
+
+impl Shape for Matrix {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank2 { rows: self.n_rows(), cols: self.n_cols() } 
+    }
 }
 
 // Pretty print
 impl fmt::Debug for Matrix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Matrix '{}': {} × {} [col-major]", self.name, self.nrows, self.ncols)?;
-        for row in 0..self.nrows.min(6) {
+        write!(f, "Matrix '{}': {} × {} [col-major]", self.name, self.n_rows, self.n_cols)?;
+        for row in 0..self.n_rows.min(6) {
             // Print up to 6 rows
             write!(f, "\n[")?;
-            for col in 0..self.ncols.min(8) {
+            for col in 0..self.n_cols.min(8) {
                 // Print up to 8 cols
                 write!(f, " {:8.4}", self.get(row, col))?;
-                if col != self.ncols - 1 {
+                if col != self.n_cols - 1 {
                     write!(f, ",")?;
                 }
             }
-            if self.ncols > 8 {
+            if self.n_cols > 8 {
                 write!(f, " ...")?;
             }
             write!(f, " ]")?;
         }
-        if self.nrows > 6 {
+        if self.n_rows > 6 {
             write!(f, "\n...")?;
         }
         Ok(())
@@ -201,28 +220,28 @@ impl fmt::Debug for Matrix {
 // From Vec<FloatArray<f64>> to Matrix (all cols must match length)
 impl From<(Vec<FloatArray<f64>>, String)> for Matrix {
     fn from((columns, name): (Vec<FloatArray<f64>>, String)) -> Self {
-        let ncols = columns.len();
-        let nrows = columns.first().map(|c| c.data.len()).unwrap_or(0);
+        let n_cols = columns.len();
+        let n_rows = columns.first().map(|c| c.data.len()).unwrap_or(0);
         for col in &columns {
-            assert_eq!(col.data.len(), nrows, "Column length mismatch");
+            assert_eq!(col.data.len(), n_rows, "Column length mismatch");
         }
-        let mut data = Vec64::with_capacity(nrows * ncols);
+        let mut data = Vec64::with_capacity(n_rows * n_cols);
         for col in &columns {
             data.extend_from_slice(&col.data);
         }
-        Matrix { nrows, ncols, data, name }
+        Matrix { n_rows, n_cols, data, name }
     }
 }
 
 // From &[FloatArray<f64>] to Matrix
 impl From<&[FloatArray<f64>]> for Matrix {
     fn from(columns: &[FloatArray<f64>]) -> Self {
-        let ncols = columns.len();
-        let nrows = columns.first().map(|c| c.data.len()).unwrap_or(0);
+        let n_cols = columns.len();
+        let n_rows = columns.first().map(|c| c.data.len()).unwrap_or(0);
         for col in columns {
-            assert_eq!(col.data.len(), nrows, "Column length mismatch");
+            assert_eq!(col.data.len(), n_rows, "Column length mismatch");
         }
-        let mut data = Vec64::with_capacity(nrows * ncols);
+        let mut data = Vec64::with_capacity(n_rows * n_cols);
         for col in columns {
             data.extend_from_slice(&col.data);
         }
@@ -230,7 +249,7 @@ impl From<&[FloatArray<f64>]> for Matrix {
             let id = UNNAMED_MATRIX_COUNTER.fetch_add(1, Ordering::Relaxed);
             format!("UnnamedMatrix{}", id)
         };
-        Matrix { nrows, ncols, data, name }
+        Matrix { n_rows, n_cols, data, name }
     }
 }
 
@@ -240,11 +259,11 @@ impl From<&[FloatArray<f64>]> for Matrix {
 
 //     fn try_from(table: &Table) -> Result<Self, Self::Error> {
 //         let name = table.name.clone();
-//         let ncols = table.n_cols();
-//         let nrows = table.n_rows();
+//         let n_cols = table.n_cols();
+//         let n_rows = table.n_rows();
 
 //         // Collect and check columns
-//         let mut float_columns = Vec::with_capacity(ncols);
+//         let mut float_columns = Vec::with_capacity(n_cols);
 //         for fa in &table.cols {
 //             let numeric_array = fa.array.num();
 //             let arr: FloatArray<f64> = numeric_array.f64()?;
@@ -253,34 +272,34 @@ impl From<&[FloatArray<f64>]> for Matrix {
 
 //         // Ensure all columns are the correct length
 //         for (col_idx, col) in float_columns.iter().enumerate() {
-//             if col.data.len() != nrows {
+//             if col.data.len() != n_rows {
 //                 return Err(MinarrowError::ColumnLengthMismatch {
 //                     col: col_idx,
-//                     expected: nrows,
+//                     expected: n_rows,
 //                     found: col.data.len()
 //                 });
 //             }
 //         }
 
 //         // Flatten into single column-major Vec64<f64>
-//         let mut data = Vec64::with_capacity(nrows * ncols);
+//         let mut data = Vec64::with_capacity(n_rows * n_cols);
 //         for col in &float_columns {
 //             data.0.extend_from_slice(&col.data);
 //         }
 
-//         Ok(Matrix { nrows, ncols, data, name })
+//         Ok(Matrix { n_rows, n_cols, data, name })
 //     }
 // }
 
 // From Vec<Vec<f64>> (Vec-of-cols) to Matrix (anonymous name)
 impl From<&[Vec<f64>]> for Matrix {
     fn from(columns: &[Vec<f64>]) -> Self {
-        let ncols = columns.len();
-        let nrows = columns.first().map(|c| c.len()).unwrap_or(0);
+        let n_cols = columns.len();
+        let n_rows = columns.first().map(|c| c.len()).unwrap_or(0);
         for col in columns {
-            assert_eq!(col.len(), nrows, "Column length mismatch");
+            assert_eq!(col.len(), n_rows, "Column length mismatch");
         }
-        let mut data = Vec64::with_capacity(nrows * ncols);
+        let mut data = Vec64::with_capacity(n_rows * n_cols);
         for col in columns {
             data.extend_from_slice(col);
         }
@@ -288,20 +307,20 @@ impl From<&[Vec<f64>]> for Matrix {
             let id = UNNAMED_MATRIX_COUNTER.fetch_add(1, Ordering::Relaxed);
             format!("UnnamedMatrix{}", id)
         };
-        Matrix { nrows, ncols, data, name }
+        Matrix { n_rows, n_cols, data, name }
     }
 }
 
 // From flat slice with shape
 impl<'a> From<(&'a [f64], usize, usize, Option<String>)> for Matrix {
-    fn from((slice, nrows, ncols, name): (&'a [f64], usize, usize, Option<String>)) -> Self {
-        assert_eq!(slice.len(), nrows * ncols, "Slice shape mismatch");
+    fn from((slice, n_rows, n_cols, name): (&'a [f64], usize, usize, Option<String>)) -> Self {
+        assert_eq!(slice.len(), n_rows * n_cols, "Slice shape mismatch");
         let data = Vec64::from(slice);
         let name = name.unwrap_or_else(|| {
             let id = UNNAMED_MATRIX_COUNTER.fetch_add(1, Ordering::Relaxed);
             format!("UnnamedMatrix{}", id)
         });
-        Matrix { nrows, ncols, data, name }
+        Matrix { n_rows, n_cols, data, name }
     }
 }
 
