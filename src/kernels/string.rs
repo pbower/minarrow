@@ -29,8 +29,8 @@ use crate::{
 use regex::Regex;
 
 use crate::enums::error::KernelError;
-use std::marker::PhantomData;
 use crate::utils::confirm_mask_capacity;
+use std::marker::PhantomData;
 
 /// Helper for predicate kernels: produce optional input masks and a fresh output mask
 #[inline(always)]

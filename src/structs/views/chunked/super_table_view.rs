@@ -32,10 +32,14 @@
 //! - `slices` are ordered, non-overlapping, and each covers a contiguous region
 //!   within its underlying table batch.
 
-use crate::structs::chunked::super_table::SuperTable;
-use crate::traits::shape::Shape;
+use std::sync::Arc;
+
+use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
-use crate::{Table, TableV};
+use crate::structs::chunked::super_table::SuperTable;
+use crate::traits::concatenate::Concatenate;
+use crate::traits::shape::Shape;
+use crate::{Field, Table, TableV};
 
 /// # SuperTableView
 ///
@@ -58,7 +62,7 @@ use crate::{Table, TableV};
 #[derive(Debug, Clone)]
 pub struct SuperTableV {
     pub slices: Vec<TableV>,
-    pub len: usize
+    pub len: usize,
 }
 
 impl SuperTableV {
@@ -69,6 +73,16 @@ impl SuperTableV {
     #[inline]
     pub fn n_slices(&self) -> usize {
         self.slices.len()
+    }
+
+    // TODO: Add test, confirm null case
+
+    /// Returns the columns of the Super Table
+    ///
+    /// Holds an assumption that all inner tables have the same fields
+    #[inline]
+    pub fn cols(&self) -> Vec<Arc<Field>> {
+        self.slices[0].fields.iter().map(|x| x.clone()).collect()
     }
 
     /// Iterator over slice‐level `TableSlice`s.
@@ -101,7 +115,10 @@ impl SuperTableV {
             }
             offset = 0;
         }
-        SuperTableV { slices: slices, len: requested_len }
+        SuperTableV {
+            slices: slices,
+            len: requested_len,
+        }
     }
 
     /// Random-access a single row (as a zero-copy TableSlice of length 1).
@@ -142,7 +159,7 @@ impl SuperTableV {
         let (ci, ri) = self.locate(row);
         self.slices[ci].from_self(ri, 1)
     }
- 
+
     /// Returns the total number of rows in the Super table across all chunks
     #[inline]
     pub fn n_rows(&self) -> usize {
@@ -150,14 +167,14 @@ impl SuperTableV {
     }
 
     /// Returns the number of columns in the Super table.
-    /// 
+    ///
     /// Assumes that every chunk has the same column schema as per
     /// the semantic requirement.
     #[inline]
     pub fn n_cols(&self) -> usize {
         let n_batches = self.slices.len();
         if n_batches > 0 {
-           self.slices[0].fields.len()
+            self.slices[0].fields.len()
         } else {
             0
         }
@@ -166,7 +183,47 @@ impl SuperTableV {
 
 impl Shape for SuperTableV {
     fn shape(&self) -> ShapeDim {
-        ShapeDim::Rank2 { rows: self.n_rows(), cols: self.n_cols() }
+        ShapeDim::Rank2 {
+            rows: self.n_rows(),
+            cols: self.n_cols(),
+        }
+    }
+}
+
+impl Concatenate for SuperTableV {
+    /// Concatenates two super table views by materializing both to owned tables,
+    /// concatenating them, and wrapping the result back in a view.
+    ///
+    /// # Notes
+    /// - This operation copies data from both views to create owned tables.
+    /// - The resulting view contains a single slice wrapping the concatenated table.
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Materialize both views to owned tables
+        let self_table = self.to_table(None);
+        let other_table = other.to_table(None);
+
+        // Concatenate the owned tables
+        let concatenated = self_table.concat(other_table)?;
+        let len = concatenated.n_rows;
+
+        // Wrap the result in a new view with a single slice
+        Ok(SuperTableV {
+            slices: vec![TableV::from(concatenated)],
+            len,
+        })
+    }
+}
+
+#[cfg(feature = "chunked")]
+impl From<SuperTable> for SuperTableV {
+    fn from(super_table: SuperTable) -> Self {
+        if super_table.is_empty() {
+            return SuperTableV {
+                slices: Vec::new(),
+                len: 0,
+            };
+        }
+        super_table.view(0, super_table.n_rows())
     }
 }
 
@@ -189,7 +246,7 @@ mod tests {
         Table {
             cols: Vec::from(vec![fa_i32(name, vals)]),
             n_rows: vals.len(),
-            name: name.to_string()
+            name: name.to_string(),
         }
     }
     /// Handy lens into the first column of a 1-column table
@@ -209,7 +266,7 @@ mod tests {
 
         let big_slice = SuperTableV {
             slices: vec![TableV::from_table(b1, 0, 2), TableV::from_table(b2, 0, 3)],
-            len: 5
+            len: 5,
         };
 
         assert!(!big_slice.is_empty());
@@ -227,7 +284,7 @@ mod tests {
         let big = table("x", &[10, 11, 12, 13, 14]);
         let full = SuperTableV {
             slices: vec![TableV::from_table(big, 0, 5)],
-            len: 5
+            len: 5,
         };
 
         // Sub-slice  [1 .. 4)  =>  rows 11,12,13
@@ -255,7 +312,7 @@ mod tests {
         let b2 = table("c", &[2]);
         let slice = SuperTableV {
             slices: vec![TableV::from_table(b1, 0, 2), TableV::from_table(b2, 0, 1)],
-            len: 3
+            len: 3,
         };
 
         // chunks()
@@ -276,7 +333,7 @@ mod tests {
         let t = table("q", &[1, 2]);
         let slice = SuperTableV {
             slices: vec![TableV::from_table(t, 0, 2)],
-            len: 2
+            len: 2,
         };
         // This should panic
         let _ = slice.row(5);
@@ -288,7 +345,7 @@ mod tests {
         let t = table("p", &[1, 2, 3]);
         let slice = SuperTableV {
             slices: vec![TableV::from_table(t, 0, 3)],
-            len: 3
+            len: 3,
         };
         // slice end exceeds original
         let _ = slice.slice(2, 5);

@@ -14,7 +14,7 @@
 //! ## Operations
 //! Supports standard arithmetic operations (add, subtract, multiply, divide, remainder, power)
 //! plus fused multiply-add (FMA) for floating-point types with hardware acceleration.
-//! 
+//!
 //! ## Scope
 //! **These do not leverage parallel-thread processing, as this is expected to be applied in the engine layer,
 //! which is app-specific.**.
@@ -24,6 +24,9 @@ pub mod dispatch;
 pub mod simd;
 pub mod std;
 pub mod string;
+pub mod string_ops;
+#[cfg(feature = "broadcast")]
+pub mod types;
 
 // Shared tests for SIMD and Std
 
@@ -34,6 +37,7 @@ mod tests {
     use crate::structs::variants::integer::IntegerArray;
     use crate::{Bitmask, MaskedArray, vec64};
 
+    use crate::enums::operators::ArithmeticOperator;
     use crate::kernels::arithmetic::dispatch::{
         apply_float_f32, apply_float_f64, apply_fma_f32, apply_fma_f64, apply_int_i32,
         apply_int_i64, apply_int_u32, apply_int_u64,
@@ -44,7 +48,6 @@ mod tests {
     };
     #[cfg(feature = "simd")]
     use crate::kernels::arithmetic::simd::int_dense_body_simd;
-    use crate::enums::operators::ArithmeticOperator;
 
     fn assert_int<T>(arr: &IntegerArray<T>, values: &[T], valid: Option<&[bool]>)
     where

@@ -11,16 +11,15 @@ use crate::enums::shape_dim::ShapeDim;
 /// Shape trait.
 ///
 /// Returns a recursively-describable `Shape` for the receiver.
-/// 
+///
 /// Includes accessor types for common use cases e.g., shape_1d, shape_2d,
 /// which are automatic provided the implementor implements `shape`.
 pub trait Shape {
-
     /// Returns arbitrary Shape dimension for any data shape
     fn shape(&self) -> ShapeDim;
 
     /// Returns the first dimension shape
-    /// 
+    ///
     /// Exists to bypass a match on `ShapeDim` for `Array` shaped types
     fn shape_1d(&self) -> usize {
         match self.shape() {
@@ -37,7 +36,7 @@ pub trait Shape {
     }
 
     /// Returns the first and second dimension shapes
-    /// 
+    ///
     /// Exists to bypass a match on `ShapeDim` for `Table` shaped types
     fn shape_2d(&self) -> (usize, usize) {
         match self.shape() {
@@ -73,7 +72,7 @@ pub trait Shape {
     }
 
     /// Returns the first, second and third dimension shapes
-    /// 
+    ///
     /// Exists to bypass a match on `ShapeDim` for 3D types
     fn shape_3d(&self) -> (usize, usize, usize) {
         match self.shape() {
@@ -123,7 +122,7 @@ pub trait Shape {
     }
 
     /// Returns the first, second, third and fourth dimension shapes
-    /// 
+    ///
     /// Exists to bypass a match on `ShapeDim` for 4D types
     fn shape_4d(&self) -> (usize, usize, usize, usize) {
         match self.shape() {
@@ -167,7 +166,12 @@ pub trait Shape {
                     }
                 }
 
-                (total_a, ref_b.unwrap_or(1), ref_c.unwrap_or(1), ref_d.unwrap_or(1))
+                (
+                    total_a,
+                    ref_b.unwrap_or(1),
+                    ref_c.unwrap_or(1),
+                    ref_d.unwrap_or(1),
+                )
             }
             ShapeDim::Dictionary { .. } => panic!("shape_4d: incompatible Dictionary shape"),
             ShapeDim::Unknown => panic!("shape_4d: incompatible Unknown shape"),

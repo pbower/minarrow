@@ -24,7 +24,7 @@ use crate::{Array, MaskedArray, NumericArray, TextArray};
 static UNNAMED_FIELD_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 /// # Field
-/// 
+///
 /// ## Description
 /// `Field` struct supporting:
 /// - Array metadata such as type, name, nullability, etc.
@@ -36,7 +36,7 @@ static UNNAMED_FIELD_COUNTER: AtomicUsize = AtomicUsize::new(1);
 ///   lightweight to avoid performance penalties. `SuperTable` wraps it in Arc.
 /// - For `Datetime` arrays, `Field` carries the logical `Arrow` type.
 ///   The physical type remains a single integer-backed `Datetime`, while
-///   the logical type specifies its intended semantics. 
+///   the logical type specifies its intended semantics.
 ///     i.e.:
 ///     `Date32`
 ///     `Date64`
@@ -46,16 +46,16 @@ static UNNAMED_FIELD_COUNTER: AtomicUsize = AtomicUsize::new(1);
 ///     `Duration64(TimeUnit)`
 ///     `Timestamp(TimeUnit)`
 ///     `Interval(IntervalUnit)`
-/// 
-/// - This ensures that when sent over Arrow C-FFI (or `to_apache_arrow()`), 
-/// it converts to the correct external type. Whilst, avoiding proliferating many 
+///
+/// - This ensures that when sent over Arrow C-FFI (or `to_apache_arrow()`),
+/// it converts to the correct external type. Whilst, avoiding proliferating many
 /// specialised types prematurely, keeping the API and binary size minimal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Field {
     pub name: String,
     pub dtype: ArrowType,
     pub nullable: bool,
-    pub metadata: BTreeMap<String, String>
+    pub metadata: BTreeMap<String, String>,
 }
 
 impl Field {
@@ -65,7 +65,7 @@ impl Field {
         name: T,
         dtype: ArrowType,
         nullable: bool,
-        metadata: Option<BTreeMap<String, String>>
+        metadata: Option<BTreeMap<String, String>>,
     ) -> Self {
         let mut name = name.into();
         if name.trim().is_empty() {
@@ -77,7 +77,7 @@ impl Field {
             name,
             dtype,
             nullable,
-            metadata: metadata.unwrap_or_default()
+            metadata: metadata.unwrap_or_default(),
         }
     }
 
@@ -88,7 +88,7 @@ impl Field {
     pub fn from_array(
         name: impl Into<String>,
         array: &Array,
-        metadata: Option<BTreeMap<String, String>>
+        metadata: Option<BTreeMap<String, String>>,
     ) -> Self {
         let name = name.into();
         let metadata = metadata.unwrap_or_default();
@@ -129,7 +129,7 @@ impl Field {
                 NumericArray::Float64(a) => {
                     Field::new(name, ArrowType::Float64, a.is_nullable(), Some(metadata))
                 }
-                NumericArray::Null => Field::new(name, ArrowType::Null, false, Some(metadata))
+                NumericArray::Null => Field::new(name, ArrowType::Null, false, Some(metadata)),
             },
             Array::BooleanArray(a) => {
                 Field::new(name, ArrowType::Boolean, a.is_nullable(), Some(metadata))
@@ -139,57 +139,58 @@ impl Field {
                     Field::new(name, ArrowType::String, a.is_nullable(), Some(metadata))
                 }
                 #[cfg(feature = "large_string")]
-                TextArray::String64(a) => {
-                    Field::new(name, ArrowType::LargeString, a.is_nullable(), Some(metadata))
-                }
+                TextArray::String64(a) => Field::new(
+                    name,
+                    ArrowType::LargeString,
+                    a.is_nullable(),
+                    Some(metadata),
+                ),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical8(a) => Field::new(
                     name,
                     ArrowType::Dictionary(CategoricalIndexType::UInt8),
                     a.is_nullable(),
-                    Some(metadata)
+                    Some(metadata),
                 ),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(a) => Field::new(
                     name,
                     ArrowType::Dictionary(CategoricalIndexType::UInt16),
                     a.is_nullable(),
-                    Some(metadata)
+                    Some(metadata),
                 ),
                 TextArray::Categorical32(a) => Field::new(
                     name,
                     ArrowType::Dictionary(CategoricalIndexType::UInt32),
                     a.is_nullable(),
-                    Some(metadata)
+                    Some(metadata),
                 ),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical64(a) => Field::new(
                     name,
                     ArrowType::Dictionary(CategoricalIndexType::UInt64),
                     a.is_nullable(),
-                    Some(metadata)
+                    Some(metadata),
                 ),
-                TextArray::Null => Field::new(name, ArrowType::Null, false, Some(metadata))
+                TextArray::Null => Field::new(name, ArrowType::Null, false, Some(metadata)),
             },
             #[cfg(feature = "datetime")]
             Array::TemporalArray(inner) => match inner {
                 TemporalArray::Datetime32(a) => {
-
                     println!(
                         "Warning: Datetime requires creating fields via `Field::new` and setting the desired arrow logical type.\nSetting ArrowType::Date32. If you need a `Timestamp`, `Duration`, or `Time` field, please use `Field::new`."
                     );
                     return Field::new(name, ArrowType::Date32, a.is_nullable(), Some(metadata));
                 }
                 TemporalArray::Datetime64(a) => {
-
                     println!(
                         "Warning: Datetime requires creating fields via `Field::new` and setting the desired arrow logical type.\nSetting ArrowType::Date64. If you need a `Timestamp`, `Duration`, or `Time` field, please use `Field::new`."
                     );
                     Field::new(name, ArrowType::Date64, a.is_nullable(), Some(metadata))
                 }
-                TemporalArray::Null => Field::new(name, ArrowType::Null, false, Some(metadata))
+                TemporalArray::Null => Field::new(name, ArrowType::Null, false, Some(metadata)),
             },
-            Array::Null => Field::new(name, ArrowType::Null, false, Some(metadata))
+            Array::Null => Field::new(name, ArrowType::Null, false, Some(metadata)),
         }
     }
 }

@@ -2,24 +2,22 @@
 
 ## Intro
 
-_Welcome to Minarrow_.
-
-Minarrow is a from-scratch columnar library built for real-time and systems workloads in Rust.  
-It keeps the surface small, makes types explicit, compiles fast, and aligns data for predictable SIMD performance.  
-It speaks Arrow when you need to talk interchange — but the core stays lean.  
+Minarrow is a from-scratch columnar library built for real-time and systems workloads in Rust.
+It keeps the surface small, makes types explicit, compiles fast, and aligns data for predictable SIMD performance.
+It speaks Arrow when you need to talk interchange — but the core stays lean.
 
 Minarrow is the base layer of several related projects that expand on it to deliver a full set of SIMD-accelerated Kernels, Tokio streamable buffers, and a full-scale engine.
 
 ## Design Focus
 
-- **Typed, direct access** – No downcasting chains  
-- **Predictable performance** – 64-byte alignment by default  
-- **Fast iteration** – Minimal dependencies, sub-1.5 s clean builds, <0.15 s rebuilds  
-- **Interoperability on demand** – Convert to and from Arrow at the boundary  
+- **Typed, direct access** – No downcasting chains
+- **High performance** – 64-byte SIMD-compatible alignment by default
+- **Fast iteration** – Minimal dependencies, sub-1.5 s clean builds, <0.15 s rebuilds
+- **Interoperability on demand** – Convert to and from Arrow at the boundary
 
 ## Why I built Minarrow
 
-- The **Arrow** format is a powerful standard for columnar data. ***Apache Arrow*** has driven an entire ecosystem forward, with zero-copy interchange, multi-language support, and extensive integration.  
+- The **Arrow** format is a powerful standard for columnar data. ***Apache Arrow*** has driven an entire ecosystem forward, with zero-copy interchange, multi-language support, and extensive integration.
 - ***Minarrow*** complements that ecosystem by focusing on Rust-first ergonomics, predictable SIMD behaviour, and extremely low build-time friction.
 - It's **easy, fast, and simple** — built to deliver extreme performance without sacrificing ergonomics.
 
@@ -35,55 +33,55 @@ Minarrow provides direct, always-typed access to array values. Unlike other Rust
 
 ## Type System
 
-Six concrete array types cover common workloads:  
+Six concrete array types cover common workloads:
 
-- BooleanArray<u8>  
-- CategoricalArray<T>  
-- DatetimeArray<T>  
-- FloatArray<T>  
-- IntegerArray<T>  
-- StringArray<T>  
+- BooleanArray<u8>
+- CategoricalArray<T>
+- DatetimeArray<T>
+- FloatArray<T>
+- IntegerArray<T>
+- StringArray<T>
 
-Unified views:  
+Unified views:
 
-- NumericArray<T>  
-- TextArray<T>  
-- TemporalArray<T>  
+- NumericArray<T>
+- TextArray<T>
+- TemporalArray<T>
 
-And a single top-level Array for mixed tables. 
+And a single top-level Array for mixed tables.
 
 The inner arrays match the Arrow IPC memory layout.
 
 ## Example: Create Arrays
 
 ```rust
-use std::sync::Arc;  
-use minarrow::{Array, IntegerArray, NumericArray, arr_bool, arr_cat32, arr_f64, arr_i32, arr_i64, arr_str32, vec64};  
+use std::sync::Arc;
+use minarrow::{Array, IntegerArray, NumericArray, arr_bool, arr_cat32, arr_f64, arr_i32, arr_i64, arr_str32, vec64};
 
-let int_arr = arr_i32![1, 2, 3, 4];  
-let float_arr = arr_f64![0.5, 1.5, 2.5];  
-let bool_arr = arr_bool![true, false, true];  
-let str_arr = arr_str32!["a", "b", "c"];  
-let cat_arr = arr_cat32!["x", "y", "x", "z"];  
+let int_arr = arr_i32![1, 2, 3, 4];
+let float_arr = arr_f64![0.5, 1.5, 2.5];
+let bool_arr = arr_bool![true, false, true];
+let str_arr = arr_str32!["a", "b", "c"];
+let cat_arr = arr_cat32!["x", "y", "x", "z"];
 
-assert_eq!(int_arr.len(), 4);  
-assert_eq!(str_arr.len(), 3);  
+assert_eq!(int_arr.len(), 4);
+assert_eq!(str_arr.len(), 3);
 
-let int = IntegerArray::<i64>::from_slice(&[100, 200]);  
-let wrapped: NumericArray = NumericArray::Int64(Arc::new(int));  
-let array = Array::NumericArray(wrapped);  
+let int = IntegerArray::<i64>::from_slice(&[100, 200]);
+let wrapped: NumericArray = NumericArray::Int64(Arc::new(int));
+let array = Array::NumericArray(wrapped);
 ```
 
 ## Example: Build Table
 
 ```rust
-use minarrow::{FieldArray, Print, Table, arr_i32, arr_str32, vec64};  
+use minarrow::{FieldArray, Print, Table, arr_i32, arr_str32, vec64};
 
-let col1 = FieldArray::from_inner("numbers", arr_i32![1, 2, 3]);  
-let col2 = FieldArray::from_inner("letters", arr_str32!["x", "y", "z"]);  
+let col1 = FieldArray::from_inner("numbers", arr_i32![1, 2, 3]);
+let col2 = FieldArray::from_inner("letters", arr_str32!["x", "y", "z"]);
 
-let mut tbl = Table::new("Demo".into(), vec![col1, col2].into());  
-tbl.print();  
+let mut tbl = Table::new("Demo".into(), vec![col1, col2].into());
+tbl.print();
 
 See _examples/_ for more.
 ```
@@ -93,7 +91,7 @@ which ensures all required methods are available.
 
 ## SIMD by Default
 
-- All buffers use 64-byte-aligned allocation from ingestion through processing. No reallocation step to fix alignment.  
+- All buffers use 64-byte-aligned allocation from ingestion through processing. No reallocation step to fix alignment.
 - Stable vectorised behaviour on modern CPUs via `Vec64` with a custom allocator.
 - The companion `Lightstream-IO` crate provides IPC readers and writers that maintain this alignment, avoiding reallocation overhead during data ingestion.
 
@@ -101,21 +99,21 @@ which ensures all required methods are available.
 
 Minarrow uses enums for type dispatch instead of trait object downcasting, providing:
 
-- **Performance** – Enables aggressive compiler inlining and optimisation  
-- **Maintainability** – Centralised, predictable dispatch logic  
-- **Type Safety** – All types are statically known; no `Any` or runtime downcasts  
-- **Ergonomics** – Direct, typed accessors such as `myarray.num().i64()`  
+- **Performance** – Enables aggressive compiler inlining and optimisation
+- **Maintainability** – Centralised, predictable dispatch logic
+- **Type Safety** – All types are statically known; no `Any` or runtime downcasts
+- **Ergonomics** – Direct, typed accessors such as `myarray.num().i64()`
 
 The structure is layered:
 
-1. **Top-level `Array` enum** – Arc-wrapped for zero-copy sharing  
-2. **Semantic groupings**:  
-   - `NumericArray` – All numeric types in one variant set  
-   - `TextArray` – String and categorical data  
-   - `TemporalArray` – All date/time variants  
-   - `BooleanArray` – Boolean data  
+1. **Top-level `Array` enum** – Arc-wrapped for zero-copy sharing
+2. **Semantic groupings**:
+   - `NumericArray` – All numeric types in one variant set
+   - `TextArray` – String and categorical data
+   - `TemporalArray` – All date/time variants
+   - `BooleanArray` – Boolean data
 
-This design supports flexible function signatures like `impl Into<NumericArray>` while preserving static typing.  
+This design supports flexible function signatures like `impl Into<NumericArray>` while preserving static typing.
 Because dispatch is static, the compiler retains full knowledge of types across calls, enabling inlining and eliminating virtual call overhead.
 
 ### Flexible Integration
@@ -130,17 +128,17 @@ Lightstream *(planned Aug ’25)* enables IPC streaming in Tokio async contexts 
 
 ## Views and Windowing
 
-- Optional view variants provide zero-copy windowed access to arrays, and encode offset and length for efficient subset operations without copying.  
+- Optional view variants provide zero-copy windowed access to arrays, and encode offset and length for efficient subset operations without copying.
 - For extreme performance needs, minimal tuple aliases `(&InnerArrayVariant, offset, len)` are available.
 
 ## Benchmarks
 
-Intel(R) Core(TM) Ultra 7 155H | x86_64 | 22 CPUs  
+Intel(R) Core(TM) Ultra 7 155H | x86_64 | 22 CPUs
 
 ***Sum of 1,000 sequential integers starting at 0.***
-Averaged over 1,000 runs (release).  
+Averaged over 1,000 runs (release).
 
-### No SIMD 
+### No SIMD
 
 ***(n=1000, lanes=4, iters=1000)***
 
@@ -159,7 +157,7 @@ Averaged over 1,000 runs (release).
 | minarrow enum: `FloatArray`        | 507 ns    |
 | arrow-rs dyn: `Float64Array`       | 1.952 µs  |
 
-### SIMD 
+### SIMD
 
 ***(n=1000, lanes=4, iters=1000)***
 
@@ -190,8 +188,8 @@ Averaged over 1,000 runs (release).
 | SIMD + Rayon `FloatArray<f64>`          | 114.095     |
 
 ### Other factors (SIMD + No SIMD Benchmarks)
-Vec<i64> construction (generating + allocating 1000 elements - avg): 87 ns  
-Vec64<i64> construction (avg): 84 ns  
+Vec<i64> construction (generating + allocating 1000 elements - avg): 87 ns
+Vec64<i64> construction (avg): 84 ns
 
 _The construction delta is not included in the benchmark timings above._
 

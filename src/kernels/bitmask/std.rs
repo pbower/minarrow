@@ -8,20 +8,20 @@
 //! bit manipulation and efficient memory access patterns.
 //!
 //! ## Overview
-//! 
+//!
 //! This module contains the scalar fallback implementations for all bitmask operations, for
 //! high performance on any target architecture. The implementations focus on 64-bit word operations
 //! to maximise throughput whilst maintaining simplicity and debuggability.
 //!
 //! ## Architecture Principles
-//! 
+//!
 //! - **Word-level operations**: Process 64 bits simultaneously using native CPU instructions  
 //! - **Minimal branching**: Reduce pipeline stalls through branchless bit manipulation
 //! - **Cache-friendly access**: Sequential memory access patterns for optimal cache utilisation
 //! - **Trailing bit handling**: Proper masking of unused bits in partial words
 //!
 //! ## Arrow Compatibility
-//! 
+//!
 //! All implementations maintain Arrow format compatibility:
 //! - **LSB bit ordering**: Bit 0 is least significant in each byte
 //! - **Proper alignment**: Operations respect byte and word boundaries
@@ -29,13 +29,13 @@
 //! - **Window support**: Efficient processing of bitmask slices at arbitrary offsets
 //!
 //! ## Error Handling
-//! 
+//!
 //! The scalar implementations include safety checks:
 //! - Debug assertions for length mismatches and invalid offsets
 //! - Panic conditions for alignment requirements (eq_mask, all_eq_mask)
 //! - Proper bounds checking for window operations
 //! - Graceful handling of zero-length inputs
-//! 
+//!
 use crate::{Bitmask, BitmaskVT};
 
 use crate::{
@@ -47,15 +47,15 @@ use crate::{
 };
 
 /// Performs bitwise binary operations (AND/OR/XOR) over two bitmask slices using word-level processing.
-/// 
+///
 /// Core scalar implementation for logical operations between bitmask windows. Processes data in 64-bit
 /// words for optimal performance, with automatic trailing bit masking to ensure Arrow compatibility.
-/// 
+///
 /// # Parameters
 /// - `lhs`: Left-hand side bitmask window as `(mask, offset, length)` tuple
 /// - `rhs`: Right-hand side bitmask window as `(mask, offset, length)` tuple
 /// - `op`: Logical operation to perform (AND, OR, XOR)
-/// 
+///
 /// # Returns
 /// A new `Bitmask` containing the element-wise results with proper trailing bit handling.
 #[inline(always)]
@@ -129,15 +129,15 @@ pub fn not_mask(src: BitmaskVT<'_>) -> Bitmask {
 }
 
 /// Logical inclusion: output bit is 1 if the corresponding LHS bit value is present in the RHS bit-set.
-/// 
+///
 /// Implements set membership semantics for boolean bitmasks. The algorithm first scans the RHS bitmask
 /// to determine which values (true/false) are present, then selects an optimal strategy based on the
 /// composition of the RHS set.
-/// 
+///
 /// # Parameters
 /// - `lhs`: Source bitmask window to test for membership
 /// - `rhs`: Reference bitmask window representing the set of allowed values
-/// 
+///
 /// # Returns
 /// A new `Bitmask` where each bit indicates whether the corresponding LHS value is present in RHS.
 #[inline]
@@ -254,14 +254,14 @@ pub fn all_ne_mask(a: BitmaskVT<'_>, b: BitmaskVT<'_>) -> bool {
 }
 
 /// Count of set `1` bits in the bitmask using native hardware popcount instructions.
-/// 
+///
 /// Efficiently computes the population count (number of set bits) across the specified bitmask window.
 /// The implementation processes data in 64-bit words and uses native CPU popcount instructions for
 /// optimal performance.
-/// 
+///
 /// # Parameters
 /// - `m`: Bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// The total number of set bits in the specified window.
 #[inline]

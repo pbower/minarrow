@@ -1,4 +1,4 @@
-//! # **FloatArray Module** - *Mid-Level, Inner Typed Float Array* 
+//! # **FloatArray Module** - *Mid-Level, Inner Typed Float Array*
 //!
 //! Arrow-compatible, SIMD-aligned floating-point array optimised for analytical workloads.
 //!
@@ -43,15 +43,16 @@
 //!
 use std::fmt::{Display, Formatter};
 
-use crate::structs::vec64::Vec64;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::print::{MAX_PREVIEW, format_float};
 use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::traits::type_unions::Float;
 use crate::{
     Bitmask, Buffer, Length, MaskedArray, Offset, impl_arc_masked_array, impl_array_ref_deref,
-    impl_from_vec_primitive, impl_masked_array, impl_numeric_array_constructors
+    impl_from_vec_primitive, impl_masked_array, impl_numeric_array_constructors,
 };
+use vec64::Vec64;
 
 /// # FloatArray
 ///
@@ -59,9 +60,9 @@ use crate::{
 ///
 /// ## Role
 /// - Many will prefer the higher level `Array` type, which dispatches to this when
-/// necessary. 
+/// necessary.
 /// - Can be used as a standalone array or as the numeric arm of `NumericArray` / `Array`.
-/// 
+///
 /// ## Description
 /// - Stores floating-point values in a contiguous `Buffer<T>` (`Vec64<T>` under the hood).
 /// - Optional Arrow-style validity bitmap (`1 = valid`, `0 = null`) via `Bitmask`.
@@ -97,7 +98,7 @@ pub struct FloatArray<T> {
     /// Backing buffer for values.
     pub data: Buffer<T>,
     /// Optional null mask (bit-packed; 1=valid, 0=null).
-    pub null_mask: Option<Bitmask>
+    pub null_mask: Option<Bitmask>,
 }
 
 impl_numeric_array_constructors!(FloatArray, Float);
@@ -117,13 +118,17 @@ impl_arc_masked_array!(
 
 impl<T> Display for FloatArray<T>
 where
-    T: Float + Display
+    T: Float + Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let len = self.len();
         let nulls = self.null_count();
 
-        writeln!(f, "FloatArray [{} values] (dtype: float, nulls: {})", len, nulls)?;
+        writeln!(
+            f,
+            "FloatArray [{} values] (dtype: float, nulls: {})",
+            len, nulls
+        )?;
 
         write!(f, "[")?;
 
@@ -134,7 +139,7 @@ where
 
             match self.get(i) {
                 Some(v) => write!(f, "{}", format_float(v))?,
-                None => write!(f, "null")?
+                None => write!(f, "null")?,
             }
         }
 
@@ -149,6 +154,17 @@ where
 impl<T: Float> Shape for FloatArray<T> {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
+    }
+}
+
+impl<T: Float> Concatenate for FloatArray<T> {
+    fn concat(
+        mut self,
+        other: Self,
+    ) -> core::result::Result<Self, crate::enums::error::MinarrowError> {
+        // Consume other and extend self with its data
+        self.append_array(&other);
+        Ok(self)
     }
 }
 
@@ -302,9 +318,9 @@ mod tests {
     fn test_batch_extend_from_iter_with_capacity() {
         let mut arr = FloatArray::<f64>::default();
         let data: Vec<f64> = (0..100).map(|i| i as f64 * 0.5).collect();
-        
+
         arr.extend_from_iter_with_capacity(data.into_iter(), 100);
-        
+
         assert_eq!(arr.len(), 100);
         for i in 0..100 {
             assert_eq!(arr.get(i), Some(i as f64 * 0.5));
@@ -316,10 +332,10 @@ mod tests {
         let mut arr = FloatArray::<f32>::with_capacity(5, true);
         arr.push(1.1);
         arr.push_null();
-        
+
         let data = &[2.2f32, 3.3, 4.4];
         arr.extend_from_slice(data);
-        
+
         assert_eq!(arr.len(), 5);
         assert_eq!(arr.get(0), Some(1.1));
         assert_eq!(arr.get(1), None);
@@ -331,7 +347,7 @@ mod tests {
     #[test]
     fn test_batch_fill_with_special_values() {
         let arr = FloatArray::<f64>::fill(f64::NAN, 10);
-        
+
         assert_eq!(arr.len(), 10);
         for i in 0..10 {
             assert!(arr.get(i).unwrap().is_nan());
@@ -341,11 +357,48 @@ mod tests {
     #[test]
     fn test_batch_fill_infinity() {
         let arr = FloatArray::<f32>::fill(f32::INFINITY, 5);
-        
+
         assert_eq!(arr.len(), 5);
         for i in 0..5 {
             assert_eq!(arr.get(i), Some(f32::INFINITY));
         }
+    }
+
+    #[test]
+    fn test_float_array_concat() {
+        let arr1 = FloatArray::<f64>::from_slice(&[1.1, 2.2, 3.3]);
+        let arr2 = FloatArray::<f64>::from_slice(&[4.4, 5.5]);
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.get(0), Some(1.1));
+        assert_eq!(result.get(1), Some(2.2));
+        assert_eq!(result.get(2), Some(3.3));
+        assert_eq!(result.get(3), Some(4.4));
+        assert_eq!(result.get(4), Some(5.5));
+    }
+
+    #[test]
+    fn test_float_array_concat_with_nulls() {
+        let mut arr1 = FloatArray::<f32>::with_capacity(3, true);
+        arr1.push(1.0);
+        arr1.push_null();
+        arr1.push(3.0);
+
+        let mut arr2 = FloatArray::<f32>::with_capacity(2, true);
+        arr2.push(4.0);
+        arr2.push_null();
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.get(0), Some(1.0));
+        assert_eq!(result.get(1), None);
+        assert_eq!(result.get(2), Some(3.0));
+        assert_eq!(result.get(3), Some(4.0));
+        assert_eq!(result.get(4), None);
+        assert_eq!(result.null_count(), 2);
     }
 }
 

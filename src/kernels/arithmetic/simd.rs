@@ -5,11 +5,11 @@
 //!
 //! Inner SIMD-accelerated implementations using `std::simd` for maximum performance on modern hardware.
 //! Prefer dispatch.rs for easily handling the general case, otherwise you can use these inner functions
-//! directly (e.g., "dense_simd") vs. "maybe masked, maybe simd". 
+//! directly (e.g., "dense_simd") vs. "maybe masked, maybe simd".
 //!
 //! ## Overview
 //! - **Portable SIMD**: Uses `std::simd` for cross-platform vectorisation with compile-time lane optimisation
-//! - **Null masks**: Dense (no nulls) and masked variants for Arrow-compatible null handling. 
+//! - **Null masks**: Dense (no nulls) and masked variants for Arrow-compatible null handling.
 //!   These are uniified in dispatch.rs, and opting out of masking yields no performance penalty.
 //! - **Type support**: Integer and floating-point arithmetic with specialised FMA operations
 //! - **Safety**: All unsafe operations are bounds-checked or guaranteed by caller invariants
@@ -30,8 +30,8 @@ use std::simd::cmp::SimdPartialEq;
 use crate::Bitmask;
 use num_traits::{One, PrimInt, ToPrimitive, WrappingAdd, WrappingMul, WrappingSub, Zero};
 
-use crate::kernels::bitmask::simd::all_true_mask_simd;
 use crate::enums::operators::ArithmeticOperator;
+use crate::kernels::bitmask::simd::all_true_mask_simd;
 use crate::utils::simd_mask;
 
 /// SIMD integer arithmetic kernel for dense arrays (no nulls).

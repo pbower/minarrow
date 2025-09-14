@@ -45,11 +45,13 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 #[cfg(feature = "views")]
 use crate::ArrayV;
+use crate::enums::error::MinarrowError;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
+use crate::traits::shape::Shape;
 use crate::{Field, FieldArray, Table};
 
 /// # TableView
@@ -79,7 +81,7 @@ pub struct TableV {
     /// Row offset from start of parent table
     pub offset: usize,
     /// Length of slice (in rows)
-    pub len: usize
+    pub len: usize,
 }
 
 impl TableV {
@@ -100,7 +102,7 @@ impl TableV {
             fields,
             cols,
             offset,
-            len
+            len,
         }
     }
 
@@ -121,14 +123,17 @@ impl TableV {
             fields,
             cols,
             offset,
-            len
+            len,
         }
     }
 
     /// Derives a subwindow from this `TableView`, adjusted by `offset` and `len`.
     #[inline]
     pub fn from_self(&self, offset: usize, len: usize) -> Self {
-        assert!(offset + len <= self.len, "TableView::from_self: slice out of bounds");
+        assert!(
+            offset + len <= self.len,
+            "TableView::from_self: slice out of bounds"
+        );
 
         let mut fields = Vec::with_capacity(self.cols.len());
         let mut cols = Vec::with_capacity(self.cols.len());
@@ -139,7 +144,7 @@ impl TableV {
             cols.push(ArrayV::new(
                 w.0,          // &Array
                 w.1 + offset, // adjusted offset
-                len           // subwindow length
+                len,          // subwindow length
             ));
         }
 
@@ -148,7 +153,7 @@ impl TableV {
             fields,
             cols,
             offset: self.offset + offset,
-            len
+            len,
         }
     }
 
@@ -247,7 +252,7 @@ impl TableV {
                 FieldArray {
                     field: field.clone(),
                     array: sliced,
-                    null_count
+                    null_count,
                 }
             })
             .collect();
@@ -255,7 +260,7 @@ impl TableV {
         Table {
             cols,
             n_rows: self.len,
-            name: self.name.clone()
+            name: self.name.clone(),
         }
     }
 
@@ -268,7 +273,7 @@ impl TableV {
         FieldArray {
             field: field.clone().into(),
             array: sliced,
-            null_count
+            null_count,
         }
     }
 }
@@ -279,7 +284,11 @@ impl Display for TableV {
         let n_cols = self.n_cols();
         let col_names: Vec<&str> = self.col_names().collect();
 
-        writeln!(f, "TableView '{}' [{} rows × {} cols]", self.name, n_rows, n_cols)?;
+        writeln!(
+            f,
+            "TableView '{}' [{} rows × {} cols]",
+            self.name, n_rows, n_cols
+        )?;
 
         // Header
         write!(f, "  ")?;
@@ -295,7 +304,7 @@ impl Display for TableV {
             for col in &self.cols {
                 match col.get_str(row_idx) {
                     Some(s) => write!(f, "{:<16}", s)?,
-                    None => write!(f, "{:<16}", "·")?
+                    None => write!(f, "{:<16}", "·")?,
                 }
             }
             writeln!(f)?;
@@ -311,7 +320,83 @@ impl Display for TableV {
 
 impl Shape for TableV {
     fn shape(&self) -> ShapeDim {
-        ShapeDim::Rank2 { rows: self.n_rows(), cols: self.n_cols() } 
+        ShapeDim::Rank2 {
+            rows: self.n_rows(),
+            cols: self.n_cols(),
+        }
+    }
+}
+
+impl Concatenate for TableV {
+    /// Concatenates two table views by materializing both to owned tables,
+    /// concatenating them, and wrapping the result back in a view.
+    ///
+    /// # Notes
+    /// - This operation copies data from both views to create owned tables.
+    /// - The resulting view has offset=0 and length equal to the combined length.
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Materialize both views to owned tables
+        let self_table = self.to_table();
+        let other_table = other.to_table();
+
+        // Concatenate the owned tables
+        let concatenated = self_table.concat(other_table)?;
+
+        // Wrap the result in a new view
+        Ok(TableV::from(concatenated))
+    }
+}
+
+// From implementations for conversion between Table and TableV
+
+/// Table -> TableV conversion
+impl From<Table> for TableV {
+    fn from(table: Table) -> Self {
+        let fields: Vec<Arc<Field>> = table.cols.iter().map(|fa| fa.field.clone()).collect();
+
+        let cols: Vec<ArrayV> = table.cols.into_iter().map(|fa| ArrayV::from(fa)).collect();
+
+        TableV {
+            name: table.name,
+            fields,
+            cols,
+            offset: 0,
+            len: table.n_rows,
+        }
+    }
+}
+
+/// TableV -> Table conversion
+impl From<TableV> for Table {
+    fn from(view: TableV) -> Self {
+        let field_arrays: Vec<FieldArray> = view
+            .cols
+            .into_iter()
+            .enumerate()
+            .map(|(i, array_v)| {
+                let field = if i < view.fields.len() {
+                    (*view.fields[i]).clone()
+                } else {
+                    Field::new(format!("col_{}", i), array_v.array.arrow_type(), true, None)
+                };
+
+                // If the view is windowed, we need to materialize the slice
+                let array = if view.offset > 0 || view.len < array_v.len() {
+                    // Need to slice the array - use the existing slice method
+                    array_v.slice(0, view.len).array
+                } else {
+                    array_v.array
+                };
+
+                FieldArray {
+                    field: Arc::new(field),
+                    array: array.clone(),
+                    null_count: array.null_count(),
+                }
+            })
+            .collect();
+
+        Table::new(view.name, Some(field_arrays))
     }
 }
 

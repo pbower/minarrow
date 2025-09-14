@@ -12,11 +12,11 @@
 //! - All indices are **relative** to the view's start.
 //! - Internally retains an `Arc` reference to the parent array's buffers.
 //! - Windowing and slicing are O(1) operations (pointer + metadata updates only).
-//! - Cached null counts are stored in a `Cell` for fast repeated access.
+//! - Cached null counts are stored in an `OnceLock` for thread-safe lazy initialization.
 //!
 //! ## Threading
-//! - Not thread-safe due to `Cell`.
-//! - For parallelism, create per-thread clones with [`slice`](ArrayV::slice).
+//! - Thread-safe for sharing across threads (uses `OnceLock` for null count caching).
+//! - Safe to share via `Arc` for parallel processing.
 //!
 //! ## Interop
 //! - Convert back to a full array via [`to_array`](ArrayV::to_array).
@@ -27,16 +27,18 @@
 //! - `offset + len <= array.len()`
 //! - `len` reflects the **logical** number of elements in the view.
 
-use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
+use std::sync::OnceLock;
 
+use crate::enums::error::MinarrowError;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::{Array, BitmaskV, FieldArray, MaskedArray, TextArray};
 
 /// # ArrayView
-/// 
+///
 /// Logical, windowed view over an `Array`.
 ///
 /// ## Purpose
@@ -50,7 +52,7 @@ use crate::{Array, BitmaskV, FieldArray, MaskedArray, TextArray};
 /// - Windowing uses an arc clone
 /// - All access (get/index, etc.) is offset-correct and bounds-checked.
 /// - Null count is computed once (on demand or at creation) and cached for subsequent use.
-/// 
+///
 /// ## Notes
 /// - Use [`slice`](Self::slice) to derive smaller views without data copy.
 /// - Use [`to_array`](Self::to_array) to materialise as an owned array.
@@ -59,7 +61,7 @@ pub struct ArrayV {
     pub array: Array, // contains Arc<inner>
     pub offset: usize,
     len: usize,
-    null_count: Cell<Option<usize>>
+    null_count: OnceLock<usize>,
 }
 
 impl ArrayV {
@@ -76,7 +78,7 @@ impl ArrayV {
             array,
             offset,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 
@@ -89,11 +91,13 @@ impl ArrayV {
             offset + len,
             array.len()
         );
+        let lock = OnceLock::new();
+        let _ = lock.set(null_count); // Pre-initialize with the provided count
         Self {
             array,
             offset,
             len,
-            null_count: Cell::new(Some(null_count))
+            null_count: lock,
         }
     }
 
@@ -141,7 +145,7 @@ impl ArrayV {
             Array::TextArray(TextArray::Categorical32(arr)) => arr.get_str(self.offset + i),
             #[cfg(feature = "extended_categorical")]
             Array::TextArray(TextArray::Categorical64(arr)) => arr.get_str(self.offset + i),
-            _ => None
+            _ => None,
         }
     }
 
@@ -198,7 +202,7 @@ impl ArrayV {
                     Some(unsafe { arr.get_str_unchecked(self.offset + i) })
                 }
             }
-            _ => None
+            _ => None,
         }
     }
 
@@ -210,7 +214,7 @@ impl ArrayV {
             array: self.array.clone(), // arc clone
             offset: self.offset + offset,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 
@@ -238,36 +242,49 @@ impl ArrayV {
         self.offset + self.len
     }
 
-    /// Returns the underlying window as a tuple: (&Array, offset, len).
+    /// Returns the underlying window as a tuple: (Array, offset, len).
+    ///
+    /// Note: This clones the Arc-wrapped Array.
     #[inline]
     pub fn as_tuple(&self) -> (Array, usize, usize) {
         (self.array.clone(), self.offset, self.len) // arc clone
     }
 
+    /// Returns a reference tuple: (&Array, offset, len).
+    ///
+    /// This avoids cloning the Arc and returns a reference with a lifetime
+    /// tied to this ArrayV.
+    #[inline]
+    pub fn as_tuple_ref(&self) -> (&Array, usize, usize) {
+        (&self.array, self.offset, self.len)
+    }
+
     /// Returns the null count in the window, caching the result after first calculation.
     #[inline]
     pub fn null_count(&self) -> usize {
-        if let Some(count) = self.null_count.get() {
-            return count;
-        }
-        let count = match self.array.null_mask() {
-            Some(mask) => mask.view(self.offset, self.len).count_zeros(),
-            None => 0
-        };
-        self.null_count.set(Some(count));
-        count
+        *self
+            .null_count
+            .get_or_init(|| match self.array.null_mask() {
+                Some(mask) => mask.view(self.offset, self.len).count_zeros(),
+                None => 0,
+            })
     }
 
     /// Returns a windowed view over the underlying null mask, if any.
     #[inline]
     pub fn null_mask_view(&self) -> Option<BitmaskV> {
-        self.array.null_mask().map(|mask| mask.view(self.offset, self.len))
+        self.array
+            .null_mask()
+            .map(|mask| mask.view(self.offset, self.len))
     }
 
-    /// Set the cached null count (advanced use only; not thread-safe if mutated after use).
+    /// Set the cached null count (advanced use only).
+    ///
+    /// Returns Ok(()) if the value was set, or Err(count) if it was already initialized.
+    /// This is thread-safe and can only succeed once per ArrayV instance.
     #[inline]
-    pub fn set_null_count(&self, count: usize) {
-        self.null_count.set(Some(count));
+    pub fn set_null_count(&self, count: usize) -> Result<(), usize> {
+        self.null_count.set(count).map_err(|_| count)
     }
 }
 
@@ -281,7 +298,7 @@ impl From<Array> for ArrayV {
             array,
             offset: 0,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 }
@@ -296,8 +313,38 @@ impl From<FieldArray> for ArrayV {
             array: field_array.array,
             offset: 0,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
+    }
+}
+
+/// NumericArrayView -> ArrayView
+///
+/// Converts via NumericArrayV.into() -> Array -> ArrayV
+#[cfg(feature = "views")]
+impl From<crate::NumericArrayV> for ArrayV {
+    fn from(numeric_view: crate::NumericArrayV) -> Self {
+        numeric_view.into()
+    }
+}
+
+/// TextArrayView -> ArrayView
+///
+/// Converts via TextArrayV.into() -> Array -> ArrayV
+#[cfg(feature = "views")]
+impl From<crate::TextArrayV> for ArrayV {
+    fn from(text_view: crate::TextArrayV) -> Self {
+        text_view.into()
+    }
+}
+
+/// TemporalArrayView -> ArrayView
+///
+/// Converts via TemporalArrayV.into() -> Array -> ArrayV
+#[cfg(all(feature = "views", feature = "datetime"))]
+impl From<crate::TemporalArrayV> for ArrayV {
+    fn from(temporal_view: crate::TemporalArrayV) -> Self {
+        temporal_view.into()
     }
 }
 
@@ -331,7 +378,7 @@ impl Display for ArrayV {
             array: self.array.clone(), // arc clone
             offset: self.offset,
             len: head_len,
-            null_count: self.null_count.clone(),
+            null_count: OnceLock::new(), // Create new lock for this view
         };
 
         // Delegate to the inner array's Display
@@ -350,6 +397,26 @@ impl Display for ArrayV {
 impl Shape for ArrayV {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
+    }
+}
+
+impl Concatenate for ArrayV {
+    /// Concatenates two array views by materializing both to owned arrays,
+    /// concatenating them, and wrapping the result back in a view.
+    ///
+    /// # Notes
+    /// - This operation copies data from both views to create owned arrays.
+    /// - The resulting view has offset=0 and length equal to the combined length.
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Materialize both views to owned arrays
+        let self_array = self.to_array();
+        let other_array = other.to_array();
+
+        // Concatenate the owned arrays
+        let concatenated = self_array.concat(other_array)?;
+
+        // Wrap the result in a new view
+        Ok(ArrayV::from(concatenated))
     }
 }
 
@@ -423,8 +490,10 @@ mod tests {
         let view = ArrayV::with_null_count(array, 0, 2, 99);
         // Should always report the supplied cached value
         assert_eq!(view.null_count(), 99);
-        view.set_null_count(101);
-        assert_eq!(view.null_count(), 101);
+        // Trying to set again should fail since it's already initialized
+        assert!(view.set_null_count(101).is_err());
+        // Still returns original value
+        assert_eq!(view.null_count(), 99);
     }
 
     #[test]

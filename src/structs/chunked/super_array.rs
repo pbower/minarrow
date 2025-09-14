@@ -13,26 +13,29 @@ use std::iter::FromIterator;
 #[cfg(feature = "views")]
 use std::sync::Arc;
 
-use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 #[cfg(feature = "views")]
 use crate::ArrayV;
 #[cfg(feature = "views")]
 use crate::SuperArrayV;
 #[cfg(feature = "datetime")]
 use crate::enums::time_units::TimeUnit;
+use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
 use crate::ffi::arrow_dtype::ArrowType;
-use crate::traits::masked_array::MaskedArray;
-use crate::traits::type_unions::{Float, Integer};
+use crate::traits::{
+    concatenate::Concatenate,
+    masked_array::MaskedArray,
+    shape::Shape,
+    type_unions::{Float, Integer},
+};
 use crate::{
     Array, Bitmask, BooleanArray, CategoricalArray, Field, FieldArray, FloatArray, IntegerArray,
-    NumericArray, StringArray, TextArray, Vec64
+    NumericArray, StringArray, TextArray, Vec64,
 };
 #[cfg(feature = "datetime")]
 use crate::{DatetimeArray, TemporalArray};
 
 /// # SuperArray
-/// 
+///
 /// Higher-order container for multiple immutable `FieldArray` segments.
 ///
 /// ## Description
@@ -54,9 +57,8 @@ use crate::{DatetimeArray, TemporalArray};
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct SuperArray {
-    arrays: Vec<FieldArray>
+    arrays: Vec<FieldArray>,
 }
-
 
 impl SuperArray {
     // Constructors
@@ -70,7 +72,10 @@ impl SuperArray {
     /// Constructs a ChunkedArray from `FieldArray` chunks.
     /// Panics if chunks is empty or metadata/type/nullable mismatch is found.
     pub fn from_field_array_chunks(chunks: Vec<FieldArray>) -> Self {
-        assert!(!chunks.is_empty(), "from_field_array_chunks: input chunks cannot be empty");
+        assert!(
+            !chunks.is_empty(),
+            "from_field_array_chunks: input chunks cannot be empty"
+        );
         let field = &chunks[0].field;
         for (i, fa) in chunks.iter().enumerate().skip(1) {
             assert_eq!(
@@ -78,7 +83,10 @@ impl SuperArray {
                 "Chunk {i} ArrowType mismatch (expected {:?}, got {:?})",
                 field.dtype, fa.field.dtype
             );
-            assert_eq!(fa.field.nullable, field.nullable, "Chunk {i} nullability mismatch");
+            assert_eq!(
+                fa.field.nullable, field.nullable,
+                "Chunk {i} nullability mismatch"
+            );
             assert_eq!(
                 fa.field.name, field.name,
                 "Chunk {i} field name mismatch (expected '{}', got '{}')",
@@ -117,7 +125,7 @@ impl SuperArray {
             out.push(FieldArray {
                 field: field.clone(),
                 array: view.array.slice_clone(view.offset, view.len()),
-                null_count: view.null_count()
+                null_count: view.null_count(),
             });
         }
 
@@ -154,14 +162,21 @@ impl SuperArray {
             off = 0;
         }
 
-        SuperArrayV { slices, len, field: field.into() }
+        SuperArrayV {
+            slices,
+            len,
+            field: field.into(),
+        }
     }
 
     // Concatenation
 
     /// Materialises a contiguous `Array` holding all rows.
     pub fn copy_to_array(&self) -> Array {
-        assert!(!self.arrays.is_empty(), "to_array() called on empty ChunkedArray");
+        assert!(
+            !self.arrays.is_empty(),
+            "to_array() called on empty ChunkedArray"
+        );
         match &self.arrays[0].array {
             Array::NumericArray(inner) => match inner {
                 #[cfg(feature = "extended_numeric_types")]
@@ -178,7 +193,7 @@ impl SuperArray {
                 NumericArray::UInt64(_) => self.concat_integer::<u64>(),
                 NumericArray::Float32(_) => self.concat_float::<f32>(),
                 NumericArray::Float64(_) => self.concat_float::<f64>(),
-                NumericArray::Null => unreachable!()
+                NumericArray::Null => unreachable!(),
             },
             Array::BooleanArray(_) => self.concat_bool(),
             Array::TextArray(inner) => match inner {
@@ -192,15 +207,15 @@ impl SuperArray {
                 TextArray::Categorical32(_) => self.concat_dictionary::<u32>(),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical64(_) => self.concat_dictionary::<u64>(),
-                TextArray::Null => unreachable!()
+                TextArray::Null => unreachable!(),
             },
             #[cfg(feature = "datetime")]
             Array::TemporalArray(inner) => match inner {
                 TemporalArray::Datetime32(_) => self.concat_datetime::<i32>(),
                 TemporalArray::Datetime64(_) => self.concat_datetime::<i64>(),
-                TemporalArray::Null => unreachable!()
+                TemporalArray::Null => unreachable!(),
             },
-            Array::Null => unreachable!()
+            Array::Null => unreachable!(),
         }
     }
 
@@ -211,7 +226,7 @@ impl SuperArray {
     /// Panics if an input is not a numerical array of the correct type.
     fn concat_integer<T>(&self) -> Array
     where
-        T: Integer + Default + Copy + 'static
+        T: Integer + Default + Copy + 'static,
     {
         let total: usize = self.arrays.iter().map(|c| c.len()).sum();
         let mut data = Vec64::<T>::with_capacity(total);
@@ -249,9 +264,9 @@ impl SuperArray {
                         &*(a.as_ref() as *const _ as *const IntegerArray<T>)
                     },
                     NumericArray::Null => unreachable!(),
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 },
-                _ => unreachable!("concat_integer called on non-numerical array")
+                _ => unreachable!("concat_integer called on non-numerical array"),
             };
 
             let dst_before = data.len();
@@ -262,12 +277,15 @@ impl SuperArray {
                     null_mask.as_mut().unwrap(),
                     dst_before,
                     src.null_mask.as_ref(),
-                    src.len()
+                    src.len(),
                 );
             }
         }
 
-        let out = IntegerArray::<T> { data: data.into(), null_mask };
+        let out = IntegerArray::<T> {
+            data: data.into(),
+            null_mask,
+        };
 
         match &self.arrays[0].array {
             Array::NumericArray(inner) => match inner {
@@ -300,9 +318,9 @@ impl SuperArray {
                     Array::from_uint64(unsafe { std::mem::transmute::<_, IntegerArray<u64>>(out) })
                 }
                 NumericArray::Null => unreachable!(),
-                _ => unreachable!()
+                _ => unreachable!(),
             },
-            _ => unreachable!("concat_integer called on non-numerical array")
+            _ => unreachable!("concat_integer called on non-numerical array"),
         }
     }
 
@@ -313,7 +331,7 @@ impl SuperArray {
     /// Panics if an input is not a numerical array of the correct type.
     fn concat_float<T>(&self) -> Array
     where
-        T: Float + Default + Copy + 'static
+        T: Float + Default + Copy + 'static,
     {
         let total: usize = self.arrays.iter().map(|c| c.len()).sum();
         let mut data = Vec64::<T>::with_capacity(total);
@@ -329,9 +347,9 @@ impl SuperArray {
                         &*(a.as_ref() as *const _ as *const FloatArray<T>)
                     },
                     NumericArray::Null => unreachable!(),
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 },
-                _ => unreachable!("concat_float called on non-numerical array")
+                _ => unreachable!("concat_float called on non-numerical array"),
             };
             let dst_before = data.len();
             data.extend_from_slice(&src.data);
@@ -341,12 +359,15 @@ impl SuperArray {
                     null_mask.as_mut().unwrap(),
                     dst_before,
                     src.null_mask.as_ref(),
-                    src.len()
+                    src.len(),
                 );
             }
         }
 
-        let out = FloatArray::<T> { data: data.into(), null_mask };
+        let out = FloatArray::<T> {
+            data: data.into(),
+            null_mask,
+        };
 
         match &self.arrays[0].array {
             Array::NumericArray(inner) => match inner {
@@ -357,9 +378,9 @@ impl SuperArray {
                     Array::from_float64(unsafe { std::mem::transmute::<_, FloatArray<f64>>(out) })
                 }
                 NumericArray::Null => unreachable!(),
-                _ => unreachable!()
+                _ => unreachable!(),
             },
-            _ => unreachable!("concat_float called on non-numerical array")
+            _ => unreachable!("concat_float called on non-numerical array"),
         }
     }
 
@@ -375,7 +396,7 @@ impl SuperArray {
         for c in &self.arrays {
             let src = match &c.array {
                 Array::BooleanArray(a) => a,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             let bytes = (src.len() + 7) / 8;
             for b in 0..bytes {
@@ -387,7 +408,7 @@ impl SuperArray {
                     null_mask.as_mut().unwrap(),
                     dst_len,
                     src.null_mask.as_ref(),
-                    src.len()
+                    src.len(),
                 );
             }
             dst_len += src.len();
@@ -402,7 +423,7 @@ impl SuperArray {
     /// Concatenates 2 string arrays
     fn concat_string<O>(&self) -> Array
     where
-        O: crate::traits::type_unions::Integer + num_traits::Unsigned
+        O: crate::traits::type_unions::Integer + num_traits::Unsigned,
     {
         let mut values = Vec64::<u8>::new();
         let mut offsets = Vec64::<O>::with_capacity(1);
@@ -415,9 +436,9 @@ impl SuperArray {
                     TextArray::String32(a) => unsafe { &*(a as *const _ as *const StringArray<O>) },
                     #[cfg(feature = "large_string")]
                     TextArray::String64(a) => unsafe { &*(a as *const _ as *const StringArray<O>) },
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 },
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             let base = values.len();
             values.extend_from_slice(&src.data);
@@ -431,7 +452,7 @@ impl SuperArray {
                     null_mask.as_mut().unwrap(),
                     total_rows,
                     src.null_mask.as_ref(),
-                    src.len()
+                    src.len(),
                 );
             }
             total_rows += src.len();
@@ -446,16 +467,16 @@ impl SuperArray {
                 TextArray::String64(_) => {
                     Array::from_string64(unsafe { std::mem::transmute::<_, StringArray<u64>>(out) })
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             },
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
     /// Concatenates 2 dict arrays
     fn concat_dictionary<Idx>(&self) -> Array
     where
-        Idx: crate::traits::type_unions::Integer + Default + Copy
+        Idx: crate::traits::type_unions::Integer + Default + Copy,
     {
         use std::collections::HashMap;
         let mut dict: Vec64<String> = Vec64::new();
@@ -481,9 +502,9 @@ impl SuperArray {
                     TextArray::Categorical64(a) => unsafe {
                         &*(a as *const _ as *const CategoricalArray<Idx>)
                     },
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 },
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             for &idx in &src.data {
                 let str_val = &src.unique_values[idx.to_usize()];
@@ -500,7 +521,7 @@ impl SuperArray {
                     null_mask.as_mut().unwrap(),
                     dst_rows,
                     src.null_mask.as_ref(),
-                    src.len()
+                    src.len(),
                 );
             }
             dst_rows += src.len();
@@ -523,9 +544,9 @@ impl SuperArray {
                 TextArray::Categorical64(_) => Array::from_categorical64(unsafe {
                     std::mem::transmute::<_, CategoricalArray<u64>>(out)
                 }),
-                _ => unreachable!()
+                _ => unreachable!(),
             },
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -533,7 +554,7 @@ impl SuperArray {
     #[cfg(feature = "datetime")]
     fn concat_datetime<T>(&self) -> Array
     where
-        T: Integer + Default + Copy
+        T: Integer + Default + Copy,
     {
         let total: usize = self.arrays.iter().map(|c| c.len()).sum();
         let mut data = Vec64::<T>::with_capacity(total);
@@ -567,9 +588,9 @@ impl SuperArray {
                         }
                         unsafe { &*(a as *const _ as *const DatetimeArray<T>) }
                     }
-                    TemporalArray::Null => unreachable!()
+                    TemporalArray::Null => unreachable!(),
                 },
-                _ => unreachable!()
+                _ => unreachable!(),
             };
 
             let dst_before = data.len();
@@ -581,7 +602,7 @@ impl SuperArray {
                     null_mask.as_mut().unwrap(),
                     dst_before,
                     src.null_mask.as_ref(),
-                    src.len()
+                    src.len(),
                 );
             }
         }
@@ -589,7 +610,7 @@ impl SuperArray {
         let out = DatetimeArray::<T> {
             data: data.into(),
             null_mask,
-            time_unit: time_unit.expect("Expected time unit")
+            time_unit: time_unit.expect("Expected time unit"),
         };
 
         match &self.arrays[0].array {
@@ -600,9 +621,9 @@ impl SuperArray {
                 TemporalArray::Datetime64(_) => Array::from_datetime_i64(unsafe {
                     std::mem::transmute::<_, crate::DatetimeArray<i64>>(out)
                 }),
-                TemporalArray::Null => unreachable!()
+                TemporalArray::Null => unreachable!(),
             },
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -674,7 +695,10 @@ impl SuperArray {
         } else {
             let f = &self.arrays[0].field;
             assert_eq!(chunk.field.dtype, f.dtype, "Chunk ArrowType mismatch");
-            assert_eq!(chunk.field.nullable, f.nullable, "Chunk nullability mismatch");
+            assert_eq!(
+                chunk.field.nullable, f.nullable,
+                "Chunk nullability mismatch"
+            );
             assert_eq!(chunk.field.name, f.name, "Chunk field name mismatch");
             self.arrays.push(chunk);
         }
@@ -686,7 +710,7 @@ fn concat_null_masks_bitmask(
     dst: &mut Bitmask,
     dst_len_before: usize,
     src_mask: Option<&Bitmask>,
-    src_len: usize
+    src_len: usize,
 ) {
     if let Some(src) = src_mask {
         dst.ensure_capacity(dst_len_before + src_len);
@@ -717,13 +741,87 @@ impl FromIterator<FieldArray> for SuperArray {
 // FieldArray -> ChunkedArray (Vec<FieldArray> of single entry)
 impl From<FieldArray> for SuperArray {
     fn from(field_array: FieldArray) -> Self {
-        SuperArray { arrays: vec![field_array] }
+        SuperArray {
+            arrays: vec![field_array],
+        }
     }
 }
 
 impl Shape for SuperArray {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
+    }
+}
+
+impl Concatenate for SuperArray {
+    /// Concatenates two SuperArrays by appending all chunks from `other` to `self`.
+    ///
+    /// # Requirements
+    /// - Both SuperArrays must have the same field metadata (name, type, nullability)
+    ///
+    /// # Returns
+    /// A new SuperArray containing all chunks from `self` followed by all chunks from `other`
+    ///
+    /// # Errors
+    /// - `IncompatibleTypeError` if field metadata doesn't match
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // If both are empty, return empty
+        if self.arrays.is_empty() && other.arrays.is_empty() {
+            return Ok(SuperArray::new());
+        }
+
+        // If one is empty, return the other
+        if self.arrays.is_empty() {
+            return Ok(other);
+        }
+        if other.arrays.is_empty() {
+            return Ok(self);
+        }
+
+        // Validate field metadata matches
+        let self_field = &self.arrays[0].field;
+        let other_field = &other.arrays[0].field;
+
+        if self_field.name != other_field.name {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "SuperArray",
+                to: "SuperArray",
+                message: Some(format!(
+                    "Field name mismatch: '{}' vs '{}'",
+                    self_field.name, other_field.name
+                )),
+            });
+        }
+
+        if self_field.dtype != other_field.dtype {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "SuperArray",
+                to: "SuperArray",
+                message: Some(format!(
+                    "Field '{}' type mismatch: {:?} vs {:?}",
+                    self_field.name, self_field.dtype, other_field.dtype
+                )),
+            });
+        }
+
+        if self_field.nullable != other_field.nullable {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "SuperArray",
+                to: "SuperArray",
+                message: Some(format!(
+                    "Field '{}' nullable mismatch: {} vs {}",
+                    self_field.name, self_field.nullable, other_field.nullable
+                )),
+            });
+        }
+
+        // Concatenate chunks
+        let mut result_arrays = self.arrays;
+        result_arrays.extend(other.arrays);
+
+        Ok(SuperArray {
+            arrays: result_arrays,
+        })
     }
 }
 
@@ -739,7 +837,12 @@ impl Display for SuperArray {
         )?;
 
         for (i, chunk) in self.arrays.iter().enumerate() {
-            writeln!(f, "  ├─ Chunk {i}: {} rows, nulls: {}", chunk.len(), chunk.null_count)?;
+            writeln!(
+                f,
+                "  ├─ Chunk {i}: {} rows, nulls: {}",
+                chunk.len(),
+                chunk.null_count
+            )?;
             let indent = "    │ ";
             for line in format!("{}", chunk.array).lines() {
                 writeln!(f, "{indent}{line}")?;
@@ -761,14 +864,14 @@ mod tests {
             name: name.to_string(),
             dtype,
             nullable,
-            metadata: Default::default()
+            metadata: Default::default(),
         }
     }
 
     fn int_array(data: &[i32]) -> Array {
         Array::from_int32(crate::IntegerArray::<i32> {
             data: Vec64::from_slice(data).into(),
-            null_mask: None
+            null_mask: None,
         })
     }
 
@@ -776,7 +879,7 @@ mod tests {
         FieldArray {
             field: field(name, ArrowType::Int32, false).into(),
             array: int_array(data),
-            null_count: null_count
+            null_count: null_count,
         }
     }
 
@@ -801,9 +904,9 @@ mod tests {
             field: field("a", ArrowType::Float64, false).into(),
             array: Array::from_float64(crate::FloatArray::<f64> {
                 data: Vec64::from_slice(&[1.0, 2.0]).into(),
-                null_mask: None
+                null_mask: None,
             }),
-            null_count: 0
+            null_count: 0,
         };
         ca.push(wrong);
     }

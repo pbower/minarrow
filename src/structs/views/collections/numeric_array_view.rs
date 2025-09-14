@@ -16,8 +16,8 @@
 //! - Slicing returns another borrowed view; data buffers are not cloned.
 //!
 //! ## Threading
-//! - Not thread-safe: uses `Cell` to cache the window’s null count.
-//! - For parallel use, create per-thread views via [`slice`](NumericArrayV::slice).
+//! - Thread-safe for sharing across threads (uses `OnceLock` for null count caching).
+//! - Safe to share via `Arc` for parallel processing.
 //!
 //! ## Interop
 //! - Convert to an owned `NumericArray` of the window via
@@ -29,13 +29,15 @@
 //! - `offset + len <= array.len()`
 //! - `len` is the logical row count of this view.
 
-use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
+use std::sync::OnceLock;
 
+use crate::enums::error::MinarrowError;
+use crate::enums::shape_dim::ShapeDim;
 use crate::structs::views::bitmask_view::BitmaskV;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::{Array, ArrayV, FieldArray, MaskedArray, NumericArray};
 
 /// # NumericArrayView
@@ -66,7 +68,7 @@ pub struct NumericArrayV {
     pub array: NumericArray,
     pub offset: usize,
     len: usize,
-    null_count: Cell<Option<usize>>
+    null_count: OnceLock<usize>,
 }
 
 impl NumericArrayV {
@@ -82,7 +84,7 @@ impl NumericArrayV {
             array,
             offset,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 
@@ -91,7 +93,7 @@ impl NumericArrayV {
         array: NumericArray,
         offset: usize,
         len: usize,
-        null_count: usize
+        null_count: usize,
     ) -> Self {
         assert!(
             offset + len <= array.len(),
@@ -99,11 +101,13 @@ impl NumericArrayV {
             offset + len,
             array.len()
         );
+        let lock = OnceLock::new();
+        let _ = lock.set(null_count); // Pre-initialize with the provided count
         Self {
             array,
             offset,
             len,
-            null_count: Cell::new(Some(null_count))
+            null_count: lock,
         }
     }
 
@@ -144,7 +148,7 @@ impl NumericArrayV {
             NumericArray::Float64(arr) => arr.get(phys_idx),
             NumericArray::Null => None,
             #[cfg(feature = "extended_numeric_types")]
-            _ => unreachable!("get_f64: not implemented for extended numeric types")
+            _ => unreachable!("get_f64: not implemented for extended numeric types"),
         }
     }
 
@@ -164,19 +168,22 @@ impl NumericArrayV {
             NumericArray::Float64(arr) => unsafe { arr.get_unchecked(phys_idx) },
             NumericArray::Null => None,
             #[cfg(feature = "extended_numeric_types")]
-            _ => unreachable!("get_f64_unchecked: not implemented for extended numeric types")
+            _ => unreachable!("get_f64_unchecked: not implemented for extended numeric types"),
         }
     }
 
     /// Returns a windowed view into a sub-range of this view.
     #[inline]
     pub fn slice(&self, offset: usize, len: usize) -> Self {
-        assert!(offset + len <= self.len, "NumericArrayView::slice: out of bounds");
+        assert!(
+            offset + len <= self.len,
+            "NumericArrayView::slice: out of bounds"
+        );
         Self {
             array: self.array.clone(),
             offset: self.offset + offset,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 
@@ -192,9 +199,20 @@ impl NumericArrayV {
     }
 
     /// Returns the view as a tuple `(array, offset, len)`.
+    ///
+    /// Note: This clones the Arc-wrapped NumericArray.
     #[inline]
     pub fn as_tuple(&self) -> (NumericArray, usize, usize) {
         (self.array.clone(), self.offset, self.len)
+    }
+
+    /// Returns a reference tuple: `(&NumericArray, offset, len)`.
+    ///
+    /// This avoids cloning the Arc and returns a reference with a lifetime
+    /// tied to this NumericArrayV.
+    #[inline]
+    pub fn as_tuple_ref(&self) -> (&NumericArray, usize, usize) {
+        (&self.array, self.offset, self.len)
     }
 
     /// Returns the length of the window
@@ -206,27 +224,29 @@ impl NumericArrayV {
     /// Returns the number of nulls in the view.
     #[inline]
     pub fn null_count(&self) -> usize {
-        if let Some(count) = self.null_count.get() {
-            return count;
-        }
-        let count = match self.array.null_mask() {
-            Some(mask) => mask.view(self.offset, self.len).count_zeros(),
-            None => 0
-        };
-        self.null_count.set(Some(count));
-        count
+        *self
+            .null_count
+            .get_or_init(|| match self.array.null_mask() {
+                Some(mask) => mask.view(self.offset, self.len).count_zeros(),
+                None => 0,
+            })
     }
 
     /// Returns the null mask as a windowed `BitmaskView`.
     #[inline]
     pub fn null_mask_view(&self) -> Option<BitmaskV> {
-        self.array.null_mask().map(|mask| mask.view(self.offset, self.len))
+        self.array
+            .null_mask()
+            .map(|mask| mask.view(self.offset, self.len))
     }
 
     /// Sets the cached null count for the view.
+    ///
+    /// Returns Ok(()) if the value was set, or Err(count) if it was already initialized.
+    /// This is thread-safe and can only succeed once per NumericArrayV instance.
     #[inline]
-    pub fn set_null_count(&self, count: usize) {
-        self.null_count.set(Some(count));
+    pub fn set_null_count(&self, count: usize) -> Result<(), usize> {
+        self.null_count.set(count).map_err(|_| count)
     }
 }
 
@@ -237,7 +257,7 @@ impl From<NumericArray> for NumericArrayV {
             array,
             offset: 0,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 }
@@ -251,10 +271,10 @@ impl From<FieldArray> for NumericArrayV {
                     array: arr,
                     offset: 0,
                     len,
-                    null_count: Cell::new(None)
+                    null_count: OnceLock::new(),
                 }
             }
-            _ => panic!("FieldArray does not contain a NumericArray")
+            _ => panic!("FieldArray does not contain a NumericArray"),
         }
     }
 }
@@ -269,10 +289,10 @@ impl From<Array> for NumericArrayV {
                     array: arr,
                     offset: 0,
                     len,
-                    null_count: Cell::new(None)
+                    null_count: OnceLock::new(),
                 }
             }
-            _ => panic!("Array is not a NumericArray")
+            _ => panic!("Array is not a NumericArray"),
         }
     }
 }
@@ -285,9 +305,9 @@ impl From<ArrayV> for NumericArrayV {
                 array: inner,
                 offset,
                 len,
-                null_count: Cell::new(None)
+                null_count: OnceLock::new(),
             },
-            _ => panic!("From<ArrayView>: expected NumericArray variant")
+            _ => panic!("From<ArrayView>: expected NumericArray variant"),
         }
     }
 }
@@ -300,6 +320,32 @@ impl Debug for NumericArrayV {
             .field("array", &self.array)
             .field("cached_null_count", &self.null_count.get())
             .finish()
+    }
+}
+
+impl Shape for NumericArrayV {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
+    }
+}
+
+impl Concatenate for NumericArrayV {
+    /// Concatenates two numeric array views by materializing both to owned numeric arrays,
+    /// concatenating them, and wrapping the result back in a view.
+    ///
+    /// # Notes
+    /// - This operation copies data from both views to create owned numeric arrays.
+    /// - The resulting view has offset=0 and length equal to the combined length.
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Materialize both views to owned numeric arrays
+        let self_array = self.to_numeric_array();
+        let other_array = other.to_numeric_array();
+
+        // Concatenate the owned numeric arrays
+        let concatenated = self_array.concat(other_array)?;
+
+        // Wrap the result in a new view
+        Ok(NumericArrayV::from(concatenated))
     }
 }
 
@@ -320,7 +366,7 @@ impl Display for NumericArrayV {
             NumericArray::UInt64(_) => "UInt64",
             NumericArray::Float32(_) => "Float32",
             NumericArray::Float64(_) => "Float64",
-            NumericArray::Null => "Null"
+            NumericArray::Null => "Null",
         };
 
         writeln!(
@@ -335,7 +381,7 @@ impl Display for NumericArrayV {
         for i in 0..max {
             match self.get_f64(i) {
                 Some(v) => writeln!(f, "  {v}")?,
-                None => writeln!(f, "  ·")?
+                None => writeln!(f, "  ·")?,
             }
         }
 
@@ -344,12 +390,6 @@ impl Display for NumericArrayV {
         }
 
         Ok(())
-    }
-}
-
-impl Shape for NumericArrayV {
-    fn shape(&self) -> ShapeDim {
-        ShapeDim::Rank1(self.len())
     }
 }
 
@@ -423,8 +463,10 @@ mod tests {
         let view = NumericArrayV::with_null_count(numeric.clone(), 0, 2, 99);
         // Should always report the supplied cached value
         assert_eq!(view.null_count(), 99);
-        view.set_null_count(101);
-        assert_eq!(view.null_count(), 101);
+        // Trying to set again should fail since it's already initialized
+        assert!(view.set_null_count(101).is_err());
+        // Still returns original value
+        assert_eq!(view.null_count(), 99);
     }
 
     #[test]

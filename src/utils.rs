@@ -11,7 +11,13 @@ use std::simd::{LaneCount, Mask, MaskElement, SupportedLaneCount};
 use std::{fmt::Display, sync::Arc};
 
 use crate::enums::error::KernelError;
+#[cfg(feature = "chunked")]
+use crate::enums::error::MinarrowError;
+#[cfg(feature = "chunked")]
+use crate::structs::field_array::create_field_for_array;
 use crate::traits::masked_array::MaskedArray;
+#[cfg(feature = "chunked")]
+use crate::{Array, FieldArray, SuperArray};
 use crate::{
     Bitmask, CategoricalArray, Float, FloatArray, Integer, IntegerArray, StringArray, TextArray,
 };
@@ -263,3 +269,117 @@ pub fn estimate_string_cardinality<T: Integer>(arr: &StringArray<T>, sample_size
     (seen.len() as f64) / (sample_size.min(len) as f64)
 }
 
+#[cfg(feature = "chunked")]
+/// Helper function to handle mask union between Array and SuperArray
+fn union_array_superarray_masks(
+    array: &Array,
+    super_array: &SuperArray,
+) -> Result<Option<Bitmask>, MinarrowError> {
+    let array_mask = array.null_mask();
+    let super_array_masks: Vec<_> = super_array
+        .chunks()
+        .iter()
+        .map(|chunk| chunk.array.null_mask())
+        .collect();
+
+    let super_array_concatenated_mask = if super_array_masks.iter().any(|m| m.is_some()) {
+        let mut concatenated_bits = Vec::new();
+        for (chunk, mask_opt) in super_array.chunks().iter().zip(super_array_masks.iter()) {
+            if let Some(mask) = mask_opt {
+                concatenated_bits.extend((0..mask.len()).map(|i| mask.get(i)));
+            } else {
+                concatenated_bits.extend(std::iter::repeat(true).take(chunk.array.len()));
+            }
+        }
+        Some(Bitmask::from_bools(&concatenated_bits))
+    } else {
+        None
+    };
+
+    match (array_mask, super_array_concatenated_mask) {
+        (Some(arr_mask), Some(super_mask)) => {
+            if arr_mask.len() == super_mask.len() {
+                Ok(Some(arr_mask.union(&super_mask)))
+            } else {
+                Err(MinarrowError::ShapeError {
+                    message: format!(
+                        "Mask lengths must match for union: {} vs {}",
+                        arr_mask.len(),
+                        super_mask.len()
+                    ),
+                })
+            }
+        }
+        (Some(mask), None) => Ok(Some(mask.clone())),
+        (None, Some(mask)) => Ok(Some(mask)),
+        (None, None) => Ok(None),
+    }
+}
+
+#[cfg(feature = "chunked")]
+/// Helper function to create aligned chunks from Array to match SuperArray chunk structure
+pub fn create_aligned_chunks_from_array(
+    array: Array,
+    super_array: &SuperArray,
+    field_name: &str,
+) -> Result<SuperArray, MinarrowError> {
+    // Check total lengths match
+    if array.len() != super_array.len() {
+        return Err(MinarrowError::ShapeError {
+            message: format!(
+                "Array and SuperArray must have same total length for broadcasting: {} vs {}",
+                array.len(),
+                super_array.len()
+            ),
+        });
+    }
+
+    // Union the masks
+    let full_mask = union_array_superarray_masks(&array, super_array)?;
+
+    // Extract chunk lengths from SuperArray
+    let chunk_lengths: Vec<usize> = super_array
+        .chunks()
+        .into_iter()
+        .map(|chunk| chunk.array.len())
+        .collect();
+
+    // Create aligned chunks from Array using view function
+    let mut start = 0;
+    let mut mask_start = 0;
+    let chunks: Result<Vec<_>, _> = chunk_lengths
+        .iter()
+        .map(|&chunk_len| {
+            let end = start + chunk_len;
+            if end > array.len() {
+                return Err(MinarrowError::ShapeError {
+                    message: format!(
+                        "Chunk alignment failed: index {} out of bounds for length {}",
+                        end,
+                        array.len()
+                    ),
+                });
+            }
+            let view = array.view(start, chunk_len);
+            let mut array_chunk = view.array.slice_clone(view.offset, view.len());
+
+            // Apply portion of full_mask to this chunk
+            if let Some(ref mask) = full_mask {
+                let mask_end = mask_start + chunk_len;
+                let chunk_mask_bits: Vec<bool> =
+                    (mask_start..mask_end).map(|i| mask.get(i)).collect();
+                let chunk_mask = Bitmask::from_bools(&chunk_mask_bits);
+                array.set_null_mask(&mut array_chunk, chunk_mask);
+                mask_start = mask_end;
+            }
+
+            start = end;
+            let first_super_chunk = &super_array.chunks()[0].array;
+            let field =
+                create_field_for_array(field_name, &array_chunk, Some(first_super_chunk), None);
+            Ok(FieldArray::new(field, array_chunk))
+        })
+        .collect();
+
+    Ok(SuperArray::from_chunks(chunks?))
+}

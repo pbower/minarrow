@@ -13,7 +13,7 @@ pub enum ArithmeticOperator {
     /// Multiplication (`lhs * rhs`)
     Multiply,
     /// Division (`lhs / rhs`)
-    /// 
+    ///
     /// For integers, division by zero panics in dense arrays and nullifies in masked arrays.
     /// For floating-point, follows IEEE 754 (yields ±Inf or NaN).
     Divide,

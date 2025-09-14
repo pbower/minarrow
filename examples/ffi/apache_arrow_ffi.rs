@@ -5,7 +5,6 @@
 //!    cargo run --example apache_arrow_ffi --features cast_arrow
 //! ---------------------------------------------------------
 
-
 #[cfg(feature = "cast_arrow")]
 use crate::apache_arrow_test::run_example;
 
@@ -15,7 +14,7 @@ mod apache_arrow_test {
     use std::sync::Arc;
 
     use arrow::array::ffi::{
-        FFI_ArrowArray, FFI_ArrowSchema, from_ffi as arrow_from_ffi, to_ffi as arrow_to_ffi
+        FFI_ArrowArray, FFI_ArrowSchema, from_ffi as arrow_from_ffi, to_ffi as arrow_to_ffi,
     };
     use arrow::array::{ArrayRef, RecordBatch, make_array};
     use minarrow::ffi::arrow_c_ffi::{export_to_c, import_from_c};
@@ -25,7 +24,7 @@ mod apache_arrow_test {
     #[cfg(feature = "datetime")]
     use minarrow::{TemporalArray, TimeUnit};
 
-    pub (crate) fn run_example() {
+    pub(crate) fn run_example() {
         // ---- 1. Build a Minarrow Table with all types ----
 
         #[cfg(feature = "extended_numeric_types")]
@@ -35,8 +34,9 @@ mod apache_arrow_test {
             Arc::new(minarrow::IntegerArray::<i16>::from_slice(&[10, 20, -10])) as Arc<_>;
         let arr_int32 =
             Arc::new(minarrow::IntegerArray::<i32>::from_slice(&[100, 200, -100])) as Arc<_>;
-        let arr_int64 =
-            Arc::new(minarrow::IntegerArray::<i64>::from_slice(&[1000, 2000, -1000])) as Arc<_>;
+        let arr_int64 = Arc::new(minarrow::IntegerArray::<i64>::from_slice(&[
+            1000, 2000, -1000,
+        ])) as Arc<_>;
 
         #[cfg(feature = "extended_numeric_types")]
         let arr_uint8 = Arc::new(minarrow::IntegerArray::<u8>::from_slice(&[1, 2, 255]))
@@ -44,25 +44,30 @@ mod apache_arrow_test {
         #[cfg(feature = "extended_numeric_types")]
         let arr_uint16 = Arc::new(minarrow::IntegerArray::<u16>::from_slice(&[1, 2, 65535]))
             as Arc<minarrow::IntegerArray<u16>>;
-        let arr_uint32 = Arc::new(minarrow::IntegerArray::<u32>::from_slice(&[1, 2, 4294967295]))
-            as Arc<minarrow::IntegerArray<u32>>;
-        let arr_uint64 =
-            Arc::new(minarrow::IntegerArray::<u64>::from_slice(&[1, 2, 18446744073709551615]))
-                as Arc<minarrow::IntegerArray<u64>>;
+        let arr_uint32 = Arc::new(minarrow::IntegerArray::<u32>::from_slice(&[
+            1, 2, 4294967295,
+        ])) as Arc<minarrow::IntegerArray<u32>>;
+        let arr_uint64 = Arc::new(minarrow::IntegerArray::<u64>::from_slice(&[
+            1,
+            2,
+            18446744073709551615,
+        ])) as Arc<minarrow::IntegerArray<u64>>;
 
         let arr_float32 = Arc::new(minarrow::FloatArray::<f32>::from_slice(&[1.5, -0.5, 0.0]))
             as Arc<minarrow::FloatArray<f32>>;
         let arr_float64 = Arc::new(minarrow::FloatArray::<f64>::from_slice(&[1.0, -2.0, 0.0]))
             as Arc<minarrow::FloatArray<f64>>;
 
-        let arr_bool = Arc::new(minarrow::BooleanArray::<()>::from_slice(&[true, false, true]))
-            as Arc<minarrow::BooleanArray<()>>;
+        let arr_bool = Arc::new(minarrow::BooleanArray::<()>::from_slice(&[
+            true, false, true,
+        ])) as Arc<minarrow::BooleanArray<()>>;
 
-        let arr_string32 = Arc::new(minarrow::StringArray::<u32>::from_slice(&["abc", "def", ""]))
-            as Arc<minarrow::StringArray<u32>>;
+        let arr_string32 = Arc::new(minarrow::StringArray::<u32>::from_slice(&[
+            "abc", "def", "",
+        ])) as Arc<minarrow::StringArray<u32>>;
         let arr_categorical32 = Arc::new(minarrow::CategoricalArray::<u32>::from_slices(
             &[0, 1, 2],
-            &["A".to_string(), "B".to_string(), "C".to_string()]
+            &["A".to_string(), "B".to_string(), "C".to_string()],
         )) as Arc<minarrow::CategoricalArray<u32>>;
 
         #[cfg(feature = "datetime")]
@@ -80,10 +85,10 @@ mod apache_arrow_test {
             data: minarrow::Buffer::<i64>::from_slice(&[
                 1_600_000_000_000,
                 1_600_000_000_001,
-                1_600_000_000_002
+                1_600_000_000_002,
             ]),
             null_mask: None,
-            time_unit: TimeUnit::Milliseconds
+            time_unit: TimeUnit::Milliseconds,
         }) as Arc<_>;
 
         // ---- 2. Wrap into Array enums ----
@@ -130,7 +135,7 @@ mod apache_arrow_test {
             "categorical32",
             ArrowType::Dictionary(CategoricalIndexType::UInt32),
             false,
-            None
+            None,
         );
 
         #[cfg(feature = "datetime")]
@@ -206,7 +211,11 @@ mod apache_arrow_test {
             let array_data = unsafe { arrow_from_ffi(arrow_array, &arrow_schema) }
                 .expect("Arrow FFI import failed");
             let field_name = &col.field.name;
-            println!("Imported field '{}' as Arrow type {:?}", field_name, array_data.data_type());
+            println!(
+                "Imported field '{}' as Arrow type {:?}",
+                field_name,
+                array_data.data_type()
+            );
             println!("Arrow-RS values for '{}':", field_name);
             println!("  {:?}", array_data);
 
@@ -214,12 +223,9 @@ mod apache_arrow_test {
             let array_ref: ArrayRef = make_array(array_data.clone());
 
             // Pretty print as a table
-            let arrow_schema =
-                Arc::new(arrow::datatypes::Schema::new(vec![arrow::datatypes::Field::new(
-                    field_name,
-                    array_ref.data_type().clone(),
-                    false
-                )]));
+            let arrow_schema = Arc::new(arrow::datatypes::Schema::new(vec![
+                arrow::datatypes::Field::new(field_name, array_ref.data_type().clone(), false),
+            ]));
             let batch = RecordBatch::try_new(arrow_schema, vec![array_ref.clone()]).unwrap();
             println!("Arrow-RS pretty-print for '{}':", field_name);
             arrow::util::pretty::print_batches(&[batch]).unwrap();
@@ -240,7 +246,10 @@ mod apache_arrow_test {
             // Now import back into minarrow using your real FFI import
             let minarr_back_array: Arc<Array> = unsafe { import_from_c(arr_ptr, schema_ptr) };
 
-            println!("Minarrow array (roundtrip) for '{}':\n{:#?}", field_name, minarr_back_array);
+            println!(
+                "Minarrow array (roundtrip) for '{}':\n{:#?}",
+                field_name, minarr_back_array
+            );
 
             // ---- 8. Validate roundtrip equality ----
             assert_eq!(

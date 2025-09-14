@@ -1,5 +1,5 @@
 //! # **View Trait Module** - *Standardises Slicing and View Moves in Minarrow*
-//! 
+//!
 //! Zero-copy array view abstractions for `MinArrow`.
 //!
 //! This module defines the [`View`] trait, which provides a unified interface
@@ -26,33 +26,33 @@
 use crate::{Array, ArrayV, Length, MaskedArray, Offset};
 
 /// # View trait
-/// 
+///
 /// Zero-copy, windowed access to array data with multiple abstraction levels.
-/// 
+///
 /// ## Description
 /// The [`View`] trait provides a unified interface for creating logical subviews
 /// into arrays without duplicating their underlying buffers. It is implemented by
 /// all [`MaskedArray`] types and supports three main access patterns:
-/// 
+///
 /// - **Native slice access** – direct `&[T]` or `&[u8]` for fixed- and variable-width data.
 /// - **ArrayView** – an `Arc`-cloned, type-aware view with safe windowing and typed accessors.
 /// - **TupleView** – a minimal `(&Array, offset, length)` form for maximum performance.
-/// 
+///
 /// ## Purpose
 /// This trait indirectly supports pipelines, joins, and analytics that need read-only
 /// subsets of arrays without the cost of copying or reallocating.
-/// 
+///
 /// ### Ownership Semantics
 /// - When called on an `Arc`-wrapped array (e.g., [`Array`]), `.view()` consumes the `Arc`.
 ///   Clone the `Arc` first if you need to retain the original.
 /// - When called on a direct array variant, `.view()` consumes ownership.
 ///   Wrap in `Array` first if you need continued access.
-/// 
+///
 /// ### Behaviour
 /// - Views enforce logical offset/length constraints.
 /// - Access methods such as `.num()`, `.text()`, `.dt()`, `.bool()` return typed view variants.
 /// - Always zero-copy: only offset and length metadata change, not the backing buffers.
-/// 
+///
 /// ### Compared to Apache Arrow
 /// Arrow arrays are lightweight views over reference-counted buffers
 /// *(the view + buffers are separate types)*. In **MinArrow**, an [`Array`]
@@ -65,7 +65,6 @@ pub trait View: MaskedArray + Into<Array> + Clone
 where
     <Self as MaskedArray>::Container: AsRef<[Self::BufferT]>,
 {
-
     /// The fixed-width buffer type (e.g. `u8`, `f32`, `bool`, etc.)
     type BufferT: Default + PartialEq + Clone + Copy + Sized;
 
@@ -85,12 +84,12 @@ where
     fn slice(&self, offset: usize, len: usize) -> (&[Self::BufferT], Offset, Length) {
         (&self.data().as_ref()[offset..offset + len], offset, len)
     }
-    
+
     /// Returns a zero-copy, windowed view (`ArrayView`) into this array.
     ///
     /// ## Ownership Semantics
-    /// - For `Arc`-wrapped arrays (e.g., `Array`), this method consumes the `Arc`. 
-    ///   If you need to retain access to the original array after calling `view`, 
+    /// - For `Arc`-wrapped arrays (e.g., `Array`), this method consumes the `Arc`.
+    ///   If you need to retain access to the original array after calling `view`,
     ///   clone the `Arc` at the call site (cheap pointer clone).
     /// - For direct array variants (e.g., `IntegerArray<u64>`), calling `view` consumes ownership.
     ///   If continued access to the original is required, promote the variant into an `Arc` (or `Array`) first.

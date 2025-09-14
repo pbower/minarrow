@@ -1,4 +1,4 @@
-//! # **IntegerArray Module**- *Mid-Level, Inner Typed Integer Array* 
+//! # **IntegerArray Module**- *Mid-Level, Inner Typed Integer Array*
 //!
 //! Arrow-compatible, SIMD-aligned integer array optimized for analytical workloads.
 //!
@@ -40,15 +40,16 @@
 
 use std::fmt::{Display, Formatter};
 
-use crate::structs::vec64::Vec64;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::traits::type_unions::Integer;
 use crate::{
     Bitmask, Buffer, Length, MaskedArray, Offset, impl_arc_masked_array, impl_array_ref_deref,
-    impl_from_vec_primitive, impl_masked_array, impl_numeric_array_constructors
+    impl_from_vec_primitive, impl_masked_array, impl_numeric_array_constructors,
 };
+use vec64::Vec64;
 
 /// # IntegerArray
 ///
@@ -56,9 +57,9 @@ use crate::{
 ///
 /// ## Role
 /// - Many will prefer the higher level `Array` type, which dispatches to this when
-/// necessary. 
+/// necessary.
 /// - Can be used as a standalone array or as the numeric arm of `NumericArray` / `Array`.
-/// 
+///
 /// ## Description
 /// - Stores fixed-width integer values in a contiguous `Buffer<T>` (`Vec64<T>` under the hood).
 /// - Optional Arrow-style validity bitmap (`1 = valid`, `0 = null`) via `Bitmask`.
@@ -92,7 +93,7 @@ pub struct IntegerArray<T> {
     /// Backing buffer for values (Arrow-compatible).
     pub data: Buffer<T>,
     /// Optional null mask (bit-packed; 1=valid, 0=null).
-    pub null_mask: Option<Bitmask>
+    pub null_mask: Option<Bitmask>,
 }
 
 impl_numeric_array_constructors!(IntegerArray, Integer);
@@ -112,13 +113,17 @@ impl_arc_masked_array!(
 
 impl<T> Display for IntegerArray<T>
 where
-    T: Integer + Display
+    T: Integer + Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let len = self.len();
         let nulls = self.null_count();
 
-        writeln!(f, "IntegerArray [{} values] (dtype: int, nulls: {})", len, nulls)?;
+        writeln!(
+            f,
+            "IntegerArray [{} values] (dtype: int, nulls: {})",
+            len, nulls
+        )?;
 
         write!(f, "[")?;
 
@@ -129,7 +134,7 @@ where
 
             match self.get(i) {
                 Some(val) => write!(f, "{}", val)?,
-                None => write!(f, "null")?
+                None => write!(f, "null")?,
             }
         }
 
@@ -302,9 +307,9 @@ mod tests {
     fn test_batch_extend_from_slice() {
         let mut arr = IntegerArray::<i32>::default();
         let data = &[1, 2, 3, 4, 5];
-        
+
         arr.extend_from_slice(data);
-        
+
         assert_eq!(arr.len(), 5);
         assert_eq!(arr.get(0), Some(1));
         assert_eq!(arr.get(4), Some(5));
@@ -314,9 +319,9 @@ mod tests {
     fn test_batch_extend_from_iter_with_capacity() {
         let mut arr = IntegerArray::<i64>::default();
         let data = vec![10i64, 20, 30];
-        
+
         arr.extend_from_iter_with_capacity(data.into_iter(), 3);
-        
+
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.get(0), Some(10));
         assert_eq!(arr.get(2), Some(30));
@@ -325,7 +330,7 @@ mod tests {
     #[test]
     fn test_batch_fill() {
         let arr = IntegerArray::<i32>::fill(42, 100);
-        
+
         assert_eq!(arr.len(), 100);
         for i in 0..100 {
             assert_eq!(arr.get(i), Some(42));
@@ -336,9 +341,9 @@ mod tests {
     fn test_batch_extend_from_iter_with_capacity_performance() {
         let mut arr = IntegerArray::<u64>::default();
         let data: Vec<u64> = (0..1000).collect();
-        
+
         arr.extend_from_iter_with_capacity(data.into_iter(), 1000);
-        
+
         assert_eq!(arr.len(), 1000);
         for i in 0..1000 {
             assert_eq!(arr.get(i), Some(i as u64));
@@ -351,10 +356,10 @@ mod tests {
         let mut arr = IntegerArray::<i16>::with_capacity(10, true);
         arr.push(100);
         arr.push_null();
-        
+
         let data = &[200i16, 300, 400];
         arr.extend_from_slice(data);
-        
+
         assert_eq!(arr.len(), 5);
         assert_eq!(arr.get(0), Some(100));
         assert_eq!(arr.get(1), None);
@@ -367,7 +372,7 @@ mod tests {
     #[test]
     fn test_batch_fill_large() {
         let arr = IntegerArray::<i8>::fill(-127, 500);
-        
+
         assert_eq!(arr.len(), 500);
         assert_eq!(arr.null_count(), 0);
         for i in 0..500 {
@@ -379,11 +384,11 @@ mod tests {
     fn test_batch_operations_preserve_capacity() {
         let mut arr = IntegerArray::<u32>::with_capacity(100, false);
         let initial_capacity = arr.data.capacity();
-        
+
         // Should not reallocate since we pre-allocated enough
         let data = vec![1u32, 2, 3, 4, 5];
         arr.extend_from_slice(&data);
-        
+
         assert!(arr.data.capacity() >= initial_capacity);
         assert_eq!(arr.len(), 5);
     }
@@ -512,5 +517,54 @@ mod parallel_tests {
         assert_eq!(arr7.get(2), None);
         assert_eq!(arr7.get(3), Some(103));
         assert_eq!(arr7.null_count(), 1);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Concatenate Trait Implementation
+// ═══════════════════════════════════════════════════════════════════════════
+
+impl<T: Integer> Concatenate for IntegerArray<T> {
+    fn concat(
+        mut self,
+        other: Self,
+    ) -> core::result::Result<Self, crate::enums::error::MinarrowError> {
+        // Consume other and extend self with its data
+        self.append_array(&other);
+        Ok(self)
+    }
+}
+
+#[cfg(test)]
+mod concat_tests {
+    use super::*;
+
+    #[test]
+    fn test_integer_array_concat() {
+        let arr1 = IntegerArray::<i32>::from_slice(&[1, 2, 3]);
+        let arr2 = IntegerArray::<i32>::from_slice(&[4, 5, 6]);
+        let result = arr1.concat(arr2).unwrap();
+        assert_eq!(result.len(), 6);
+        assert_eq!(result.get(0), Some(1));
+        assert_eq!(result.get(5), Some(6));
+    }
+
+    #[test]
+    fn test_integer_array_concat_with_nulls() {
+        let mut arr1 = IntegerArray::<i32>::with_capacity(2, true);
+        arr1.push(10);
+        arr1.push_null();
+
+        let mut arr2 = IntegerArray::<i32>::with_capacity(2, true);
+        arr2.push_null();
+        arr2.push(40);
+
+        let result = arr1.concat(arr2).unwrap();
+        assert_eq!(result.len(), 4);
+        assert_eq!(result.get(0), Some(10));
+        assert_eq!(result.get(1), None);
+        assert_eq!(result.get(2), None);
+        assert_eq!(result.get(3), Some(40));
+        assert_eq!(result.null_count(), 2);
     }
 }

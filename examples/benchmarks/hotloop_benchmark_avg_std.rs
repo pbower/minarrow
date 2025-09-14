@@ -24,7 +24,7 @@ mod benchmarks_avg {
 
     use arrow::array::{
         Array as ArrowArrayTrait, ArrayRef, Float64Array as ArrowF64Array,
-        Int64Array as ArrowI64Array
+        Int64Array as ArrowI64Array,
     };
     use minarrow::{Array, Buffer, FloatArray, IntegerArray, NumericArray, Vec64};
 
@@ -77,7 +77,7 @@ mod benchmarks_avg {
             let start = Instant::now();
             let array = Array::NumericArray(NumericArray::Int64(Arc::new(IntegerArray {
                 data: Buffer::from(min_data),
-                null_mask: None
+                null_mask: None,
             })));
             let mut acc = 0i64;
             let int_arr = array.num().i64().unwrap();
@@ -94,7 +94,7 @@ mod benchmarks_avg {
             let start = Instant::now();
             let int_arr = IntegerArray {
                 data: Buffer::from(min_data),
-                null_mask: None
+                null_mask: None,
             };
             let mut acc = 0i64;
             let slice = int_arr.data.as_slice();
@@ -147,7 +147,7 @@ mod benchmarks_avg {
             let start = Instant::now();
             let array = Array::NumericArray(NumericArray::Float64(Arc::new(FloatArray {
                 data: Buffer::from(min_data_f64),
-                null_mask: None
+                null_mask: None,
             })));
             let mut acc = 0.0f64;
             let float_arr = array.num().f64().unwrap();
@@ -164,7 +164,7 @@ mod benchmarks_avg {
             let start = Instant::now();
             let float_arr = FloatArray {
                 data: Buffer::from(min_data_f64),
-                null_mask: None
+                null_mask: None,
             };
             let mut acc = 0.0f64;
             let slice = float_arr.data.as_slice();

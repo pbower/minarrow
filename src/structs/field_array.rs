@@ -20,14 +20,18 @@ use polars::series::Series;
 
 #[cfg(feature = "views")]
 use crate::aliases::FieldAVT;
-use crate::ffi::arrow_dtype::ArrowType;
-use crate::traits::shape::Shape;
+use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
-use crate::{Array, Field};
-
+use crate::ffi::arrow_dtype::ArrowType;
+use crate::ffi::arrow_dtype::CategoricalIndexType;
+use crate::traits::concatenate::Concatenate;
+use crate::traits::shape::Shape;
+use crate::{Array, Field, NumericArray, TextArray};
+#[cfg(feature = "datetime")]
+use crate::{TemporalArray, TimeUnit};
 
 /// # FieldArray
-/// 
+///
 /// Named and typed data column with associated array values.
 ///
 /// ## Role
@@ -36,7 +40,7 @@ use crate::{Array, Field};
 /// It can also serve as a self-documenting array and is required when sending `Minarrow` data
 /// over FFI to `Apache Arrow`. In such cases, it's worth ensuring the correct logical `Datetime` Arrow type
 /// is built when constructing the `Field`, as this determines the `Arrow` type on the receiving side.
-/// 
+///
 /// ##  
 /// ```rust
 /// use minarrow::{Array, Field, FieldArray, MaskedArray};
@@ -60,9 +64,9 @@ use crate::{Array, Field};
 /// // Take an owned slice [offset..offset+len)
 /// let sub = fa.slice_clone(0, 1);
 /// assert_eq!(sub.len(), 1);
-/// 
-/// // Standard constructor 
-/// 
+///
+/// // Standard constructor
+///
 /// // Describe it with a Field and wrap as FieldArray
 /// let field = Field::new("id", ArrowType::Int32, false, None);
 /// let fa = FieldArray::new(field, arr);
@@ -88,20 +92,28 @@ pub struct FieldArray {
 
     /// Null count for the immutable array to support skipping null-mask
     /// operations when it's `0`, and/or related strategies.
-    pub null_count: usize
+    pub null_count: usize,
 }
 
 impl FieldArray {
     /// Constructs a new `FieldArray` from an existing `Field` and `Array`.
     pub fn new(field: Field, array: Array) -> Self {
         let null_count = array.null_count();
-        FieldArray { field: field.into(), array, null_count }
+        FieldArray {
+            field: field.into(),
+            array,
+            null_count,
+        }
     }
 
     /// Constructs a new `FieldArray` from an existing `Arc<Field>` and `Array`.
     pub fn new_arc(field: Arc<Field>, array: Array) -> Self {
         let null_count = array.null_count();
-        FieldArray { field: field, array, null_count }
+        FieldArray {
+            field: field,
+            array,
+            null_count,
+        }
     }
 
     /// Constructs a new `FieldArray` from a name and any supported typed array,
@@ -109,7 +121,7 @@ impl FieldArray {
     pub fn from_inner<N, A>(name: N, arr: A) -> Self
     where
         N: Into<String>,
-        A: Into<Array>
+        A: Into<Array>,
     {
         let array: Array = arr.into();
         let dtype = array.arrow_type();
@@ -124,19 +136,19 @@ impl FieldArray {
         dtype: ArrowType,
         nullable: Option<bool>,
         metadata: Option<BTreeMap<String, String>>,
-        array: Array
+        array: Array,
     ) -> Self {
         let null_count = array.null_count();
         let field = Field {
             name: field_name.into(),
             dtype,
             nullable: nullable.unwrap_or_else(|| array.is_nullable()),
-            metadata: metadata.unwrap_or_default()
+            metadata: metadata.unwrap_or_default(),
         };
         FieldArray {
             field: field.into(),
             array: array.into(),
-            null_count
+            null_count,
         }
     }
 
@@ -171,7 +183,7 @@ impl FieldArray {
         FieldArray {
             field: self.field.clone(),
             array: array.into(),
-            null_count
+            null_count,
         }
     }
 
@@ -200,7 +212,7 @@ impl FieldArray {
     /// Provides mutable access to the underlying array with automatic null_count refresh.
     /// Uses copy-on-write semantics - clones array data if Arc reference count > 1.
     /// Use this for operations that may change the null count.
-    pub fn with_array_mut<F, R>(&mut self, f: F) -> R 
+    pub fn with_array_mut<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut Array) -> R,
     {
@@ -234,6 +246,69 @@ pub fn field_array<T: Into<String>>(name: T, array: Array) -> FieldArray {
     FieldArray::new(field, array)
 }
 
+/// Helper to create a proper Field for an Array with correct type, mask, and metadata
+pub fn create_field_for_array(
+    name: &str,
+    array: &Array,
+    other_array: Option<&Array>,
+    metadata: Option<std::collections::BTreeMap<String, String>>,
+) -> Field {
+    let arrow_type = match array {
+        Array::NumericArray(num_arr) => match num_arr {
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::Int8(_) => ArrowType::Int8,
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::Int16(_) => ArrowType::Int16,
+            NumericArray::Int32(_) => ArrowType::Int32,
+            NumericArray::Int64(_) => ArrowType::Int64,
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt8(_) => ArrowType::UInt8,
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt16(_) => ArrowType::UInt16,
+            NumericArray::UInt32(_) => ArrowType::UInt32,
+            NumericArray::UInt64(_) => ArrowType::UInt64,
+            NumericArray::Float32(_) => ArrowType::Float32,
+            NumericArray::Float64(_) => ArrowType::Float64,
+            NumericArray::Null => ArrowType::Null,
+        },
+        Array::TextArray(text_arr) => match text_arr {
+            TextArray::String32(_) => ArrowType::String,
+            #[cfg(feature = "large_string")]
+            TextArray::String64(_) => ArrowType::LargeString,
+            #[cfg(feature = "extended_categorical")]
+            TextArray::Categorical8(_) => ArrowType::Dictionary(CategoricalIndexType::UInt8),
+            #[cfg(feature = "extended_categorical")]
+            TextArray::Categorical16(_) => ArrowType::Dictionary(CategoricalIndexType::UInt16),
+            TextArray::Categorical32(_) => ArrowType::Dictionary(CategoricalIndexType::UInt32),
+            #[cfg(feature = "extended_categorical")]
+            TextArray::Categorical64(_) => ArrowType::Dictionary(CategoricalIndexType::UInt64),
+            TextArray::Null => ArrowType::Null,
+        },
+        #[cfg(feature = "datetime")]
+        Array::TemporalArray(temp_arr) => match temp_arr {
+            TemporalArray::Datetime32(dt_arr) => match &dt_arr.time_unit {
+                TimeUnit::Days => ArrowType::Date32,
+                unit => ArrowType::Time32(unit.clone()),
+            },
+            TemporalArray::Datetime64(dt_arr) => match &dt_arr.time_unit {
+                TimeUnit::Milliseconds => ArrowType::Date64,
+                TimeUnit::Microseconds | TimeUnit::Nanoseconds => {
+                    ArrowType::Time64(dt_arr.time_unit.clone())
+                }
+                unit => ArrowType::Timestamp(unit.clone()),
+            },
+            TemporalArray::Null => ArrowType::Null,
+        },
+        Array::BooleanArray(_) => ArrowType::Boolean,
+        Array::Null => ArrowType::Null,
+    };
+
+    let has_mask = array.null_mask().is_some()
+        || other_array.map_or(false, |other| other.null_mask().is_some());
+
+    Field::new(name, arrow_type, has_mask, metadata)
+}
+
 impl Display for FieldArray {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(
@@ -250,6 +325,68 @@ impl Display for FieldArray {
 impl Shape for FieldArray {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
+    }
+}
+
+impl Concatenate for FieldArray {
+    /// Concatenates two FieldArrays, consuming both.
+    ///
+    /// # Requirements
+    /// - Both FieldArrays must have matching field metadata:
+    ///   - Same name
+    ///   - Same dtype
+    ///   - Same nullability
+    ///
+    /// # Returns
+    /// A new FieldArray with the concatenated array data
+    ///
+    /// # Errors
+    /// - `IncompatibleTypeError` if field metadata doesn't match
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Validate field compatibility
+        if self.field.name != other.field.name {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "FieldArray",
+                to: "FieldArray",
+                message: Some(format!(
+                    "Field name mismatch: '{}' vs '{}'",
+                    self.field.name, other.field.name
+                )),
+            });
+        }
+
+        if self.field.dtype != other.field.dtype {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "FieldArray",
+                to: "FieldArray",
+                message: Some(format!(
+                    "Field '{}' dtype mismatch: {:?} vs {:?}",
+                    self.field.name, self.field.dtype, other.field.dtype
+                )),
+            });
+        }
+
+        if self.field.nullable != other.field.nullable {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "FieldArray",
+                to: "FieldArray",
+                message: Some(format!(
+                    "Field '{}' nullable mismatch: {} vs {}",
+                    self.field.name, self.field.nullable, other.field.nullable
+                )),
+            });
+        }
+
+        // Concatenate the underlying arrays
+        let concatenated_array = self.array.concat(other.array)?;
+        let null_count = concatenated_array.null_count();
+
+        // Create result FieldArray with the same field metadata
+        Ok(FieldArray {
+            field: self.field,
+            array: concatenated_array,
+            null_count,
+        })
     }
 }
 
@@ -374,5 +511,145 @@ mod tests {
         // Refresh the cache
         fa.refresh_null_count();
         assert_eq!(fa.null_count(), 1); // Cache now updated
+    }
+}
+
+#[cfg(test)]
+mod concat_tests {
+    use super::*;
+    use crate::structs::variants::integer::IntegerArray;
+    use crate::traits::concatenate::Concatenate;
+    use crate::traits::masked_array::MaskedArray;
+
+    #[test]
+    fn test_field_array_concat_basic() {
+        let arr1 = IntegerArray::<i32>::from_slice(&[1, 2, 3]);
+        let fa1 = field_array("numbers", Array::from_int32(arr1));
+
+        let arr2 = IntegerArray::<i32>::from_slice(&[4, 5, 6]);
+        let fa2 = field_array("numbers", Array::from_int32(arr2));
+
+        let result = fa1.concat(fa2).unwrap();
+
+        assert_eq!(result.len(), 6);
+        assert_eq!(result.field.name, "numbers");
+        assert_eq!(result.field.dtype, ArrowType::Int32);
+
+        if let Array::NumericArray(crate::NumericArray::Int32(arr)) = result.array {
+            assert_eq!(arr.len(), 6);
+            assert_eq!(arr.get(0), Some(1));
+            assert_eq!(arr.get(5), Some(6));
+        } else {
+            panic!("Expected Int32 array");
+        }
+    }
+
+    #[test]
+    fn test_field_array_concat_with_nulls() {
+        let mut arr1 = IntegerArray::<i32>::with_capacity(3, true);
+        arr1.push(10);
+        arr1.push_null();
+        arr1.push(30);
+        let fa1 = FieldArray::from_parts(
+            "data",
+            ArrowType::Int32,
+            Some(true),
+            None,
+            Array::from_int32(arr1),
+        );
+
+        let mut arr2 = IntegerArray::<i32>::with_capacity(2, true);
+        arr2.push_null();
+        arr2.push(50);
+        let fa2 = FieldArray::from_parts(
+            "data",
+            ArrowType::Int32,
+            Some(true),
+            None,
+            Array::from_int32(arr2),
+        );
+
+        let result = fa1.concat(fa2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.null_count(), 2);
+
+        if let Array::NumericArray(crate::NumericArray::Int32(arr)) = result.array {
+            assert_eq!(arr.get(0), Some(10));
+            assert_eq!(arr.get(1), None);
+            assert_eq!(arr.get(2), Some(30));
+            assert_eq!(arr.get(3), None);
+            assert_eq!(arr.get(4), Some(50));
+        } else {
+            panic!("Expected Int32 array");
+        }
+    }
+
+    #[test]
+    fn test_field_array_concat_name_mismatch() {
+        let arr1 = IntegerArray::<i32>::from_slice(&[1, 2]);
+        let fa1 = field_array("col_a", Array::from_int32(arr1));
+
+        let arr2 = IntegerArray::<i32>::from_slice(&[3, 4]);
+        let fa2 = field_array("col_b", Array::from_int32(arr2));
+
+        let result = fa1.concat(fa2);
+        assert!(result.is_err());
+
+        if let Err(MinarrowError::IncompatibleTypeError { message, .. }) = result {
+            assert!(message.unwrap().contains("Field name mismatch"));
+        } else {
+            panic!("Expected IncompatibleTypeError");
+        }
+    }
+
+    #[test]
+    fn test_field_array_concat_dtype_mismatch() {
+        let arr1 = IntegerArray::<i32>::from_slice(&[1, 2]);
+        let fa1 = field_array("data", Array::from_int32(arr1));
+
+        let arr2 = crate::FloatArray::<f64>::from_slice(&[3.0, 4.0]);
+        let fa2 = field_array("data", Array::from_float64(arr2));
+
+        let result = fa1.concat(fa2);
+        assert!(result.is_err());
+
+        if let Err(MinarrowError::IncompatibleTypeError { message, .. }) = result {
+            assert!(message.unwrap().contains("dtype mismatch"));
+        } else {
+            panic!("Expected IncompatibleTypeError");
+        }
+    }
+
+    #[test]
+    fn test_field_array_concat_nullable_mismatch() {
+        let arr1 = IntegerArray::<i32>::from_slice(&[1, 2]);
+        let fa1 = FieldArray::from_parts(
+            "data",
+            ArrowType::Int32,
+            Some(false),
+            None,
+            Array::from_int32(arr1),
+        );
+
+        let mut arr2 = IntegerArray::<i32>::with_capacity(2, true);
+        arr2.push(3);
+        arr2.push(4);
+        let fa2 = FieldArray::from_parts(
+            "data",
+            ArrowType::Int32,
+            Some(true),
+            None,
+            Array::from_int32(arr2),
+        );
+
+        let result = fa1.concat(fa2);
+        assert!(result.is_err());
+
+        if let Err(MinarrowError::IncompatibleTypeError { message, .. }) = result {
+            assert!(message.unwrap().contains("nullable mismatch"));
+        } else {
+            panic!("Expected IncompatibleTypeError");
+        }
     }
 }

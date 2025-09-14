@@ -1,30 +1,36 @@
 //! # **NumericArray Module** - *High-Level Numerical Array Type for Unified Signature Dispatch*
-//! 
-//! NumericArray unifies all integer and floating-point arrays 
+//!
+//! NumericArray unifies all integer and floating-point arrays
 //! into a single enum for standardised numeric operations.
 //!   
 //! ## Features
 //! - direct variant access
 //! - zero-cost casts when the type is known
-//! - lossless conversions between integer and float types. 
+//! - lossless conversions between integer and float types.
 //! - simplifies function signatures by accepting `impl Into<NumericArray>`
 //! - centralises dispatch
 //! - preserves SIMD-aligned buffers across all numeric variants.
 
-use std::{fmt::{Display, Formatter}, sync::Arc};
+use std::{
+    fmt::{Display, Formatter},
+    sync::Arc,
+};
 
-use crate::enums::error::MinarrowError;
 use crate::{Bitmask, FloatArray, IntegerArray, MaskedArray};
 use crate::{BooleanArray, StringArray};
+use crate::{
+    enums::{error::MinarrowError, shape_dim::ShapeDim},
+    traits::{concatenate::Concatenate, shape::Shape},
+};
 
 /// # NumericArray
-/// 
+///
 /// Unified numerical array container
-/// 
+///
 /// ## Purpose
 /// Exists to unify numerical operations,
 /// simplify API's and streamline user ergonomics.
-/// 
+///
 /// ## Usage:
 /// - It is accessible from `Array` using `.num()`,
 /// and provides typed variant access via for e.g.,
@@ -33,14 +39,14 @@ use crate::{BooleanArray, StringArray};
 /// - This streamlines function implementations,
 /// and, despite the additional `enum` layer,
 /// matching lanes in many real-world scenarios.
-/// This is because one can for e.g., unify a 
+/// This is because one can for e.g., unify a
 /// function signature with `impl Into<NumericArray>`,
 /// and all of the subtypes, plus `Array` and `NumericalArray`,
-/// all qualify. 
+/// all qualify.
 /// - Additionally, you can then use one `Integer` implementation
 /// on the enum dispatch arm for all `Integer` variants, or,
 /// in many cases, for the entire numeric arm when they are the same.
-/// 
+///
 /// ### Typecasting behaviour
 /// - If the enum already holds the given type *(which should be known at compile-time)*,
 /// then using accessors like `.i32()` is zero-cost, as it transfers ownership.
@@ -48,11 +54,11 @@ use crate::{BooleanArray, StringArray};
 /// - If you use an accessor to a different base type, e.g., `.f32()` when it's a
 /// `.int32()` already in the enum, it will convert it. Therefore, be mindful
 /// of performance when this occurs.
-/// 
+///
 /// ## Also see:
 /// - Under [crate::traits::type_unions] , we additionally
-/// include minimal `Integer`, `Float`, `Numeric` and `Primitive` traits that 
-/// for which the base Rust primitive types already qualify. 
+/// include minimal `Integer`, `Float`, `Numeric` and `Primitive` traits that
+/// for which the base Rust primitive types already qualify.
 /// These are loose wrappers over the `num-traits` crate to help improve
 /// type ergonomics when traits are required, but without requiring
 /// any downcasting.
@@ -74,7 +80,7 @@ pub enum NumericArray {
     Float32(Arc<FloatArray<f32>>),
     Float64(Arc<FloatArray<f64>>),
     #[default]
-    Null // Default Marker for mem::take
+    Null, // Default Marker for mem::take
 }
 
 impl NumericArray {
@@ -96,7 +102,7 @@ impl NumericArray {
             NumericArray::UInt64(arr) => arr.len(),
             NumericArray::Float32(arr) => arr.len(),
             NumericArray::Float64(arr) => arr.len(),
-            NumericArray::Null => 0
+            NumericArray::Null => 0,
         }
     }
 
@@ -118,7 +124,7 @@ impl NumericArray {
             NumericArray::UInt64(arr) => arr.null_mask.as_ref(),
             NumericArray::Float32(arr) => arr.null_mask.as_ref(),
             NumericArray::Float64(arr) => arr.null_mask.as_ref(),
-            NumericArray::Null => None
+            NumericArray::Null => None,
         }
     }
 
@@ -157,7 +163,7 @@ impl NumericArray {
             }
 
             (NumericArray::Null, NumericArray::Null) => (),
-            (lhs, rhs) => panic!("Cannot append {:?} into {:?}", rhs, lhs)
+            (lhs, rhs) => panic!("Cannot append {:?} into {:?}", rhs, lhs),
         }
     }
 
@@ -181,7 +187,7 @@ impl NumericArray {
             NumericArray::UInt64(a) => Ok(IntegerArray::<i32>::try_from(&*a)?),
             NumericArray::Float32(a) => Ok(IntegerArray::<i32>::try_from(&*a)?),
             NumericArray::Float64(a) => Ok(IntegerArray::<i32>::try_from(&*a)?),
-            NumericArray::Null => Err(MinarrowError::NullError { message: None })
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
@@ -205,7 +211,7 @@ impl NumericArray {
             NumericArray::UInt64(a) => Ok(IntegerArray::<i64>::try_from(&*a)?),
             NumericArray::Float32(a) => Ok(IntegerArray::<i64>::try_from(&*a)?),
             NumericArray::Float64(a) => Ok(IntegerArray::<i64>::try_from(&*a)?),
-            NumericArray::Null => Err(MinarrowError::NullError { message: None })
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
@@ -229,7 +235,7 @@ impl NumericArray {
             NumericArray::UInt64(a) => Ok(IntegerArray::<u32>::try_from(&*a)?),
             NumericArray::Float32(a) => Ok(IntegerArray::<u32>::try_from(&*a)?),
             NumericArray::Float64(a) => Ok(IntegerArray::<u32>::try_from(&*a)?),
-            NumericArray::Null => Err(MinarrowError::NullError { message: None })
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
@@ -253,7 +259,7 @@ impl NumericArray {
             },
             NumericArray::Float32(a) => Ok(IntegerArray::<u64>::try_from(&*a)?),
             NumericArray::Float64(a) => Ok(IntegerArray::<u64>::try_from(&*a)?),
-            NumericArray::Null => Err(MinarrowError::NullError { message: None })
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
@@ -277,7 +283,7 @@ impl NumericArray {
                 Err(shared) => Ok((*shared).clone()),
             },
             NumericArray::Float64(a) => Ok(FloatArray::<f32>::from(&*a)),
-            NumericArray::Null => Err(MinarrowError::NullError { message: None })
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
@@ -301,12 +307,12 @@ impl NumericArray {
                 Ok(inner) => Ok(inner),
                 Err(shared) => Ok((*shared).clone()),
             },
-            NumericArray::Null => Err(MinarrowError::NullError { message: None })
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
-    /// Converts to BooleanArray<u8>. 
-    /// 
+    /// Converts to BooleanArray<u8>.
+    ///
     /// All non-zero values become `true`, but the null mask is preserved.
     pub fn bool(self) -> Result<BooleanArray<u8>, MinarrowError> {
         match self {
@@ -324,12 +330,12 @@ impl NumericArray {
             NumericArray::UInt64(a) => Ok(BooleanArray::<u8>::from(&*a)),
             NumericArray::Float32(a) => Ok(BooleanArray::<u8>::from(&*a)),
             NumericArray::Float64(a) => Ok(BooleanArray::<u8>::from(&*a)),
-            NumericArray::Null => Err(MinarrowError::NullError { message: None })
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
-    /// Converts to StringArray<u32> by formatting each value as string. 
-    /// 
+    /// Converts to StringArray<u32> by formatting each value as string.
+    ///
     /// Preserves Null mask.
     pub fn str(self) -> Result<StringArray<u32>, MinarrowError> {
         match self {
@@ -347,7 +353,7 @@ impl NumericArray {
             NumericArray::UInt64(a) => Ok(StringArray::<u32>::from(&*a)),
             NumericArray::Float32(a) => Ok(StringArray::<u32>::from(&*a)),
             NumericArray::Float64(a) => Ok(StringArray::<u32>::from(&*a)),
-            NumericArray::Null => Err(MinarrowError::NullError { message: None })
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 }
@@ -356,31 +362,24 @@ impl Display for NumericArray {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             #[cfg(feature = "extended_numeric_types")]
-            NumericArray::Int8(arr) =>
-                write_numeric_array_with_header(f, "Int8", arr.as_ref()),
+            NumericArray::Int8(arr) => write_numeric_array_with_header(f, "Int8", arr.as_ref()),
             #[cfg(feature = "extended_numeric_types")]
-            NumericArray::Int16(arr) =>
-                write_numeric_array_with_header(f, "Int16", arr.as_ref()),
-            NumericArray::Int32(arr) =>
-                write_numeric_array_with_header(f, "Int32", arr.as_ref()),
-            NumericArray::Int64(arr) =>
-                write_numeric_array_with_header(f, "Int64", arr.as_ref()),
+            NumericArray::Int16(arr) => write_numeric_array_with_header(f, "Int16", arr.as_ref()),
+            NumericArray::Int32(arr) => write_numeric_array_with_header(f, "Int32", arr.as_ref()),
+            NumericArray::Int64(arr) => write_numeric_array_with_header(f, "Int64", arr.as_ref()),
             #[cfg(feature = "extended_numeric_types")]
-            NumericArray::UInt8(arr) =>
-                write_numeric_array_with_header(f, "UInt8", arr.as_ref()),
+            NumericArray::UInt8(arr) => write_numeric_array_with_header(f, "UInt8", arr.as_ref()),
             #[cfg(feature = "extended_numeric_types")]
-            NumericArray::UInt16(arr) =>
-                write_numeric_array_with_header(f, "UInt16", arr.as_ref()),
-            NumericArray::UInt32(arr) =>
-                write_numeric_array_with_header(f, "UInt32", arr.as_ref()),
-            NumericArray::UInt64(arr) =>
-                write_numeric_array_with_header(f, "UInt64", arr.as_ref()),
-            NumericArray::Float32(arr) =>
-                write_numeric_array_with_header(f, "Float32", arr.as_ref()),
-            NumericArray::Float64(arr) =>
-                write_numeric_array_with_header(f, "Float64", arr.as_ref()),
-            NumericArray::Null =>
-                writeln!(f, "NullNumericArray [0 values]"),
+            NumericArray::UInt16(arr) => write_numeric_array_with_header(f, "UInt16", arr.as_ref()),
+            NumericArray::UInt32(arr) => write_numeric_array_with_header(f, "UInt32", arr.as_ref()),
+            NumericArray::UInt64(arr) => write_numeric_array_with_header(f, "UInt64", arr.as_ref()),
+            NumericArray::Float32(arr) => {
+                write_numeric_array_with_header(f, "Float32", arr.as_ref())
+            }
+            NumericArray::Float64(arr) => {
+                write_numeric_array_with_header(f, "Float64", arr.as_ref())
+            }
+            NumericArray::Null => writeln!(f, "NullNumericArray [0 values]"),
         }
     }
 }
@@ -399,4 +398,103 @@ fn write_numeric_array_with_header<T>(
     )?;
     // Delegate row formatting
     Display::fmt(arr, f)
+}
+
+impl Shape for NumericArray {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
+    }
+}
+
+// TODO: Add cross-type casting
+impl Concatenate for NumericArray {
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        match (self, other) {
+            #[cfg(feature = "extended_numeric_types")]
+            (NumericArray::Int8(a), NumericArray::Int8(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::Int8(Arc::new(a.concat(b)?)))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            (NumericArray::Int16(a), NumericArray::Int16(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::Int16(Arc::new(a.concat(b)?)))
+            }
+            (NumericArray::Int32(a), NumericArray::Int32(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::Int32(Arc::new(a.concat(b)?)))
+            }
+            (NumericArray::Int64(a), NumericArray::Int64(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::Int64(Arc::new(a.concat(b)?)))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            (NumericArray::UInt8(a), NumericArray::UInt8(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::UInt8(Arc::new(a.concat(b)?)))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            (NumericArray::UInt16(a), NumericArray::UInt16(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::UInt16(Arc::new(a.concat(b)?)))
+            }
+            (NumericArray::UInt32(a), NumericArray::UInt32(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::UInt32(Arc::new(a.concat(b)?)))
+            }
+            (NumericArray::UInt64(a), NumericArray::UInt64(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::UInt64(Arc::new(a.concat(b)?)))
+            }
+            (NumericArray::Float32(a), NumericArray::Float32(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::Float32(Arc::new(a.concat(b)?)))
+            }
+            (NumericArray::Float64(a), NumericArray::Float64(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(NumericArray::Float64(Arc::new(a.concat(b)?)))
+            }
+            (NumericArray::Null, NumericArray::Null) => Ok(NumericArray::Null),
+            (lhs, rhs) => Err(MinarrowError::IncompatibleTypeError {
+                from: "NumericArray",
+                to: "NumericArray",
+                message: Some(format!(
+                    "Cannot concatenate mismatched NumericArray variants: {:?} and {:?}",
+                    variant_name(&lhs),
+                    variant_name(&rhs)
+                )),
+            }),
+        }
+    }
+}
+
+/// Helper function to get the variant name for error messages
+fn variant_name(arr: &NumericArray) -> &'static str {
+    match arr {
+        #[cfg(feature = "extended_numeric_types")]
+        NumericArray::Int8(_) => "Int8",
+        #[cfg(feature = "extended_numeric_types")]
+        NumericArray::Int16(_) => "Int16",
+        NumericArray::Int32(_) => "Int32",
+        NumericArray::Int64(_) => "Int64",
+        #[cfg(feature = "extended_numeric_types")]
+        NumericArray::UInt8(_) => "UInt8",
+        #[cfg(feature = "extended_numeric_types")]
+        NumericArray::UInt16(_) => "UInt16",
+        NumericArray::UInt32(_) => "UInt32",
+        NumericArray::UInt64(_) => "UInt64",
+        NumericArray::Float32(_) => "Float32",
+        NumericArray::Float64(_) => "Float64",
+        NumericArray::Null => "Null",
+    }
 }

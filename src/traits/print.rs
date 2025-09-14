@@ -1,20 +1,20 @@
 //! # **Print Module** - *Pretty Printing with Attitude*
-//! 
+//!
 //! Contains implementations of the Display trait
 //! and an additional `Print` trait which wraps it to provide
 //! `myobj.print()` for any object that implements it.
 use std::fmt::{self, Display, Formatter};
 
+use crate::{Array, Buffer, Float, NumericArray, TextArray};
 #[cfg(feature = "datetime")]
 use crate::{DatetimeArray, Integer, TemporalArray};
-use crate::{Array, Buffer,  Float, NumericArray, TextArray};
 
-pub (crate) const MAX_PREVIEW: usize = 50;
+pub(crate) const MAX_PREVIEW: usize = 50;
 
 /// # Print
-/// 
+///
 /// Loaded print trait for pretty printing tables
-/// 
+///
 /// Provides a more convenient way to activate `Display`
 /// for other types such as arrays via `myarr.print()`,
 /// avoiding the need to write `println!("{}", myarr);`
@@ -22,7 +22,7 @@ pub trait Print {
     #[inline]
     fn print(&self)
     where
-        Self: Display
+        Self: Display,
     {
         println!("{}", self);
     }
@@ -32,7 +32,7 @@ impl<T: Display> Print for T where T: Display {}
 
 // Helper functions
 
-pub (crate) fn value_to_string(arr: &Array, idx: usize) -> String {
+pub(crate) fn value_to_string(arr: &Array, idx: usize) -> String {
     // Null checks (handles absent mask too)
     if let Some(mask) = arr.null_mask() {
         if !mask.get(idx) {
@@ -56,7 +56,7 @@ pub (crate) fn value_to_string(arr: &Array, idx: usize) -> String {
             NumericArray::UInt16(a) => a.data[idx].to_string(),
             NumericArray::Float32(a) => format_float(a.data[idx] as f64),
             NumericArray::Float64(a) => format_float(a.data[idx]),
-            NumericArray::Null => "null".into()
+            NumericArray::Null => "null".into(),
         },
         // ------------------------- boolean ------------------------------
         Array::BooleanArray(b) => {
@@ -87,27 +87,23 @@ pub (crate) fn value_to_string(arr: &Array, idx: usize) -> String {
                 let key = cat.data[idx] as usize;
                 cat.unique_values[key].clone()
             }
-            TextArray::Null => "null".into()
+            TextArray::Null => "null".into(),
         },
         // ------------------------- datetime -----------------------------
         #[cfg(feature = "datetime")]
         Array::TemporalArray(inner) => match inner {
             TemporalArray::Datetime32(dt) => format_datetime_value(dt, idx),
             TemporalArray::Datetime64(dt) => format_datetime_value(dt, idx),
-            TemporalArray::Null => "null".into()
+            TemporalArray::Null => "null".into(),
         },
         // ------------------------- fallback -----------------------------
-        Array::Null => "null".into()
+        Array::Null => "null".into(),
     }
 }
 
-fn string_value<T: Copy>(
-    offsets: &Buffer<T>,
-    data: &Buffer<u8>,
-    idx: usize
-) -> String
+fn string_value<T: Copy>(offsets: &Buffer<T>, data: &Buffer<u8>, idx: usize) -> String
 where
-    T: Copy + Into<u64>
+    T: Copy + Into<u64>,
 {
     // Convert to u64, then to usize (explicitly)
     let start = offsets[idx].into() as usize;
@@ -119,7 +115,11 @@ where
     s.to_string()
 }
 
-pub (crate) fn print_rule(f: &mut Formatter<'_>, idx_width: usize, col_widths: &[usize]) -> fmt::Result {
+pub(crate) fn print_rule(
+    f: &mut Formatter<'_>,
+    idx_width: usize,
+    col_widths: &[usize],
+) -> fmt::Result {
     write!(f, "+{:-<w$}+", "", w = idx_width + 2)?; // idx column (+2 for spaces)
     for &w in col_widths {
         write!(f, "{:-<w$}+", "", w = w + 2)?; // +2 for spaces
@@ -127,11 +127,11 @@ pub (crate) fn print_rule(f: &mut Formatter<'_>, idx_width: usize, col_widths: &
     writeln!(f)
 }
 
-pub (crate) fn print_header_row(
+pub(crate) fn print_header_row(
     f: &mut Formatter<'_>,
     idx_width: usize,
     headers: &[String],
-    col_widths: &[usize]
+    col_widths: &[usize],
 ) -> fmt::Result {
     write!(f, "| {hdr:^w$} |", hdr = "idx", w = idx_width)?;
     for (hdr, &w) in headers.iter().zip(col_widths) {
@@ -140,10 +140,10 @@ pub (crate) fn print_header_row(
     writeln!(f)
 }
 
-pub (crate) fn print_ellipsis_row(
+pub(crate) fn print_ellipsis_row(
     f: &mut Formatter<'_>,
     idx_width: usize,
-    col_widths: &[usize]
+    col_widths: &[usize],
 ) -> fmt::Result {
     write!(f, "| {dots:^w$} |", dots = "…", w = idx_width)?;
     for &w in col_widths {
@@ -156,7 +156,7 @@ pub (crate) fn print_ellipsis_row(
 /// - Keeps up to 6 decimal digits
 /// - Trims trailing zeroes and unnecessary decimal point
 #[inline]
-pub (crate) fn format_float<T: Float + Display>(v: T) -> String {
+pub(crate) fn format_float<T: Float + Display>(v: T) -> String {
     let s = format!("{:.6}", v);
     if s.contains('.') {
         s.trim_end_matches('0').trim_end_matches('.').to_string()

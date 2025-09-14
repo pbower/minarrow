@@ -24,14 +24,13 @@ mod benchmarks_std {
 
     use arrow::array::{
         Array as ArrowArrayTrait, ArrayRef, Float64Array as ArrowF64Array,
-        Int64Array as ArrowI64Array
+        Int64Array as ArrowI64Array,
     };
     use minarrow::{Array, Buffer, FloatArray, IntegerArray, NumericArray, Vec64};
 
     const N: usize = 1_000;
 
     pub(crate) fn run_benchmark() {
-
         // ----------- Raw Vec<i64> -----------
         let raw_vec: Vec<i64> = (0..N as i64).collect();
         let start = Instant::now();
@@ -61,7 +60,7 @@ mod benchmarks_std {
         let start = Instant::now();
         let int_arr = IntegerArray {
             data: Buffer::from(min_data),
-            null_mask: None
+            null_mask: None,
         };
         let mut acc = 0i64;
         let slice = int_arr.data.as_slice();
@@ -69,7 +68,10 @@ mod benchmarks_std {
             acc += v;
         }
         let dur_minarrow_direct_i64 = start.elapsed();
-        println!("minarrow direct: IntegerArray sum = {}, {:?}", acc, dur_minarrow_direct_i64);
+        println!(
+            "minarrow direct: IntegerArray sum = {}, {:?}",
+            acc, dur_minarrow_direct_i64
+        );
         black_box(acc);
         std::mem::drop(int_arr);
 
@@ -82,7 +84,10 @@ mod benchmarks_std {
             acc += arr.value(i);
         }
         let dur_arrow_struct_i64 = start.elapsed();
-        println!("arrow-rs struct: Int64Array sum = {}, {:?}", acc, dur_arrow_struct_i64);
+        println!(
+            "arrow-rs struct: Int64Array sum = {}, {:?}",
+            acc, dur_arrow_struct_i64
+        );
         black_box(acc);
         std::mem::drop(arr);
 
@@ -91,7 +96,7 @@ mod benchmarks_std {
         let start = Instant::now();
         let array = Array::NumericArray(NumericArray::Int64(Arc::new(IntegerArray {
             data: Buffer::from(min_data),
-            null_mask: None
+            null_mask: None,
         })));
         let mut acc = 0i64;
         let int_arr = array.num().i64().unwrap();
@@ -100,7 +105,10 @@ mod benchmarks_std {
             acc += v;
         }
         let dur_minarrow_enum_i64 = start.elapsed();
-        println!("minarrow enum: IntegerArray sum = {}, {:?}", acc, dur_minarrow_enum_i64);
+        println!(
+            "minarrow enum: IntegerArray sum = {}, {:?}",
+            acc, dur_minarrow_enum_i64
+        );
         black_box(acc);
         std::mem::drop(int_arr);
 
@@ -115,7 +123,10 @@ mod benchmarks_std {
             }
         }
         let dur_arrow_dyn_i64 = start.elapsed();
-        println!("arrow-rs dyn: ArrayRef Int64Array sum = {}, {:?}", acc, dur_arrow_dyn_i64);
+        println!(
+            "arrow-rs dyn: ArrayRef Int64Array sum = {}, {:?}",
+            acc, dur_arrow_dyn_i64
+        );
         black_box(acc);
         std::mem::drop(arr_dyn);
 
@@ -148,7 +159,7 @@ mod benchmarks_std {
         let start = Instant::now();
         let float_arr = FloatArray {
             data: Buffer::from(min_data_f64),
-            null_mask: None
+            null_mask: None,
         };
         let mut acc = 0.0f64;
         let slice = float_arr.data.as_slice();
@@ -156,10 +167,13 @@ mod benchmarks_std {
             acc += v;
         }
         let dur_minarrow_direct_f64 = start.elapsed();
-        println!("minarrow direct: FloatArray sum = {}, {:?}", acc, dur_minarrow_direct_f64);
+        println!(
+            "minarrow direct: FloatArray sum = {}, {:?}",
+            acc, dur_minarrow_direct_f64
+        );
         black_box(acc);
         std::mem::drop(float_arr);
-        
+
         // ----------- Arrow f64 (struct direct) -----------
         let data_f64: Vec<f64> = (0..N as i64).map(|x| x as f64).collect();
         let start = Instant::now();
@@ -169,7 +183,10 @@ mod benchmarks_std {
             acc += arr.value(i);
         }
         let dur_arrow_struct_f64 = start.elapsed();
-        println!("arrow-rs struct: Float64Array sum = {}, {:?}", acc, dur_arrow_struct_f64);
+        println!(
+            "arrow-rs struct: Float64Array sum = {}, {:?}",
+            acc, dur_arrow_struct_f64
+        );
         black_box(acc);
         std::mem::drop(arr);
 
@@ -178,7 +195,7 @@ mod benchmarks_std {
         let start = Instant::now();
         let array = Array::NumericArray(NumericArray::Float64(Arc::new(FloatArray {
             data: Buffer::from(min_data_f64),
-            null_mask: None
+            null_mask: None,
         })));
         let mut acc = 0.0f64;
         let float_arr = array.num().f64().unwrap();
@@ -187,10 +204,12 @@ mod benchmarks_std {
             acc += v;
         }
         let dur_minarrow_enum_f64 = start.elapsed();
-        println!("minarrow enum: FloatArray sum = {}, {:?}", acc, dur_minarrow_enum_f64);
+        println!(
+            "minarrow enum: FloatArray sum = {}, {:?}",
+            acc, dur_minarrow_enum_f64
+        );
         black_box(acc);
         std::mem::drop(float_arr);
-
 
         // ----------- Arrow f64 (dynamic) -----------
         let data_f64: Vec<f64> = (0..N as i64).map(|x| x as f64).collect();
@@ -203,10 +222,12 @@ mod benchmarks_std {
             }
         }
         let dur_arrow_dyn_f64 = start.elapsed();
-        println!("arrow-rs dyn: Float64Array sum = {}, {:?}", acc, dur_arrow_dyn_f64);
+        println!(
+            "arrow-rs dyn: Float64Array sum = {}, {:?}",
+            acc, dur_arrow_dyn_f64
+        );
         black_box(acc);
         std::mem::drop(arr);
-
     }
 }
 

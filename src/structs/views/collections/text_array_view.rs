@@ -25,12 +25,14 @@
 //! - `offset + len <= array.len()`
 //! - `len` is the logical number of text elements in the view.
 
-use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
+use std::sync::OnceLock;
 
+use crate::enums::error::MinarrowError;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::{Array, ArrayV, BitmaskV, TextArray};
 
 /// # TextArrayView
@@ -58,7 +60,7 @@ pub struct TextArrayV {
     pub array: TextArray,
     pub offset: usize,
     len: usize,
-    null_count: Cell<Option<usize>>
+    null_count: OnceLock<usize>,
 }
 
 impl TextArrayV {
@@ -74,7 +76,7 @@ impl TextArrayV {
             array,
             offset,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 
@@ -86,11 +88,13 @@ impl TextArrayV {
             offset + len,
             array.len()
         );
+        let lock = OnceLock::new();
+        let _ = lock.set(null_count); // Pre-initialize with the provided count
         Self {
             array,
             offset,
             len,
-            null_count: Cell::new(Some(null_count))
+            null_count: lock,
         }
     }
 
@@ -118,19 +122,22 @@ impl TextArrayV {
             TextArray::Categorical16(arr) => arr.get_str(phys_idx),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(arr) => arr.get_str(phys_idx),
-            TextArray::Null => None
+            TextArray::Null => None,
         }
     }
 
     /// Returns a sliced view into a subrange of this view.
     #[inline]
     pub fn slice(&self, offset: usize, len: usize) -> Self {
-        assert!(offset + len <= self.len, "TextArrayView::slice: out of bounds");
+        assert!(
+            offset + len <= self.len,
+            "TextArrayView::slice: out of bounds"
+        );
         Self {
             array: self.array.clone(),
             offset: self.offset + offset,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 
@@ -170,27 +177,29 @@ impl TextArrayV {
     /// Caches it after the first calculation.
     #[inline]
     pub fn null_count(&self) -> usize {
-        if let Some(count) = self.null_count.get() {
-            return count;
-        }
-        let count = match self.array.null_mask() {
-            Some(mask) => mask.view(self.offset, self.len).count_zeros(),
-            None => 0
-        };
-        self.null_count.set(Some(count));
-        count
+        *self
+            .null_count
+            .get_or_init(|| match self.array.null_mask() {
+                Some(mask) => mask.view(self.offset, self.len).count_zeros(),
+                None => 0,
+            })
     }
 
     /// Returns the null mask as a windowed `BitmaskView`.
     #[inline]
     pub fn null_mask_view(&self) -> Option<BitmaskV> {
-        self.array.null_mask().map(|mask| mask.view(self.offset, self.len))
+        self.array
+            .null_mask()
+            .map(|mask| mask.view(self.offset, self.len))
     }
 
     /// Sets the cached null count for the view.
+    ///
+    /// Returns Ok(()) if the value was set, or Err(count) if it was already initialized.
+    /// This is thread-safe and can only succeed once per TextArrayV instance.
     #[inline]
-    pub fn set_null_count(&self, count: usize) {
-        self.null_count.set(Some(count));
+    pub fn set_null_count(&self, count: usize) -> Result<(), usize> {
+        self.null_count.set(count).map_err(|_| count)
     }
 }
 
@@ -201,7 +210,7 @@ impl From<TextArray> for TextArrayV {
             array,
             offset: 0,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 }
@@ -215,10 +224,10 @@ impl From<Array> for TextArrayV {
                     array: arr,
                     offset: 0,
                     len,
-                    null_count: Cell::new(None)
+                    null_count: OnceLock::new(),
                 }
             }
-            _ => panic!("Array is not a TextArray")
+            _ => panic!("Array is not a TextArray"),
         }
     }
 }
@@ -231,9 +240,9 @@ impl From<ArrayV> for TextArrayV {
                 array: inner,
                 offset,
                 len,
-                null_count: Cell::new(None)
+                null_count: OnceLock::new(),
             },
-            _ => panic!("From<ArrayView>: expected TextArray variant")
+            _ => panic!("From<ArrayView>: expected TextArray variant"),
         }
     }
 }
@@ -262,7 +271,7 @@ impl Display for TextArrayV {
             TextArray::Categorical16(_) => "Categorical16<u16>",
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(_) => "Categorical64<u64>",
-            TextArray::Null => "Null"
+            TextArray::Null => "Null",
         };
 
         writeln!(
@@ -277,7 +286,7 @@ impl Display for TextArrayV {
         for i in 0..max {
             match self.get_str(i) {
                 Some(s) => writeln!(f, "  \"{s}\"")?,
-                None => writeln!(f, "  ·")?
+                None => writeln!(f, "  ·")?,
             }
         }
 
@@ -292,6 +301,26 @@ impl Display for TextArrayV {
 impl Shape for TextArrayV {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
+    }
+}
+
+impl Concatenate for TextArrayV {
+    /// Concatenates two text array views by materializing both to owned text arrays,
+    /// concatenating them, and wrapping the result back in a view.
+    ///
+    /// # Notes
+    /// - This operation copies data from both views to create owned text arrays.
+    /// - The resulting view has offset=0 and length equal to the combined length.
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Materialize both views to owned text arrays
+        let self_array = self.to_text_array();
+        let other_array = other.to_text_array();
+
+        // Concatenate the owned text arrays
+        let concatenated = self_array.concat(other_array)?;
+
+        // Wrap the result in a new view
+        Ok(TextArrayV::from(concatenated))
     }
 }
 
@@ -344,8 +373,10 @@ mod tests {
         let text = TextArray::String32(Arc::new(arr));
         let view = TextArrayV::with_null_count(text, 0, 2, 99);
         assert_eq!(view.null_count(), 99);
-        view.set_null_count(101);
-        assert_eq!(view.null_count(), 101);
+        // Trying to set again should fail since it's already initialized
+        assert!(view.set_null_count(101).is_err());
+        // Still returns original value
+        assert_eq!(view.null_count(), 99);
     }
 
     #[test]

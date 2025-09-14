@@ -1,5 +1,5 @@
 //! # **Array Module** - *Main High-Level Array Type*
-//! 
+//!
 //! `Array` is the primary unified container for all array types in Minarrow.
 //!   
 //! ## Features:
@@ -14,6 +14,8 @@ use std::any::TypeId;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
+#[cfg(any(feature = "cast_arrow", feature = "cast_polars"))]
+use crate::Field;
 #[cfg(feature = "cast_arrow")]
 use crate::ffi::arrow_c_ffi::export_to_c;
 #[cfg(feature = "cast_arrow")]
@@ -22,8 +24,6 @@ use crate::ffi::schema::Schema;
 use arrow::array::{ArrayRef, make_array};
 #[cfg(feature = "cast_arrow")]
 use arrow::ffi::{FFI_ArrowArray, FFI_ArrowSchema};
-#[cfg(any(feature = "cast_arrow", feature = "cast_polars"))]
-use crate::Field;
 
 #[cfg(feature = "views")]
 use crate::ArrayV;
@@ -33,15 +33,18 @@ use crate::ArrayVT;
 use crate::DatetimeArray;
 #[cfg(feature = "datetime")]
 use crate::TemporalArray;
+use crate::enums::error::MinarrowError;
+use crate::enums::shape_dim::ShapeDim;
 use crate::ffi::arrow_dtype::{ArrowType, CategoricalIndexType};
+use crate::traits::{concatenate::Concatenate, shape::Shape};
 use crate::utils::{float_to_text_array, int_to_text_array};
 use crate::{
-    Bitmask, BooleanArray, CategoricalArray, FloatArray, IntegerArray, MaskedArray,
-    NumericArray, StringArray, TextArray, Vec64, match_array,
+    Bitmask, BooleanArray, CategoricalArray, FloatArray, IntegerArray, MaskedArray, NumericArray,
+    StringArray, TextArray, Vec64, match_array,
 };
 
 /// # Array
-/// 
+///
 /// Standard `Array` type. Wrap in a `FieldArray` when using inside a `Table`
 /// or as a standalone value requiring tagged metadata.
 ///
@@ -54,16 +57,16 @@ use crate::{
 /// - Supports ergonomic categorisation: functions typically match on the
 ///   outer enum for broad category handling *(numeric, text, temporal, boolean)*,
 ///   while allowing inner variant matching for precise type handling.
-/// - The focused typeset (no nested types) helps keeps enum size efficient 
+/// - The focused typeset (no nested types) helps keeps enum size efficient
 ///   as memory is allocated for the largest variant.
-/// 
+///
 /// ## Usage
 /// Functions can accept references tailored to the intended match granularity:
 ///
 /// - `&IntegerArray`: direct reference to the inner type e.g., `arr.num().i64()`.
 /// - `&NumericArray`: any numeric type via `arr.num()`.
 /// - `&Array`: match on categories or individual types.
-/// 
+///
 /// ## Benefits
 /// - No heap allocation or runtime indirection — all enum variants are inline
 ///   with minimal discriminant cost.
@@ -71,7 +74,7 @@ use crate::{
 /// - Easy casting to inner types (e.g., `.str()` for strings).
 /// - Supports aggressive compiler inlining, unlike approaches relying on
 ///   dynamic dispatch and downcasting.
-/// 
+///
 /// ## Trade-offs
 /// - Adds ~30–100 ns latency compared to direct inner type calls — only
 ///   noticeable in extreme low-latency contexts such as HFT.
@@ -1373,6 +1376,90 @@ impl Array {
         }
     }
 
+    /// Set null mask on Array by matching on variants
+    pub fn set_null_mask(&self, array: &mut Array, mask: Bitmask) {
+        match array {
+            Array::NumericArray(num_arr) => {
+                match num_arr {
+                    NumericArray::Int32(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    NumericArray::Int64(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    NumericArray::Float32(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    NumericArray::Float64(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    #[cfg(feature = "extended_numeric_types")]
+                    NumericArray::Int8(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    #[cfg(feature = "extended_numeric_types")]
+                    NumericArray::Int16(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    #[cfg(feature = "extended_numeric_types")]
+                    NumericArray::UInt8(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    #[cfg(feature = "extended_numeric_types")]
+                    NumericArray::UInt16(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    NumericArray::UInt32(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    NumericArray::UInt64(arr) => {
+                        Arc::make_mut(arr).set_null_mask(Some(mask));
+                    }
+                    NumericArray::Null => {} // No-op for null arrays
+                }
+            }
+            Array::TextArray(text_arr) => match text_arr {
+                TextArray::String32(arr) => {
+                    Arc::make_mut(arr).set_null_mask(Some(mask));
+                }
+                #[cfg(feature = "large_string")]
+                TextArray::String64(arr) => {
+                    Arc::make_mut(arr).set_null_mask(Some(mask));
+                }
+                TextArray::Categorical32(arr) => {
+                    Arc::make_mut(arr).set_null_mask(Some(mask));
+                }
+                #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+                TextArray::Categorical8(arr) => {
+                    Arc::make_mut(arr).set_null_mask(Some(mask));
+                }
+                #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+                TextArray::Categorical16(arr) => {
+                    Arc::make_mut(arr).set_null_mask(Some(mask));
+                }
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(arr) => {
+                    Arc::make_mut(arr).set_null_mask(Some(mask));
+                }
+                TextArray::Null => {}
+            },
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(temp_arr) => match temp_arr {
+                TemporalArray::Datetime32(arr) => {
+                    Arc::make_mut(arr).set_null_mask(Some(mask));
+                }
+                TemporalArray::Datetime64(arr) => {
+                    Arc::make_mut(arr).set_null_mask(Some(mask));
+                }
+                TemporalArray::Null => {}
+            },
+            Array::BooleanArray(arr) => {
+                Arc::make_mut(arr).set_null_mask(Some(mask));
+            }
+            Array::Null => {}
+        }
+    }
+
     /// Returns a pointer to the backing data (contiguous bytes), length in elements, and element size.
     ///
     /// This is not logical length - it is total raw bytes in the buffer, so for non-fixed width
@@ -2063,9 +2150,6 @@ macro_rules! arr_i8 {
     };
     // Handle literal arrays
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
-
         // Check if any element is None by trying to match patterns
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_int8($crate::IntegerArray::<i8>::from_vec64(temp_vec, None))
@@ -2083,8 +2167,7 @@ macro_rules! arr_i16 {
         $crate::Array::from_int16($crate::IntegerArray::<i16>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_int16($crate::IntegerArray::<i16>::from_vec64(temp_vec, None))
     }};
@@ -2099,8 +2182,8 @@ macro_rules! arr_i32 {
         $crate::Array::from_int32($crate::IntegerArray::<i32>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_int32($crate::IntegerArray::<i32>::from_vec64(temp_vec, None))
     }};
@@ -2115,8 +2198,8 @@ macro_rules! arr_i64 {
         $crate::Array::from_int64($crate::IntegerArray::<i64>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_int64($crate::IntegerArray::<i64>::from_vec64(temp_vec, None))
     }};
@@ -2132,8 +2215,8 @@ macro_rules! arr_u8 {
         $crate::Array::from_uint8($crate::IntegerArray::<u8>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_uint8($crate::IntegerArray::<u8>::from_vec64(temp_vec, None))
     }};
@@ -2149,8 +2232,8 @@ macro_rules! arr_u16 {
         $crate::Array::from_uint16($crate::IntegerArray::<u16>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_uint16($crate::IntegerArray::<u16>::from_vec64(temp_vec, None))
     }};
@@ -2165,8 +2248,8 @@ macro_rules! arr_u32 {
         $crate::Array::from_uint32($crate::IntegerArray::<u32>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_uint32($crate::IntegerArray::<u32>::from_vec64(temp_vec, None))
     }};
@@ -2181,8 +2264,8 @@ macro_rules! arr_u64 {
         $crate::Array::from_uint64($crate::IntegerArray::<u64>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_uint64($crate::IntegerArray::<u64>::from_vec64(temp_vec, None))
     }};
@@ -2199,8 +2282,8 @@ macro_rules! arr_f32 {
         $crate::Array::from_float32($crate::FloatArray::<f32>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_float32($crate::FloatArray::<f32>::from_vec64(temp_vec, None))
     }};
@@ -2215,8 +2298,8 @@ macro_rules! arr_f64 {
         $crate::Array::from_float64($crate::FloatArray::<f64>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_float64($crate::FloatArray::<f64>::from_vec64(temp_vec, None))
     }};
@@ -2233,8 +2316,8 @@ macro_rules! arr_bool {
         $crate::Array::from_bool($crate::BooleanArray::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_bool($crate::BooleanArray::from_vec64(temp_vec, None))
     }};
@@ -2251,8 +2334,8 @@ macro_rules! arr_str32 {
         $crate::Array::from_string32($crate::StringArray::<u32>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_string32($crate::StringArray::<u32>::from_vec64(temp_vec, None))
     }};
@@ -2268,8 +2351,8 @@ macro_rules! arr_str64 {
         $crate::Array::from_string64($crate::StringArray::<u64>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_string64($crate::StringArray::<u64>::from_vec64(temp_vec, None))
     }};
@@ -2287,8 +2370,8 @@ macro_rules! arr_cat8 {
         $crate::Array::from_categorical8($crate::CategoricalArray::<u8>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_categorical8($crate::CategoricalArray::<u8>::from_vec64(temp_vec, None))
     }};
@@ -2304,8 +2387,8 @@ macro_rules! arr_cat16 {
         $crate::Array::from_categorical16($crate::CategoricalArray::<u16>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_categorical16($crate::CategoricalArray::<u16>::from_vec64(temp_vec, None))
     }};
@@ -2320,8 +2403,8 @@ macro_rules! arr_cat32 {
         $crate::Array::from_categorical32($crate::CategoricalArray::<u32>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_categorical32($crate::CategoricalArray::<u32>::from_vec64(temp_vec, None))
     }};
@@ -2337,8 +2420,8 @@ macro_rules! arr_cat64 {
         $crate::Array::from_categorical64($crate::CategoricalArray::<u64>::from_vec64($v, None))
     };
     ($($x:expr),+ $(,)?) => {{
-        #[allow(unused_imports)]
-        use $crate::Vec64;
+
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_categorical64($crate::CategoricalArray::<u64>::from_vec64(temp_vec, None))
     }};
@@ -2357,11 +2440,13 @@ macro_rules! arr_i8_opt {
         $crate::Array::from_int8($crate::IntegerArray::<i8>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_int8($crate::IntegerArray::<i8>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_int8($crate::IntegerArray::<i8>::from_vec64(vals, mask))
@@ -2376,11 +2461,13 @@ macro_rules! arr_i16_opt {
         $crate::Array::from_int16($crate::IntegerArray::<i16>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_int16($crate::IntegerArray::<i16>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_int16($crate::IntegerArray::<i16>::from_vec64(vals, mask))
@@ -2394,11 +2481,13 @@ macro_rules! arr_i32_opt {
         $crate::Array::from_int32($crate::IntegerArray::<i32>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_int32($crate::IntegerArray::<i32>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_int32($crate::IntegerArray::<i32>::from_vec64(vals, mask))
@@ -2412,11 +2501,13 @@ macro_rules! arr_i64_opt {
         $crate::Array::from_int64($crate::IntegerArray::<i64>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_int64($crate::IntegerArray::<i64>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_int64($crate::IntegerArray::<i64>::from_vec64(vals, mask))
@@ -2433,11 +2524,13 @@ macro_rules! arr_u8_opt {
         $crate::Array::from_uint8($crate::IntegerArray::<u8>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_uint8($crate::IntegerArray::<u8>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_uint8($crate::IntegerArray::<u8>::from_vec64(vals, mask))
@@ -2452,11 +2545,13 @@ macro_rules! arr_u16_opt {
         $crate::Array::from_uint16($crate::IntegerArray::<u16>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_uint16($crate::IntegerArray::<u16>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_uint16($crate::IntegerArray::<u16>::from_vec64(vals, mask))
@@ -2470,11 +2565,13 @@ macro_rules! arr_u32_opt {
         $crate::Array::from_uint32($crate::IntegerArray::<u32>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_uint32($crate::IntegerArray::<u32>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_uint32($crate::IntegerArray::<u32>::from_vec64(vals, mask))
@@ -2488,11 +2585,13 @@ macro_rules! arr_u64_opt {
         $crate::Array::from_uint64($crate::IntegerArray::<u64>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_uint64($crate::IntegerArray::<u64>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_uint64($crate::IntegerArray::<u64>::from_vec64(vals, mask))
@@ -2508,11 +2607,13 @@ macro_rules! arr_f32_opt {
         $crate::Array::from_float32($crate::FloatArray::<f32>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_float32($crate::FloatArray::<f32>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_float32($crate::FloatArray::<f32>::from_vec64(vals, mask))
@@ -2526,11 +2627,13 @@ macro_rules! arr_f64_opt {
         $crate::Array::from_float64($crate::FloatArray::<f64>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_float64($crate::FloatArray::<f64>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_float64($crate::FloatArray::<f64>::from_vec64(vals, mask))
@@ -2546,11 +2649,13 @@ macro_rules! arr_bool_opt {
         $crate::Array::from_bool($crate::BooleanArray::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_bool($crate::BooleanArray::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_option_values64(temp_vec);
         $crate::Array::from_bool($crate::BooleanArray::from_vec64(vals, mask))
@@ -2566,11 +2671,13 @@ macro_rules! arr_str32_opt {
         $crate::Array::from_string32($crate::StringArray::<u32>::from_vec64_owned(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_string_option_values64_owned(temp_vec);
         $crate::Array::from_string32($crate::StringArray::<u32>::from_vec64_owned(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_string_option_values64_owned(temp_vec);
         $crate::Array::from_string32($crate::StringArray::<u32>::from_vec64_owned(vals, mask))
@@ -2585,11 +2692,13 @@ macro_rules! arr_str64_opt {
         $crate::Array::from_string64($crate::StringArray::<u64>::from_vec64_owned(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_string_option_values64_owned(temp_vec);
         $crate::Array::from_string64($crate::StringArray::<u64>::from_vec64_owned(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_string_option_values64_owned(temp_vec);
         $crate::Array::from_string64($crate::StringArray::<u64>::from_vec64_owned(vals, mask))
@@ -2606,11 +2715,13 @@ macro_rules! arr_cat8_opt {
         $crate::Array::from_categorical8($crate::CategoricalArray::<u8>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_categorical_option_values64(temp_vec);
         $crate::Array::from_categorical8($crate::CategoricalArray::<u8>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_categorical_option_values64(temp_vec);
         $crate::Array::from_categorical8($crate::CategoricalArray::<u8>::from_vec64(vals, mask))
@@ -2625,11 +2736,13 @@ macro_rules! arr_cat16_opt {
         $crate::Array::from_categorical16($crate::CategoricalArray::<u16>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_categorical_option_values64(temp_vec);
         $crate::Array::from_categorical16($crate::CategoricalArray::<u16>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_categorical_option_values64(temp_vec);
         $crate::Array::from_categorical16($crate::CategoricalArray::<u16>::from_vec64(vals, mask))
@@ -2643,11 +2756,13 @@ macro_rules! arr_cat32_opt {
         $crate::Array::from_categorical32($crate::CategoricalArray::<u32>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_categorical_option_values64(temp_vec);
         $crate::Array::from_categorical32($crate::CategoricalArray::<u32>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_categorical_option_values64(temp_vec);
         $crate::Array::from_categorical32($crate::CategoricalArray::<u32>::from_vec64(vals, mask))
@@ -2662,11 +2777,13 @@ macro_rules! arr_cat64_opt {
         $crate::Array::from_categorical64($crate::CategoricalArray::<u64>::from_vec64(vals, mask))
     }};
     ($($x:expr),+ $(,)?) => {{
+        use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         let (vals, mask) = $crate::enums::array::extract_categorical_option_values64(temp_vec);
         $crate::Array::from_categorical64($crate::CategoricalArray::<u64>::from_vec64(vals, mask))
     }};
     () => {{
+        use $crate::vec64;
         let temp_vec = vec64![];
         let (vals, mask) = $crate::enums::array::extract_categorical_option_values64(temp_vec);
         $crate::Array::from_categorical64($crate::CategoricalArray::<u64>::from_vec64(vals, mask))
@@ -2856,7 +2973,6 @@ mod tests {
         assert!(a.is_nullable());
     }
 
-    
     #[test]
     fn test_array_enum_slice() {
         use crate::{Array, ArrayVT};
@@ -3617,5 +3733,145 @@ mod macro_tests {
         } else {
             panic!("Wrong variants");
         }
+    }
+}
+
+impl Shape for Array {
+    fn shape(&self) -> ShapeDim {
+        match self {
+            Array::NumericArray(numeric_array) => numeric_array.shape(),
+            Array::TextArray(text_array) => text_array.shape(),
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(temporal_array) => temporal_array.shape(),
+            Array::BooleanArray(boolean_array) => boolean_array.shape(),
+            Array::Null => ShapeDim::Rank0(0),
+        }
+    }
+}
+
+impl Concatenate for Array {
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        match (self, other) {
+            (Array::NumericArray(a), Array::NumericArray(b)) => {
+                Ok(Array::NumericArray(a.concat(b)?))
+            }
+            (Array::TextArray(a), Array::TextArray(b)) => Ok(Array::TextArray(a.concat(b)?)),
+            #[cfg(feature = "datetime")]
+            (Array::TemporalArray(a), Array::TemporalArray(b)) => {
+                Ok(Array::TemporalArray(a.concat(b)?))
+            }
+            (Array::BooleanArray(a), Array::BooleanArray(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(Array::BooleanArray(Arc::new(a.concat(b)?)))
+            }
+            (Array::Null, Array::Null) => Ok(Array::Null),
+            (lhs, rhs) => Err(MinarrowError::IncompatibleTypeError {
+                from: "Array",
+                to: "Array",
+                message: Some(format!(
+                    "Cannot concatenate mismatched Array categories: {} and {}",
+                    array_category_name(&lhs),
+                    array_category_name(&rhs)
+                )),
+            }),
+        }
+    }
+}
+
+/// Helper function to get the category name for error messages
+fn array_category_name(arr: &Array) -> &'static str {
+    match arr {
+        Array::NumericArray(_) => "NumericArray",
+        Array::TextArray(_) => "TextArray",
+        #[cfg(feature = "datetime")]
+        Array::TemporalArray(_) => "TemporalArray",
+        Array::BooleanArray(_) => "BooleanArray",
+        Array::Null => "Null",
+    }
+}
+
+#[cfg(test)]
+mod concat_tests {
+    use super::*;
+    use crate::{IntegerArray, StringArray};
+
+    #[test]
+    fn test_array_concat_numeric() {
+        let arr1 = Array::from_int32(IntegerArray::from_slice(&[1, 2, 3]));
+        let arr2 = Array::from_int32(IntegerArray::from_slice(&[4, 5, 6]));
+
+        let result = arr1.concat(arr2).unwrap();
+
+        match result {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.len(), 6);
+                assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4, 5, 6]);
+            }
+            _ => panic!("Expected Int32 array"),
+        }
+    }
+
+    #[test]
+    fn test_array_concat_text() {
+        let arr1 = Array::from_string32(StringArray::from_slice(&["a", "b"]));
+        let arr2 = Array::from_string32(StringArray::from_slice(&["c", "d"]));
+
+        let result = arr1.concat(arr2).unwrap();
+
+        match result {
+            Array::TextArray(TextArray::String32(arr)) => {
+                assert_eq!(arr.len(), 4);
+                assert_eq!(arr.get_str(0), Some("a"));
+                assert_eq!(arr.get_str(1), Some("b"));
+                assert_eq!(arr.get_str(2), Some("c"));
+                assert_eq!(arr.get_str(3), Some("d"));
+            }
+            _ => panic!("Expected String32 array"),
+        }
+    }
+
+    #[test]
+    fn test_array_concat_boolean() {
+        let arr1 = Array::from_bool(BooleanArray::from_slice(&[true, false, true]));
+        let arr2 = Array::from_bool(BooleanArray::from_slice(&[false, true]));
+
+        let result = arr1.concat(arr2).unwrap();
+
+        match result {
+            Array::BooleanArray(arr) => {
+                assert_eq!(arr.len(), 5);
+                assert_eq!(arr.get(0), Some(true));
+                assert_eq!(arr.get(1), Some(false));
+                assert_eq!(arr.get(2), Some(true));
+                assert_eq!(arr.get(3), Some(false));
+                assert_eq!(arr.get(4), Some(true));
+            }
+            _ => panic!("Expected BooleanArray"),
+        }
+    }
+
+    #[test]
+    fn test_array_concat_mismatched_types() {
+        let arr1 = Array::from_int32(IntegerArray::from_slice(&[1, 2, 3]));
+        let arr2 = Array::from_string32(StringArray::from_slice(&["a", "b"]));
+
+        let result = arr1.concat(arr2);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            MinarrowError::IncompatibleTypeError { .. }
+        ));
+    }
+
+    #[test]
+    fn test_array_concat_null() {
+        let arr1 = Array::Null;
+        let arr2 = Array::Null;
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert!(matches!(result, Array::Null));
     }
 }

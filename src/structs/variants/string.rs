@@ -1,4 +1,4 @@
-//! # **StringArray Module** - *Mid-Level, Inner Typed String Array* 
+//! # **StringArray Module** - *Mid-Level, Inner Typed String Array*
 //!
 //! Arrow-compatible UTF-8, variable-length string array backed by a compact
 //! `offsets + data (+ optional null_mask)` layout.
@@ -36,16 +36,17 @@ use num_traits::{NumCast, Zero};
 #[cfg(feature = "parallel_proc")]
 use rayon::iter::ParallelIterator;
 
-use crate::structs::vec64::Vec64;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::masked_array::MaskedArray;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::traits::type_unions::Integer;
 use crate::utils::validate_null_mask_len;
 use crate::{
     Bitmask, Buffer, CategoricalArray, Length, Offset, StringAVT, impl_arc_masked_array, vec64,
 };
+use vec64::Vec64;
 
 /// # StringArray
 ///
@@ -1023,41 +1024,42 @@ impl<T: Integer> MaskedArray for StringArray<T> {
         let values: Vec<Self::LogicalType> = iter.collect();
         let start_len = self.len();
         let total_bytes: usize = values.iter().map(|s| s.len()).sum();
-        
+
         // Extend data and offsets to proper length
         let current_data_len = self.data.len();
         self.data.resize(current_data_len + total_bytes, 0);
-        self.offsets.resize(start_len + values.len() + 1, T::from_usize(0));
+        self.offsets
+            .resize(start_len + values.len() + 1, T::from_usize(0));
         // Extend null mask if it exists
         if let Some(mask) = &mut self.null_mask {
             mask.resize(start_len + values.len(), true);
         }
-        
+
         // Now use unchecked operations since we have proper length
         let mut byte_offset = current_data_len;
         for (i, value) in values.iter().enumerate() {
             let string_bytes = value.as_bytes();
             let offset_idx = start_len + i;
-            
+
             // Set the offset for this string
             {
                 let offsets = self.offsets.as_mut_slice();
                 offsets[offset_idx] = T::from_usize(byte_offset);
             }
-            
+
             // Copy string bytes
             {
                 let data = self.data.as_mut_slice();
                 data[byte_offset..byte_offset + string_bytes.len()].copy_from_slice(string_bytes);
             }
-            
+
             byte_offset += string_bytes.len();
-            
+
             if let Some(mask) = &mut self.null_mask {
                 unsafe { mask.set_unchecked(offset_idx, true) };
             }
         }
-        
+
         // Set final offset
         {
             let offsets = self.offsets.as_mut_slice();
@@ -1073,41 +1075,42 @@ impl<T: Integer> MaskedArray for StringArray<T> {
         let total_bytes: usize = slice.iter().map(|s| s.len()).sum();
         self.data.reserve(total_bytes);
         self.offsets.reserve(slice.len());
-        
+
         // Extend data and offsets to proper length
         let current_data_len = self.data.len();
         self.data.resize(current_data_len + total_bytes, 0);
-        self.offsets.resize(start_len + slice.len() + 1, T::from_usize(0));
+        self.offsets
+            .resize(start_len + slice.len() + 1, T::from_usize(0));
         // Extend null mask if it exists
         if let Some(mask) = &mut self.null_mask {
             mask.resize(start_len + slice.len(), true);
         }
-        
+
         // Now use unchecked operations since we have proper length
         let mut byte_offset = current_data_len;
         for (i, value) in slice.iter().enumerate() {
             let string_bytes = value.as_bytes();
             let offset_idx = start_len + i;
-            
+
             // Set the offset for this string
             {
                 let offsets = self.offsets.as_mut_slice();
                 offsets[offset_idx] = T::from_usize(byte_offset);
             }
-            
+
             // Copy string bytes
             {
                 let data = self.data.as_mut_slice();
                 data[byte_offset..byte_offset + string_bytes.len()].copy_from_slice(string_bytes);
             }
-            
+
             byte_offset += string_bytes.len();
-            
+
             if let Some(mask) = &mut self.null_mask {
                 unsafe { mask.set_unchecked(offset_idx, true) };
             }
         }
-        
+
         // Set final offset
         {
             let offsets = self.offsets.as_mut_slice();
@@ -1121,37 +1124,37 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     fn fill(value: Self::LogicalType, count: usize) -> Self {
         let total_bytes = value.len() * count;
         let mut array = StringArray::<T>::with_capacity(count, total_bytes, false);
-        
+
         // Extend data and offsets to proper length
         array.data.resize(total_bytes, 0);
         array.offsets.resize(count + 1, T::from_usize(0));
-        
+
         let string_bytes = value.as_bytes();
         let string_len = string_bytes.len();
-        
+
         // Now use unchecked operations since we have proper length
         for i in 0..count {
             let byte_offset = i * string_len;
-            
+
             // Set the offset for this string
             {
                 let offsets = array.offsets.as_mut_slice();
                 offsets[i] = T::from_usize(byte_offset);
             }
-            
+
             // Copy string bytes
             {
                 let data = array.data.as_mut_slice();
                 data[byte_offset..byte_offset + string_len].copy_from_slice(string_bytes);
             }
         }
-        
+
         // Set final offset
         {
             let offsets = array.offsets.as_mut_slice();
             offsets[count] = T::from_usize(total_bytes);
         }
-        
+
         array
     }
 }
@@ -1287,6 +1290,17 @@ impl_arc_masked_array!(
 impl<T: Integer> Shape for StringArray<T> {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
+    }
+}
+
+impl<T: Integer> Concatenate for StringArray<T> {
+    fn concat(
+        mut self,
+        other: Self,
+    ) -> core::result::Result<Self, crate::enums::error::MinarrowError> {
+        // Consume other and extend self with its data
+        self.append_array(&other);
+        Ok(self)
     }
 }
 
@@ -1649,9 +1663,9 @@ mod tests {
     fn test_batch_extend_from_iter_with_capacity() {
         let mut arr = StringArray::<u32>::default();
         let data = vec!["hello".to_string(), "world".to_string(), "test".to_string()];
-        
+
         arr.extend_from_iter_with_capacity(data.into_iter(), 20); // pre-allocate byte capacity
-        
+
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.get(0), Some("hello"));
         assert_eq!(arr.get(1), Some("world"));
@@ -1663,10 +1677,10 @@ mod tests {
         let mut arr = StringArray::<u32>::with_capacity(10, 50, true);
         arr.push("start".to_string());
         arr.push_null();
-        
+
         let data = &["alpha".to_string(), "beta".to_string(), "gamma".to_string()];
         arr.extend_from_slice(data);
-        
+
         assert_eq!(arr.len(), 5);
         assert_eq!(arr.get(0), Some("start"));
         assert_eq!(arr.get(1), None);
@@ -1679,13 +1693,13 @@ mod tests {
     #[test]
     fn test_batch_fill_repeated_string() {
         let arr = StringArray::<u32>::fill("repeated".to_string(), 50);
-        
+
         assert_eq!(arr.len(), 50);
         assert_eq!(arr.null_count(), 0);
         for i in 0..50 {
             assert_eq!(arr.get(i), Some("repeated"));
         }
-        
+
         // Verify efficient memory usage: 50 * "repeated".len() bytes + offsets
         let expected_bytes = 50 * "repeated".len();
         assert_eq!(arr.data.len(), expected_bytes);
@@ -1695,9 +1709,9 @@ mod tests {
     fn test_batch_operations_empty_strings() {
         let mut arr = StringArray::<u32>::default();
         let data = &["".to_string(), "non-empty".to_string(), "".to_string()];
-        
+
         arr.extend_from_slice(data);
-        
+
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.get(0), Some(""));
         assert_eq!(arr.get(1), Some("non-empty"));
@@ -1708,12 +1722,48 @@ mod tests {
     fn test_batch_fill_large_strings() {
         let large_string = "x".repeat(1000);
         let arr = StringArray::<u32>::fill(large_string.clone(), 10);
-        
+
         assert_eq!(arr.len(), 10);
         for i in 0..10 {
             assert_eq!(arr.get(i), Some(large_string.as_str()));
         }
         assert_eq!(arr.data.len(), 10000); // 10 * 1000 bytes
+    }
+
+    #[test]
+    fn test_string_array_concat() {
+        let arr1 = StringArray::<u32>::from_slice(&["hello", "world"]);
+        let arr2 = StringArray::<u32>::from_slice(&["foo", "bar"]);
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 4);
+        assert_eq!(result.get_str(0), Some("hello"));
+        assert_eq!(result.get_str(1), Some("world"));
+        assert_eq!(result.get_str(2), Some("foo"));
+        assert_eq!(result.get_str(3), Some("bar"));
+    }
+
+    #[test]
+    fn test_string_array_concat_with_nulls() {
+        let mut arr1 = StringArray::<u32>::with_capacity(3, 16, true);
+        arr1.push_str("first");
+        arr1.push_null();
+        arr1.push_str("second");
+
+        let mut arr2 = StringArray::<u32>::with_capacity(2, 16, true);
+        arr2.push_str("third");
+        arr2.push_null();
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.get_str(0), Some("first"));
+        assert_eq!(result.get_str(1), None);
+        assert_eq!(result.get_str(2), Some("second"));
+        assert_eq!(result.get_str(3), Some("third"));
+        assert_eq!(result.get_str(4), None);
+        assert_eq!(result.null_count(), 2);
     }
 }
 

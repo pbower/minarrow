@@ -30,32 +30,31 @@ use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use super::field_array::FieldArray;
 #[cfg(feature = "views")]
-use crate::aliases::CubeV;
-use crate::ffi::arrow_dtype::ArrowType;
-use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
-use crate::{Field, Table};
-#[cfg(feature = "views")]
 use crate::TableV;
+#[cfg(feature = "views")]
+use crate::aliases::CubeV;
+use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
+use crate::ffi::arrow_dtype::ArrowType;
+use crate::traits::{concatenate::Concatenate, shape::Shape};
+use crate::{Field, Table};
 
 // Global counter for unnamed cube instances
 static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
-
 /// # Cube - 3D Type for Advanced Analysis Use Cases
-/// 
+///
 /// Holds a vector of tables unified by some value, often `Time`,
 /// for special indexing. Useful for data analysis.
-/// 
+///
 /// ## Purpose
 /// Useful when the tables represent discrete time snapshots,
 /// or a category dimension. This enables comparing data without losing
 /// the underlying grain through aggregation, whilst still supporting that.
-/// 
+///
 /// ## Description
-/// **This is an optional extra enabled by the `cube` feature, 
+/// **This is an optional extra enabled by the `cube` feature,
 /// and is not part of the *`Apache Arrow`* framework**.
-/// 
+///
 /// ### Under Development
 /// ⚠️ **Unstable API and WIP: expect future development. Breaking changes will be minimised,
 /// but avoid using this in production unless you are ready to wear API adjustments**.
@@ -66,32 +65,36 @@ pub struct Cube {
     pub tables: Vec<Table>,
     /// Number of rows in each table
     pub n_rows: Vec<usize>,
-    
+
     /// Cube name
     pub name: String,
     // Third-dimensional index column names
     // It's a vec, as there are cases where one will
     // want to compound the index using time.
-    pub third_dim_index: Option<Vec<String>>
+    pub third_dim_index: Option<Vec<String>>,
 }
 
 impl Cube {
     /// Constructs a new Cube with a specified name and optional set of columns.
-    /// If `cols` is provided, the columns are used to create the first table. 
-    /// The number of rows will be inferred from the first column. 
+    /// If `cols` is provided, the columns are used to create the first table.
+    /// The number of rows will be inferred from the first column.
     /// If the name is empty or whitespace, a unique default name is assigned.
     /// If no columns are provided, the Cube will be empty.
-    pub fn new(name: String, cols: Option<Vec<FieldArray>>, third_dim_index: Option<Vec<String>>) -> Self {
+    pub fn new(
+        name: String,
+        cols: Option<Vec<FieldArray>>,
+        third_dim_index: Option<Vec<String>>,
+    ) -> Self {
         let name = if name.trim().is_empty() {
             let id = UNNAMED_COUNTER.fetch_add(1, Ordering::Relaxed);
             format!("UnnamedCube{}", id)
         } else {
             name
         };
-    
+
         let mut tables = Vec::new();
         let mut n_rows = Vec::new();
-    
+
         if let Some(cols) = cols {
             let table = Table::new(name.clone(), Some(cols));
             n_rows.push(table.n_rows());
@@ -107,7 +110,7 @@ impl Cube {
         cube.validate_third_dim_index();
         cube
     }
-    
+
     /// Constructs a new, empty Cube with a globally unique name.
     pub fn new_empty() -> Self {
         let id = UNNAMED_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -119,7 +122,7 @@ impl Cube {
             third_dim_index: None,
         }
     }
-    
+
     /// Adds a table to the cube.
     pub fn add_table(&mut self, table: Table) {
         let table_length = table.n_rows;
@@ -127,7 +130,6 @@ impl Cube {
         if self.tables.is_empty() {
             self.n_rows.push(table_length);
         } else {
-
             let existing_fields: HashMap<String, ArrowType> = self.tables[0]
                 .cols()
                 .iter()
@@ -138,11 +140,13 @@ impl Cube {
                 let field = &col.field;
                 match existing_fields.get(&field.name) {
                     Some(existing_dtype) => assert_eq!(
-                        existing_dtype,
-                        &field.dtype,
+                        existing_dtype, &field.dtype,
                         "Error: Schema mismatch between existing and new tables for Cube."
                     ),
-                    None => panic!("New table has field '{}' with datatype '{}' not present in existing tables.", field.name, field.dtype),
+                    None => panic!(
+                        "New table has field '{}' with datatype '{}' not present in existing tables.",
+                        field.name, field.dtype
+                    ),
                 }
             }
 
@@ -231,7 +235,7 @@ impl Cube {
         self.n_rows.clear();
         self.third_dim_index = None;
     }
-    
+
     /// Returns an immutable reference to all tables.
     pub fn tables(&self) -> &[Table] {
         &self.tables
@@ -289,14 +293,21 @@ impl Cube {
         if !self.has_col(name) {
             None
         } else {
-            Some(self.tables.iter().map(|t| t.col_by_name(name).unwrap()).collect())
+            Some(
+                self.tables
+                    .iter()
+                    .map(|t| t.col_by_name(name).unwrap())
+                    .collect(),
+            )
         }
     }
 
-
     /// Returns all columns for all tables as Vec<Vec<&FieldArray>>.
     pub fn cols(&self) -> Vec<Vec<&FieldArray>> {
-        self.tables.iter().map(|t| t.cols().iter().collect()).collect()
+        self.tables
+            .iter()
+            .map(|t| t.cols().iter().collect())
+            .collect()
     }
 
     /// Removes a column by name from all tables. Returns true if removed from all.
@@ -340,9 +351,16 @@ impl Cube {
 
     /// Returns an iterator over the named column across all tables.
     #[inline]
-    pub fn iter_cols_by_name<'a>(&'a self, name: &'a str) -> Option<impl Iterator<Item = &'a FieldArray> + 'a> {
+    pub fn iter_cols_by_name<'a>(
+        &'a self,
+        name: &'a str,
+    ) -> Option<impl Iterator<Item = &'a FieldArray> + 'a> {
         if self.has_col(name) {
-            Some(self.tables.iter().map(move |t| t.col_by_name(name).unwrap()))
+            Some(
+                self.tables
+                    .iter()
+                    .map(move |t| t.col_by_name(name).unwrap()),
+            )
         } else {
             None
         }
@@ -357,12 +375,16 @@ impl Cube {
     pub fn third_dim_index(&self) -> Option<&[String]> {
         self.third_dim_index.as_deref()
     }
-    
-    /// Confirms that the third dimension index exists in the schema 
+
+    /// Confirms that the third dimension index exists in the schema
     fn validate_third_dim_index(&self) {
         if let Some(ref indices) = self.third_dim_index {
             for col_name in indices {
-                assert!(self.has_col(col_name), "Index column '{}' not found in all tables", col_name);
+                assert!(
+                    self.has_col(col_name),
+                    "Index column '{}' not found in all tables",
+                    col_name
+                );
             }
         }
     }
@@ -372,9 +394,16 @@ impl Cube {
     pub fn slice_clone(&self, offset: usize, len: usize) -> Self {
         assert!(!self.tables.is_empty(), "No tables to slice");
         for n in &self.n_rows {
-            assert!(offset + len <= *n, "slice window out of bounds for one or more tables");
+            assert!(
+                offset + len <= *n,
+                "slice window out of bounds for one or more tables"
+            );
         }
-        let tables: Vec<Table> = self.tables.iter().map(|t| t.slice_clone(offset, len)).collect();
+        let tables: Vec<Table> = self
+            .tables
+            .iter()
+            .map(|t| t.slice_clone(offset, len))
+            .collect();
         let n_rows: Vec<usize> = tables.iter().map(|t| t.n_rows()).collect();
         let name = format!("{}[{}, {})", self.name, offset, offset + len);
         Cube {
@@ -416,7 +445,6 @@ impl Cube {
     }
 }
 
-
 impl<'a> IntoIterator for &'a Cube {
     type Item = &'a Table;
     type IntoIter = std::slice::Iter<'a, Table>;
@@ -453,6 +481,105 @@ impl Shape for Cube {
     }
 }
 
+impl Concatenate for Cube {
+    /// Concatenates two cubes by appending all tables from `other` to `self`.
+    ///
+    /// # Requirements
+    /// - Both cubes must have the same schema (column names and types)
+    ///
+    /// # Returns
+    /// A new Cube containing all tables from `self` followed by all tables from `other`
+    ///
+    /// # Errors
+    /// - `IncompatibleTypeError` if schemas don't match
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // If both cubes are empty, return empty cube
+        if self.tables.is_empty() && other.tables.is_empty() {
+            return Ok(Cube::new(
+                format!("{}+{}", self.name, other.name),
+                None,
+                None,
+            ));
+        }
+
+        // If one is empty, return the other
+        if self.tables.is_empty() {
+            let mut result = other;
+            result.name = format!("{}+{}", self.name, result.name);
+            return Ok(result);
+        }
+        if other.tables.is_empty() {
+            let mut result = self;
+            result.name = format!("{}+{}", result.name, other.name);
+            return Ok(result);
+        }
+
+        // Validate schemas match between first tables
+        let self_schema: HashMap<String, ArrowType> = self.tables[0]
+            .cols()
+            .iter()
+            .map(|col| (col.field.name.clone(), col.field.dtype.clone()))
+            .collect();
+
+        let other_schema: HashMap<String, ArrowType> = other.tables[0]
+            .cols()
+            .iter()
+            .map(|col| (col.field.name.clone(), col.field.dtype.clone()))
+            .collect();
+
+        // Check column count
+        if self_schema.len() != other_schema.len() {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "Cube",
+                to: "Cube",
+                message: Some(format!(
+                    "Cannot concatenate cubes with different column counts: {} vs {}",
+                    self_schema.len(),
+                    other_schema.len()
+                )),
+            });
+        }
+
+        // Check schema compatibility
+        for (col_name, col_type) in &self_schema {
+            match other_schema.get(col_name) {
+                Some(other_type) if other_type == col_type => {}
+                Some(other_type) => {
+                    return Err(MinarrowError::IncompatibleTypeError {
+                        from: "Cube",
+                        to: "Cube",
+                        message: Some(format!(
+                            "Column '{}' type mismatch: {:?} vs {:?}",
+                            col_name, col_type, other_type
+                        )),
+                    });
+                }
+                None => {
+                    return Err(MinarrowError::IncompatibleTypeError {
+                        from: "Cube",
+                        to: "Cube",
+                        message: Some(format!(
+                            "Column '{}' present in first cube but not in second",
+                            col_name
+                        )),
+                    });
+                }
+            }
+        }
+
+        // Concatenate tables
+        let mut result_tables = self.tables;
+        result_tables.extend(other.tables);
+        let result_n_rows: Vec<usize> = result_tables.iter().map(|t| t.n_rows()).collect();
+
+        Ok(Cube {
+            tables: result_tables,
+            n_rows: result_n_rows,
+            name: format!("{}+{}", self.name, other.name),
+            third_dim_index: self.third_dim_index.clone(),
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -644,19 +771,23 @@ mod tests {
         c.add_table(t2.clone());
 
         // By index
-        let ints: Vec<i32> = c.iter_cols(0).unwrap()
+        let ints: Vec<i32> = c
+            .iter_cols(0)
+            .unwrap()
             .map(|col| match &col.array {
                 Array::NumericArray(NumericArray::Int32(arr)) => arr.get(1).unwrap(),
-                _ => panic!("Type mismatch")
+                _ => panic!("Type mismatch"),
             })
             .collect();
         assert_eq!(ints, vec![2, 4]);
 
         // By name
-        let bools: Vec<bool> = c.iter_cols_by_name("bools").unwrap()
+        let bools: Vec<bool> = c
+            .iter_cols_by_name("bools")
+            .unwrap()
             .map(|col| match &col.array {
                 Array::BooleanArray(arr) => arr.get(0).unwrap(),
-                _ => panic!("Type mismatch")
+                _ => panic!("Type mismatch"),
             })
             .collect();
         assert_eq!(bools, vec![true, false]);
@@ -685,7 +816,7 @@ mod tests {
         assert_eq!(cube.name, "test");
         assert_eq!(cube.third_dim_index().unwrap(), &["timestamp"]);
     }
-    
+
     #[cfg(feature = "views")]
     #[test]
     fn test_cube_slice_and_slice_clone() {
@@ -725,7 +856,7 @@ mod tests {
         assert_eq!(view.len(), 2); // Two tables
         assert_eq!(view[0].n_rows(), 2); // First table window length is 2
         assert_eq!(view[1].n_rows(), 2); // Second table window length is 2
-    
+
         assert_eq!(view[0].col_by_name("bools").unwrap().len(), 2); // arrayview length is 2
         assert_eq!(view[1].col_by_name("bools").unwrap().len(), 2); // arrayview length is 2
     }

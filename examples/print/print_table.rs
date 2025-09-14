@@ -28,19 +28,27 @@ fn main() {
     // String and Dictionary/Categorical
     let col_str32 = StrArr::<u32>::from_slice(&["red", "blue", "green", "yellow", "purple"]);
     let col_cat32 = CatArr::<u32>::from_values(
-        ["apple", "banana", "cherry", "banana", "apple"].iter().copied()
+        ["apple", "banana", "cherry", "banana", "apple"]
+            .iter()
+            .copied(),
     );
 
     // Datetime
     #[cfg(feature = "datetime")]
     let col_dt32 = DatetimeArray::<i32>::from_slice(
         &[1000, 2000, 3000, 4000, 5000],
-        Some(TimeUnit::Milliseconds)
+        Some(TimeUnit::Milliseconds),
     );
     #[cfg(feature = "datetime")]
     let col_dt64 = DatetimeArray::<i64>::from_slice(
-        &[1_000_000_000, 2_000_000_000, 3_000_000_000, 4_000_000_000, 5_000_000_000],
-        Some(TimeUnit::Nanoseconds)
+        &[
+            1_000_000_000,
+            2_000_000_000,
+            3_000_000_000,
+            4_000_000_000,
+            5_000_000_000,
+        ],
+        Some(TimeUnit::Nanoseconds),
     );
 
     // FieldArray (column) construction

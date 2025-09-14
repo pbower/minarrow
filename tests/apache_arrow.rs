@@ -11,9 +11,7 @@ use arrow::array::{
 use arrow::datatypes::{DataType as ADataType, TimeUnit as ATimeUnit};
 use arrow::record_batch::RecordBatch;
 
-use minarrow::{
-    Array as MArray, ArrowType, Field, FieldArray, NumericArray, Table, TextArray,
-};
+use minarrow::{Array as MArray, ArrowType, Field, FieldArray, NumericArray, Table, TextArray};
 
 #[cfg(feature = "datetime")]
 use minarrow::{TemporalArray, TimeUnit};
@@ -127,7 +125,10 @@ fn test_array_to_arrow_datetime_infer_date64_and_ts_ns() {
         None,
     );
     let ar_ns = a_ns.to_apache_arrow_with_field(&f_tsns);
-    assert_eq!(ar_ns.data_type(), &ADataType::Timestamp(ATimeUnit::Nanosecond, None));
+    assert_eq!(
+        ar_ns.data_type(),
+        &ADataType::Timestamp(ATimeUnit::Nanosecond, None)
+    );
     let c_ns = ar_ns
         .as_any()
         .downcast_ref::<TimestampNanosecondArray>()
@@ -190,16 +191,8 @@ fn test_table_to_arrow_record_batch() {
     assert_eq!(rb.num_rows(), 2);
     assert_eq!(rb.num_columns(), 2);
 
-    let a = rb
-        .column(0)
-        .as_any()
-        .downcast_ref::<Int32Array>()
-        .unwrap();
-    let b = rb
-        .column(1)
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .unwrap();
+    let a = rb.column(0).as_any().downcast_ref::<Int32Array>().unwrap();
+    let b = rb.column(1).as_any().downcast_ref::<StringArray>().unwrap();
 
     assert_eq!(a.value(0), 1);
     assert_eq!(a.value(1), 2);

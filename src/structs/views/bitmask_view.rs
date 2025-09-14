@@ -29,9 +29,11 @@ use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::Index;
 use std::sync::Arc;
 
+use crate::enums::error::MinarrowError;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::{Bitmask, BitmaskVT};
 
 /// # BitmaskView
@@ -65,7 +67,7 @@ use crate::{Bitmask, BitmaskVT};
 pub struct BitmaskV {
     pub bitmask: Arc<Bitmask>,
     pub offset: usize,
-    len: usize
+    len: usize,
 }
 
 impl BitmaskV {
@@ -78,7 +80,11 @@ impl BitmaskV {
             offset + len,
             bitmask.len()
         );
-        Self { bitmask: bitmask.into(), offset, len }
+        Self {
+            bitmask: bitmask.into(),
+            offset,
+            len,
+        }
     }
 
     /// Returns the length (number of bits) in the view.
@@ -96,7 +102,11 @@ impl BitmaskV {
     /// Returns the value at logical index `i` within the view.
     #[inline]
     pub fn get(&self, i: usize) -> bool {
-        assert!(i < self.len, "BitmaskView: index {i} out of bounds for window len {}", self.len);
+        assert!(
+            i < self.len,
+            "BitmaskView: index {i} out of bounds for window len {}",
+            self.len
+        );
         self.bitmask.get(self.offset + i)
     }
 
@@ -164,11 +174,14 @@ impl BitmaskV {
     /// Slices the view further by logical offset and len (relative to this window).
     #[inline]
     pub fn slice(&self, offset: usize, len: usize) -> Self {
-        assert!(offset + len <= self.len, "BitmaskView::slice: out of bounds");
+        assert!(
+            offset + len <= self.len,
+            "BitmaskView::slice: out of bounds"
+        );
         Self {
             bitmask: self.bitmask.clone(),
             offset: self.offset + offset,
-            len
+            len,
         }
     }
 
@@ -250,6 +263,27 @@ impl Shape for BitmaskV {
     }
 }
 
+impl Concatenate for BitmaskV {
+    /// Concatenates two bitmask views by materializing both to owned bitmasks,
+    /// concatenating them, and wrapping the result back in a view.
+    ///
+    /// # Notes
+    /// - This operation copies data from both views to create owned bitmasks.
+    /// - The resulting view has offset=0 and length equal to the combined length.
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Materialize both views to owned bitmasks
+        let self_bitmask = self.to_bitmask();
+        let other_bitmask = other.to_bitmask();
+
+        // Concatenate the owned bitmasks
+        let concatenated = self_bitmask.concat(other_bitmask)?;
+
+        // Wrap the result in a new view
+        let len = concatenated.len();
+        Ok(BitmaskV::new(concatenated, 0, len))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,7 +326,10 @@ mod tests {
         // view over [2..6): 0 0 1 1
         let view = BitmaskV::new(mask, 2, 4);
         assert_eq!(view.len(), 4);
-        assert_eq!((0..4).map(|i| view.get(i)).collect::<Vec<_>>(), vec![false, false, true, true]);
+        assert_eq!(
+            (0..4).map(|i| view.get(i)).collect::<Vec<_>>(),
+            vec![false, false, true, true]
+        );
         assert_eq!(view.count_ones(), 2);
         assert_eq!(view.count_zeros(), 2);
 
@@ -304,7 +341,9 @@ mod tests {
     #[test]
     fn test_bitmask_view_slice_and_to_bitmask() {
         // 10 bits: 1 1 1 0 0 0 1 0 1 1
-        let bits = [true, true, true, false, false, false, true, false, true, true];
+        let bits = [
+            true, true, true, false, false, false, true, false, true, true,
+        ];
         let mask = Bitmask::from_bools(&bits);
 
         let view = BitmaskV::new(mask, 2, 6); // [2..8): 1 0 0 0 1 0

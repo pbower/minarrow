@@ -28,16 +28,17 @@ use std::slice::{Iter, IterMut};
 use rayon::iter::ParallelIterator;
 
 use crate::aliases::CategoricalAVT;
-use crate::structs::allocator::Alloc64;
-use crate::structs::vec64::Vec64;
-use crate::traits::shape::Shape;
 use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
+use crate::traits::shape::Shape;
 use crate::traits::type_unions::Integer;
 use crate::utils::validate_null_mask_len;
 use crate::{
     Bitmask, Buffer, Length, MaskedArray, Offset, StringArray, impl_arc_masked_array,
     impl_array_ref_deref,
 };
+use vec64::Vec64;
+use vec64::alloc64::Alloc64;
 
 /// # CategoricalArray
 ///
@@ -846,7 +847,11 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
         }
         // Now use unchecked operations since we have proper length
         for (i, value) in values.iter().enumerate() {
-            let dict_idx = match self.unique_values.iter().position(|s| s == &value.to_string()) {
+            let dict_idx = match self
+                .unique_values
+                .iter()
+                .position(|s| s == &value.to_string())
+            {
                 Some(idx) => T::from_usize(idx),
                 None => {
                     let idx = self.unique_values.len();
@@ -878,7 +883,11 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
         }
         // Now use unchecked operations since we have proper length
         for (i, value) in slice.iter().enumerate() {
-            let dict_idx = match self.unique_values.iter().position(|s| s == &value.to_string()) {
+            let dict_idx = match self
+                .unique_values
+                .iter()
+                .position(|s| s == &value.to_string())
+            {
                 Some(idx) => T::from_usize(idx),
                 None => {
                     let idx = self.unique_values.len();
@@ -897,7 +906,7 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
     }
 
     /// Creates a new categorical array filled with the specified string repeated `count` times.
-    /// The dictionary will contain only one unique value, making this highly memory-efficient 
+    /// The dictionary will contain only one unique value, making this highly memory-efficient
     /// for repeated categorical values.
     fn fill(value: Self::LogicalType, count: usize) -> Self {
         let mut array = CategoricalArray::<T>::from_vec64(crate::Vec64::with_capacity(count), None);
@@ -1027,6 +1036,64 @@ impl<T: Integer + Send + Sync> CategoricalArray<T> {
 impl<T: Integer> Shape for CategoricalArray<T> {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
+    }
+}
+
+impl<T: Integer> Concatenate for CategoricalArray<T> {
+    fn concat(
+        mut self,
+        other: Self,
+    ) -> core::result::Result<Self, crate::enums::error::MinarrowError> {
+        let orig_len = self.len();
+        let other_len = other.len();
+
+        if other_len == 0 {
+            return Ok(self);
+        }
+
+        // Build a mapping from other's dictionary indices to self's dictionary indices
+        let mut index_map = std::collections::HashMap::new();
+        for (other_idx, other_value) in other.unique_values.iter().enumerate() {
+            // Find or insert this value in self's dictionary
+            let result_idx =
+                if let Some(pos) = self.unique_values.iter().position(|v| v == other_value) {
+                    pos
+                } else {
+                    let new_idx = self.unique_values.len();
+                    self.unique_values.push(other_value.clone());
+                    new_idx
+                };
+            index_map.insert(other_idx, result_idx);
+        }
+
+        // Remap and extend data indices
+        for &other_code in other.data.iter() {
+            let other_idx = other_code.to_usize();
+            let result_idx = index_map[&other_idx];
+            self.data.push(T::from_usize(result_idx));
+        }
+
+        // Merge null masks
+        match (self.null_mask_mut(), other.null_mask()) {
+            (Some(self_mask), Some(other_mask)) => {
+                self_mask.extend_from_bitmask(other_mask);
+            }
+            (Some(self_mask), None) => {
+                self_mask.resize(orig_len + other_len, true);
+            }
+            (None, Some(other_mask)) => {
+                let mut mask = Bitmask::new_set_all(orig_len + other_len, true);
+                for i in 0..other_len {
+                    mask.set(orig_len + i, other_mask.get(i));
+                }
+                self.set_null_mask(Some(mask));
+            }
+            (None, None) => {
+                // No mask in either: nothing to do.
+            }
+        }
+
+        Ok(self)
     }
 }
 
@@ -1317,16 +1384,21 @@ mod tests {
     #[test]
     fn test_batch_extend_from_iter_with_capacity() {
         let mut arr = CategoricalArray::<u32>::default();
-        let data = vec!["cat".to_string(), "dog".to_string(), "cat".to_string(), "bird".to_string()];
-        
+        let data = vec![
+            "cat".to_string(),
+            "dog".to_string(),
+            "cat".to_string(),
+            "bird".to_string(),
+        ];
+
         arr.extend_from_iter_with_capacity(data.into_iter(), 4);
-        
+
         assert_eq!(arr.len(), 4);
         assert_eq!(arr.get(0), Some("cat"));
         assert_eq!(arr.get(1), Some("dog"));
         assert_eq!(arr.get(2), Some("cat"));
         assert_eq!(arr.get(3), Some("bird"));
-        
+
         // Dictionary should have 3 unique values
         assert_eq!(arr.unique_values.len(), 3);
     }
@@ -1335,16 +1407,20 @@ mod tests {
     fn test_batch_extend_from_slice_dictionary_growth() {
         let mut arr = CategoricalArray::<u32>::default();
         arr.push("initial".to_string());
-        
-        let data = &["apple".to_string(), "banana".to_string(), "apple".to_string()];
+
+        let data = &[
+            "apple".to_string(),
+            "banana".to_string(),
+            "apple".to_string(),
+        ];
         arr.extend_from_slice(data);
-        
+
         assert_eq!(arr.len(), 4);
         assert_eq!(arr.get(0), Some("initial"));
         assert_eq!(arr.get(1), Some("apple"));
         assert_eq!(arr.get(2), Some("banana"));
         assert_eq!(arr.get(3), Some("apple"));
-        
+
         // Dictionary: initial, apple, banana
         assert_eq!(arr.unique_values.len(), 3);
     }
@@ -1352,19 +1428,19 @@ mod tests {
     #[test]
     fn test_batch_fill_single_category() {
         let arr = CategoricalArray::<u32>::fill("repeated".to_string(), 100);
-        
+
         assert_eq!(arr.len(), 100);
         assert_eq!(arr.null_count(), 0);
-        
+
         // All values should be the same category
         for i in 0..100 {
             assert_eq!(arr.get(i), Some("repeated"));
         }
-        
+
         // Dictionary should contain only one unique value
         assert_eq!(arr.unique_values.len(), 1);
         assert_eq!(arr.unique_values[0], "repeated");
-        
+
         // All indices should point to the same dictionary entry (0)
         for i in 0..100 {
             assert_eq!(arr.data[i], 0u32);
@@ -1376,25 +1452,25 @@ mod tests {
         let mut arr = CategoricalArray::<u32>::default();
         arr.push("first".to_string());
         arr.push_null();
-        
+
         let data = &["second".to_string(), "first".to_string()];
         arr.extend_from_slice(data);
-        
+
         assert_eq!(arr.len(), 4);
         assert_eq!(arr.get(0), Some("first"));
         assert_eq!(arr.get(1), None);
         assert_eq!(arr.get(2), Some("second"));
         assert_eq!(arr.get(3), Some("first"));
         assert!(arr.null_count() >= 1); // At least the initial null
-        
-        // Dictionary: first, second  
+
+        // Dictionary: first, second
         assert!(arr.unique_values.len() >= 2); // At least first and second
     }
 
     #[test]
     fn test_batch_operations_preserve_categorical_efficiency() {
         let mut arr = CategoricalArray::<u32>::default();
-        
+
         // Create data with many repeated categories
         let categories = ["A", "B", "C"];
         let mut data = Vec::new();
@@ -1403,17 +1479,113 @@ mod tests {
                 data.push(cat.to_string());
             }
         }
-        
+
         arr.extend_from_slice(&data);
-        
+
         assert_eq!(arr.len(), 300);
         assert_eq!(arr.unique_values.len(), 3); // Only 3 unique despite 300 entries
-        
+
         // Verify all categories are represented correctly
         for i in 0..300 {
             let expected = categories[i % 3];
             assert_eq!(arr.get(i), Some(expected));
         }
+    }
+
+    #[test]
+    fn test_categorical_array_concat() {
+        let arr1 = CategoricalArray::<u32>::from_values(["apple", "banana", "apple"]);
+        let arr2 = CategoricalArray::<u32>::from_values(["cherry", "apple"]);
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.get_str(0), Some("apple"));
+        assert_eq!(result.get_str(1), Some("banana"));
+        assert_eq!(result.get_str(2), Some("apple"));
+        assert_eq!(result.get_str(3), Some("cherry"));
+        assert_eq!(result.get_str(4), Some("apple"));
+
+        // Dictionary should be merged: apple, banana, cherry
+        assert_eq!(result.unique_values.len(), 3);
+        assert!(result.unique_values.contains(&"apple".to_string()));
+        assert!(result.unique_values.contains(&"banana".to_string()));
+        assert!(result.unique_values.contains(&"cherry".to_string()));
+    }
+
+    #[test]
+    fn test_categorical_array_concat_with_nulls() {
+        let mut arr1 = CategoricalArray::<u32>::default();
+        arr1.push_str("red");
+        arr1.push_null();
+        arr1.push_str("blue");
+
+        let mut arr2 = CategoricalArray::<u32>::default();
+        arr2.push_str("green");
+        arr2.push_null();
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.get_str(0), Some("red"));
+        assert_eq!(result.get_str(1), None);
+        assert_eq!(result.get_str(2), Some("blue"));
+        assert_eq!(result.get_str(3), Some("green"));
+        assert_eq!(result.get_str(4), None);
+        assert_eq!(result.null_count(), 2);
+    }
+
+    #[test]
+    fn test_categorical_array_concat_disjoint_dictionaries() {
+        // First array with dictionary: [red, blue, green]
+        let arr1 = CategoricalArray::<u32>::from_values(["red", "blue", "green", "red", "blue"]);
+
+        // Second array with completely different dictionary: [alpha, beta, gamma]
+        let arr2 = CategoricalArray::<u32>::from_values(["alpha", "beta", "gamma", "alpha"]);
+
+        // Verify initial state
+        assert_eq!(arr1.unique_values.len(), 3); // red, blue, green
+        assert_eq!(arr2.unique_values.len(), 3); // alpha, beta, gamma
+
+        // Verify arr1 indices point to correct values
+        assert_eq!(arr1.get_str(0), Some("red"));
+        assert_eq!(arr1.get_str(1), Some("blue"));
+        assert_eq!(arr1.get_str(2), Some("green"));
+        assert_eq!(arr1.get_str(3), Some("red"));
+        assert_eq!(arr1.get_str(4), Some("blue"));
+
+        // Verify arr2 indices point to correct values
+        assert_eq!(arr2.get_str(0), Some("alpha"));
+        assert_eq!(arr2.get_str(1), Some("beta"));
+        assert_eq!(arr2.get_str(2), Some("gamma"));
+        assert_eq!(arr2.get_str(3), Some("alpha"));
+
+        let result = arr1.concat(arr2).unwrap();
+
+        // After concatenation, dictionary should have all 6 unique values
+        assert_eq!(result.unique_values.len(), 6);
+        assert!(result.unique_values.contains(&"red".to_string()));
+        assert!(result.unique_values.contains(&"blue".to_string()));
+        assert!(result.unique_values.contains(&"green".to_string()));
+        assert!(result.unique_values.contains(&"alpha".to_string()));
+        assert!(result.unique_values.contains(&"beta".to_string()));
+        assert!(result.unique_values.contains(&"gamma".to_string()));
+
+        // Verify all values are correctly accessible after remapping
+        assert_eq!(result.len(), 9);
+
+        // Original arr1 values should be unchanged
+        assert_eq!(result.get_str(0), Some("red"));
+        assert_eq!(result.get_str(1), Some("blue"));
+        assert_eq!(result.get_str(2), Some("green"));
+        assert_eq!(result.get_str(3), Some("red"));
+        assert_eq!(result.get_str(4), Some("blue"));
+
+        // arr2 values should be correctly remapped
+        assert_eq!(result.get_str(5), Some("alpha"));
+        assert_eq!(result.get_str(6), Some("beta"));
+        assert_eq!(result.get_str(7), Some("gamma"));
+        assert_eq!(result.get_str(8), Some("alpha"));
     }
 }
 

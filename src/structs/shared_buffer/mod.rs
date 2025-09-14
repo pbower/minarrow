@@ -1,28 +1,30 @@
 //! # **SharedBuffer Internal Module** - Backs *Buffer* for ZC MMAP and foreign buffer sharing
-//! 
+//!
 //! Zero-copy, reference-counted byte buffer with 64-byte SIMD alignment.
-//! 
+//!
 //! This is an internal module that backs the `Buffer` type supporting
 //! the typed Arrays in *Minarrow*.
 
+use crate::Vec64;
+use crate::structs::shared_buffer::internal::owned::{OWNED_VT, Owned};
+use crate::structs::shared_buffer::internal::pvec::PromotableVec;
+use crate::structs::shared_buffer::internal::vtable::{
+    PROMO_EVEN_VT, PROMO_ODD_VT, PROMO64_EVEN_VT, PROMO64_ODD_VT, STATIC_VT, Vtable,
+};
 use core::ops::RangeBounds;
 use core::{ptr, slice};
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::fmt;
+use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
-use crate::structs::shared_buffer::internal::vtable::{Vtable, PROMO64_EVEN_VT, PROMO64_ODD_VT, PROMO_EVEN_VT, PROMO_ODD_VT, STATIC_VT};
-use crate::Vec64;
-use crate::structs::shared_buffer::internal::owned::{Owned, OWNED_VT};
-use crate::structs::shared_buffer::internal::pvec::{ PromotableVec};
-use std::hash::Hash;
 
 mod internal {
-    pub (crate) mod owned;
-    pub (crate) mod pvec;
-    pub (crate) mod vtable;
+    pub(crate) mod owned;
+    pub(crate) mod pvec;
+    pub(crate) mod vtable;
 }
 
 // # SharedBuffer
@@ -56,9 +58,8 @@ pub struct SharedBuffer {
     ptr: *const u8,
     len: usize,
     data: AtomicPtr<()>, // header or null
-    vtable: &'static Vtable
+    vtable: &'static Vtable,
 }
-
 
 impl SharedBuffer {
     /// Constructs a new, empty `SharedBuffer`
@@ -67,16 +68,16 @@ impl SharedBuffer {
         Self::from_static(EMPTY)
     }
 
-     /// Constructs a `SharedBuffer` from a static slice
+    /// Constructs a `SharedBuffer` from a static slice
     pub const fn from_static(s: &'static [u8]) -> Self {
         Self {
             ptr: s.as_ptr(),
             len: s.len(),
             data: AtomicPtr::new(ptr::null_mut()),
-            vtable: &STATIC_VT
+            vtable: &STATIC_VT,
         }
     }
-    
+
     pub fn from_vec(mut v: Vec<u8>) -> Self {
         let ptr = v.as_mut_ptr();
         let len = v.len();
@@ -89,10 +90,14 @@ impl SharedBuffer {
             ptr,
             len,
             data: AtomicPtr::new(raw.cast()),
-            vtable: if cap & 1 == 0 { &PROMO_EVEN_VT } else { &PROMO_ODD_VT }
+            vtable: if cap & 1 == 0 {
+                &PROMO_EVEN_VT
+            } else {
+                &PROMO_ODD_VT
+            },
         }
     }
-    
+
     /// Constructs a `SharedBuffer` from a SIMD-aligned Vec64<u8>.
     pub fn from_vec64(mut v: Vec64<u8>) -> Self {
         let ptr = v.as_mut_ptr();
@@ -106,7 +111,11 @@ impl SharedBuffer {
             ptr,
             len,
             data: AtomicPtr::new(raw.cast()),
-            vtable: if cap & 1 == 0 { &PROMO64_EVEN_VT } else { &PROMO64_ODD_VT }
+            vtable: if cap & 1 == 0 {
+                &PROMO64_EVEN_VT
+            } else {
+                &PROMO64_ODD_VT
+            },
         }
     }
     /// Constructs a `SharedBuffer` from an arbitrary owner (e.g. Arc<[u8]>, mmap, etc).
@@ -114,16 +123,18 @@ impl SharedBuffer {
     /// The owner must implement `AsRef<[u8]> + Send + Sync + 'static`.
     pub fn from_owner<T>(owner: T) -> Self
     where
-        T: AsRef<[u8]> + Send + Sync + 'static
+        T: AsRef<[u8]> + Send + Sync + 'static,
     {
-        let raw: *mut Owned<T> =
-            Box::into_raw(Box::new(Owned { ref_cnt: AtomicUsize::new(1), owner }));
+        let raw: *mut Owned<T> = Box::into_raw(Box::new(Owned {
+            ref_cnt: AtomicUsize::new(1),
+            owner,
+        }));
         let buf = unsafe { (*raw).owner.as_ref() };
         Self {
             ptr: buf.as_ptr(),
             len: buf.len(),
             data: AtomicPtr::new(raw.cast()),
-            vtable: &OWNED_VT
+            vtable: &OWNED_VT,
         }
     }
 
@@ -153,12 +164,12 @@ impl SharedBuffer {
         let start = match range.start_bound() {
             Unbounded => 0,
             Included(&n) => n,
-            Excluded(&n) => n + 1
+            Excluded(&n) => n + 1,
         };
         let end = match range.end_bound() {
             Unbounded => self.len,
             Included(&n) => n + 1,
-            Excluded(&n) => n
+            Excluded(&n) => n,
         };
         assert!(start <= end && end <= self.len);
         if start == end {
@@ -184,7 +195,7 @@ impl SharedBuffer {
 
     /// Attempts to convert into an owned, SIMD-aligned `Vec64<u8>`.
     ///
-    /// If this is the unique owner, and it was originally allocated with a Vec64<u8> 
+    /// If this is the unique owner, and it was originally allocated with a Vec64<u8>
     /// this is zero-copy. Otherwise, the data is cloned.
     #[inline]
     pub fn into_vec64(self) -> Vec64<u8> {
@@ -226,7 +237,6 @@ impl Drop for SharedBuffer {
         unsafe { (self.vtable.drop)(&mut self.data, self.ptr, self.len) }
     }
 }
-
 
 /// Default for an empty buffer (same as new()).
 impl Default for SharedBuffer {

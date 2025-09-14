@@ -1,5 +1,5 @@
-//! # **Arrow-C-FFI Module** - *Share data to another language and/or run-time** 
-//! 
+//! # **Arrow-C-FFI Module** - *Share data to another language and/or run-time**
+//!
 //! Implements the *Apache Arrow* **C Data Interface** for Minarrow, enabling zero-copy
 //! data exchange across language boundaries.  
 //! Compatible with any runtime implementing the Arrow C interface, including Python, C++,
@@ -27,13 +27,13 @@
 //! - UTF-8 and large UTF-8 string arrays preserve offset and value buffer ordering.
 //! - Temporal arrays validate logical type ↔ physical storage alignment prior to export.
 //!- `pyo3` normally abstracts pointer handling and lifetime management when integrating
-//!   with Python; we do not yet use it, but once integrated, instead of manual `Arc` reference 
-//!  count handling and explicit clean-up, one will be able to instead leverage automatic, 
+//!   with Python; we do not yet use it, but once integrated, instead of manual `Arc` reference
+//!  count handling and explicit clean-up, one will be able to instead leverage automatic,
 //!  Python-owned lifetimes.
 //!
 //! ## Trademark Notice
 //! *Apache Arrow* is a trademark of the Apache Software Foundation, used here under
-//! fair-use to implement its published interoperability standard as per 
+//! fair-use to implement its published interoperability standard as per
 //! https://www.apache.org/foundation/marks/ .
 
 use std::ffi::{CString, c_void};
@@ -751,7 +751,7 @@ unsafe fn import_utf8<T: Integer>(arr: &ArrowArray) -> Arc<Array> {
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
         return Arc::new(Array::TextArray(TextArray::String64(Arc::new(unsafe {
             std::mem::transmute::<StringArray<T>, StringArray<u64>>(arr)
-        }))))
+        }))));
     }
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
         Arc::new(Array::TextArray(TextArray::String32(Arc::new(unsafe {

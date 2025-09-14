@@ -33,10 +33,15 @@
 //! - `field` is the schema for the underlying array and is shared by all slices.
 use std::sync::Arc;
 
-use crate::{enums::shape_dim::ShapeDim, traits::shape::Shape, Array, ArrayV, ArrayVT, Field, SuperArray};
+use crate::{
+    Array, ArrayV, ArrayVT, Field, SuperArray,
+    enums::error::MinarrowError,
+    enums::shape_dim::ShapeDim,
+    traits::{concatenate::Concatenate, shape::Shape},
+};
 
 /// # SuperArrayView
-/// 
+///
 /// Borrowed view over an arbitrary `[offset .. offset+len)` window of a `ChunkedArray`.
 /// The window may span multiple internal chunks, presenting them as a unified logical view.
 ///
@@ -59,7 +64,7 @@ use crate::{enums::shape_dim::ShapeDim, traits::shape::Shape, Array, ArrayV, Arr
 pub struct SuperArrayV {
     pub slices: Vec<ArrayV>,
     pub len: usize,
-    pub field: Arc<Field>
+    pub field: Arc<Field>,
 }
 
 impl SuperArrayV {
@@ -67,7 +72,7 @@ impl SuperArrayV {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
-    
+
     #[inline]
     pub fn n_slices(&self) -> usize {
         self.slices.len()
@@ -101,7 +106,11 @@ impl SuperArrayV {
             }
 
             let take = (base_len - offset).min(len);
-            slices.push(ArrayV::new(array_view.array.clone(), base_offset + offset, take));
+            slices.push(ArrayV::new(
+                array_view.array.clone(),
+                base_offset + offset,
+                take,
+            ));
 
             len -= take;
             if len == 0 {
@@ -113,7 +122,7 @@ impl SuperArrayV {
         Self {
             slices,
             len: self.len,
-            field: self.field.clone()
+            field: self.field.clone(),
         }
     }
 
@@ -181,6 +190,32 @@ impl Shape for SuperArrayV {
     }
 }
 
+impl Concatenate for SuperArrayV {
+    /// Concatenates two super array views by materializing both to owned arrays,
+    /// concatenating them, and wrapping the result back in a view.
+    ///
+    /// # Notes
+    /// - This operation copies data from both views to create owned arrays.
+    /// - The resulting view contains a single slice wrapping the concatenated array.
+    /// - The field metadata from the first view is preserved.
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Materialize both views to owned arrays
+        let self_array = self.copy_to_array();
+        let other_array = other.copy_to_array();
+
+        // Concatenate the owned arrays
+        let concatenated = self_array.concat(other_array)?;
+        let len = concatenated.len();
+
+        // Wrap the result in a new view with a single slice
+        Ok(SuperArrayV {
+            slices: vec![ArrayV::from(concatenated)],
+            len,
+            field: self.field,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,7 +235,7 @@ mod tests {
         let empty = SuperArrayV {
             slices: Vec::new(),
             len: 0,
-            field: f.clone()
+            field: f.clone(),
         };
         assert!(empty.is_empty());
         assert_eq!(empty.n_slices(), 0);
@@ -209,7 +244,7 @@ mod tests {
         let non_empty = SuperArrayV {
             slices: Vec::from(vec![ArrayV::new(arr, 0, 3)]),
             len: 3,
-            field: f.clone()
+            field: f.clone(),
         };
         assert!(!non_empty.is_empty());
         assert_eq!(non_empty.n_slices(), 1);
@@ -335,5 +370,26 @@ mod tests {
         assert_eq!(slice.field.name, "field");
         let subslice = slice.slice(1, 2);
         assert_eq!(subslice.field.name, "field");
+    }
+}
+
+// From implementations for conversion between SuperArray and SuperArrayV
+
+/// SuperArray -> SuperArrayV conversion
+impl From<SuperArray> for SuperArrayV {
+    fn from(super_array: SuperArray) -> Self {
+        let field = super_array.field().clone();
+        let slices: Vec<ArrayV> = super_array
+            .chunks()
+            .iter()
+            .map(|fa| ArrayV::from(fa.clone()))
+            .collect();
+        let len = super_array.len();
+
+        SuperArrayV {
+            slices,
+            len,
+            field: Arc::new(field),
+        }
     }
 }

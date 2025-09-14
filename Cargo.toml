@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
@@ -50,6 +50,7 @@ ryu = { version = "1.0.20", optional = true }
 memchr = { version = "2.7.5", optional = true }
 ahash = { version = "0.8.12", optional = true }
 regex = { version = "1.11.1", optional = true }
+vec64 = { version = "0.2"}
 
 [build-dependencies]
 cc = { version = "1", optional = true }
@@ -166,16 +167,19 @@ str_arithmetic = ["ryu", "memchr"]
 # and categorical dictionary interning with the faster ahash.
 fast_hash = ["dep:ahash"]
 
+# Adds typed arithmetic broadcasting for add, sub, mult, div, rem
+broadcast = []
+
+# Adds byte size trait for best-effort size calculation
+size = []
+
 default = [
     "views",
     "chunked",
     "large_string",
     "scalar_type",
-    "value_type",
-    "cube",
     "datetime",
-    "extended_categorical",
-    "simd"
+    "simd",
 ]
 
 [package.metadata.cargo-all-features]
@@ -189,3 +193,74 @@ max_combination_size = 2
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+# Arithmetic example
+[[example]]
+name = "arithmetic"
+path = "examples/arithmetic.rs"
+required-features = ["broadcast"]
+
+# Broadcasting examples
+[[example]]
+name = "test_broadcasting"
+path = "examples/broadcasting/test_broadcasting.rs"
+required-features = ["broadcast"]
+
+[[example]]
+name = "test_scalar_arithmetic"
+path = "examples/broadcasting/test_scalar_arithmetic.rs"
+required-features = ["broadcast", "scalar_type"]
+
+[[example]]
+name = "test_string_broadcasting"
+path = "examples/broadcasting/test_string_broadcasting.rs"
+required-features = ["broadcast"]
+
+[[example]]
+name = "test_value_ops"
+path = "examples/broadcasting/test_value_ops.rs"
+required-features = ["broadcast"]
+
+[[example]]
+name = "test_value_macros"
+path = "examples/broadcasting/test_value_macros.rs"
+required-features = ["broadcast"]
+
+# Benchmark examples
+[[example]]
+name = "hotloop_benchmark_simd"
+path = "examples/benchmarks/hotloop_benchmark_simd.rs"
+
+[[example]]
+name = "hotloop_benchmark_std"
+path = "examples/benchmarks/hotloop_benchmark_std.rs"
+
+[[example]]
+name = "hotloop_benchmark_avg_simd"
+path = "examples/benchmarks/hotloop_benchmark_avg_simd.rs"
+
+[[example]]
+name = "hotloop_benchmark_avg_std"
+path = "examples/benchmarks/hotloop_benchmark_avg_std.rs"
+
+[[example]]
+name = "benchmark_parallel_simd"
+path = "examples/benchmarks/benchmark_parallel_simd.rs"
+
+# FFI examples
+[[example]]
+name = "apache_arrow_ffi"
+path = "examples/ffi/apache_arrow_ffi.rs"
+
+[[example]]
+name = "polars_ffi"
+path = "examples/ffi/polars_ffi.rs"
+
+# Print examples
+[[example]]
+name = "print_arrays"
+path = "examples/print/print_arrays.rs"
+
+[[example]]
+name = "print_table"
+path = "examples/print/print_table.rs"

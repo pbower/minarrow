@@ -43,7 +43,7 @@ use crate::{
 use crate::SuperTable;
 
 /// # RecordBatch
-/// 
+///
 /// Standard Arrow `Record Batch`. Alias of *Minarrow* `Table`.
 ///
 /// # Description
@@ -80,7 +80,7 @@ use crate::SuperTable;
 pub type RecordBatch = Table;
 
 /// # ChunkedTable
-/// 
+///
 /// Batched (windowed/chunked) table - collection of `Tables`.
 ///
 /// ### Data structure

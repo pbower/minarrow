@@ -15,9 +15,9 @@
 #[cfg(feature = "cast_arrow")]
 use crate::avg_simd::run_benchmark;
 
-pub (crate) const N: usize = 1000000;
-pub (crate) const SIMD_LANES: usize = 4;
-pub (crate) const ITERATIONS: usize = 1000;
+pub(crate) const N: usize = 1000000;
+pub(crate) const SIMD_LANES: usize = 4;
+pub(crate) const ITERATIONS: usize = 1000;
 
 #[cfg(feature = "cast_arrow")]
 mod avg_simd {
@@ -31,14 +31,14 @@ mod avg_simd {
 
     use arrow::array::{
         Array as ArrowArrayTrait, ArrayRef, Float64Array as ArrowF64Array,
-        Int64Array as ArrowI64Array
+        Int64Array as ArrowI64Array,
     };
     use minarrow::{Array, Buffer, FloatArray, IntegerArray, NumericArray, Vec64};
 
     #[inline(always)]
     fn simd_sum_i64<const LANES: usize>(data: &[i64]) -> i64
     where
-        LaneCount<LANES>: SupportedLaneCount
+        LaneCount<LANES>: SupportedLaneCount,
     {
         let n = data.len();
         let simd_width = LANES;
@@ -100,7 +100,7 @@ mod avg_simd {
     #[inline(always)]
     fn simd_sum_f64<const LANES: usize>(data: &[f64]) -> f64
     where
-        LaneCount<LANES>: SupportedLaneCount
+        LaneCount<LANES>: SupportedLaneCount,
     {
         let n = data.len();
         let simd_width = LANES;
@@ -165,7 +165,7 @@ mod avg_simd {
             4 => simd_sum_f64::<4>(data),
             8 => simd_sum_f64::<8>(data),
             16 => simd_sum_f64::<16>(data),
-            _ => panic!("Unsupported SIMD lanes. Only 2, 4, 8, 16 supported.")
+            _ => panic!("Unsupported SIMD lanes. Only 2, 4, 8, 16 supported."),
         }
     }
 
@@ -175,7 +175,7 @@ mod avg_simd {
             4 => simd_sum_i64::<4>(data),
             8 => simd_sum_i64::<8>(data),
             16 => simd_sum_i64::<16>(data),
-            _ => panic!("Unsupported SIMD lanes. Only 2, 4, 8, 16 supported.")
+            _ => panic!("Unsupported SIMD lanes. Only 2, 4, 8, 16 supported."),
         }
     }
 
@@ -222,8 +222,14 @@ mod avg_simd {
         let avg_vec_i64 = sum_vec_i64 as f64 / ITERATIONS as f64;
         let avg_vec64_i64 = sum_vec64_i64 as f64 / ITERATIONS as f64;
 
-        println!("Vec<i64> construction (avg):    {}", fmt_duration_ns(avg_vec_i64));
-        println!("Vec64<i64> construction (avg):  {}", fmt_duration_ns(avg_vec64_i64));
+        println!(
+            "Vec<i64> construction (avg):    {}",
+            fmt_duration_ns(avg_vec_i64)
+        );
+        println!(
+            "Vec64<i64> construction (avg):  {}",
+            fmt_duration_ns(avg_vec64_i64)
+        );
         println!("\n=> Keep the above Vec construction delta in mind when interpreting the below results,
     as it is not included in the benchmarks that follow.\n");
 
@@ -243,7 +249,7 @@ mod avg_simd {
         let int_array_aligned = {
             let int_arr = IntegerArray {
                 data: Buffer::from(v64_int_data.clone()),
-                null_mask: None
+                null_mask: None,
             };
             let slice = &int_arr[..];
             (slice.as_ptr() as usize) % std::mem::align_of::<Simd<i64, SIMD_LANES>>() == 0
@@ -257,7 +263,7 @@ mod avg_simd {
         let arr_int_enum_aligned = {
             let array = Array::NumericArray(NumericArray::Int64(Arc::new(IntegerArray {
                 data: Buffer::from(v64_int_data.clone()),
-                null_mask: None
+                null_mask: None,
             })));
             let int_arr = array.num().i64().unwrap();
             (int_arr.data.as_slice().as_ptr() as usize)
@@ -290,7 +296,7 @@ mod avg_simd {
         let float_arr_aligned = {
             let float_arr = FloatArray {
                 data: Buffer::from(v64_float_data.clone()),
-                null_mask: None
+                null_mask: None,
             };
             (&float_arr.data.as_slice()[0] as *const f64 as usize)
                 % std::mem::align_of::<Simd<f64, SIMD_LANES>>()
@@ -305,7 +311,7 @@ mod avg_simd {
         let float_enum_aligned = {
             let array = Array::NumericArray(NumericArray::Float64(Arc::new(FloatArray {
                 data: Buffer::from(v64_float_data.clone()),
-                null_mask: None
+                null_mask: None,
             })));
             let float_arr = array.num().f64().unwrap();
             (float_arr.data.as_slice().as_ptr() as usize)
@@ -343,7 +349,7 @@ mod avg_simd {
             let start = Instant::now();
             let int_arr = IntegerArray {
                 data: Buffer::from(data),
-                null_mask: None
+                null_mask: None,
             };
             let sum = simd_sum_i64_runtime(&int_arr[..], simd_lanes);
             let dur = start.elapsed();
@@ -364,7 +370,7 @@ mod avg_simd {
             let start = Instant::now();
             let array = Array::NumericArray(NumericArray::Int64(Arc::new(IntegerArray {
                 data: Buffer::from(data),
-                null_mask: None
+                null_mask: None,
             })));
             let int_arr = array.num().i64().unwrap();
             let sum = simd_sum_i64_runtime(&int_arr[..], simd_lanes);
@@ -405,7 +411,7 @@ mod avg_simd {
             let start = Instant::now();
             let float_arr = FloatArray {
                 data: Buffer::from(data),
-                null_mask: None
+                null_mask: None,
             };
             let sum = simd_sum_f64_runtime(&float_arr[..], simd_lanes);
             let dur = start.elapsed();
@@ -426,7 +432,7 @@ mod avg_simd {
             let start = Instant::now();
             let array = Array::NumericArray(NumericArray::Float64(Arc::new(FloatArray {
                 data: Buffer::from(data),
-                null_mask: None
+                null_mask: None,
             })));
             let float_arr = array.num().f64().unwrap();
             let sum = simd_sum_f64_runtime(&float_arr[..], simd_lanes);
@@ -533,9 +539,15 @@ mod avg_simd {
         println!("\nVerify SIMD pointer alignment for Integer calculations (based on lane width):");
         println!("Vec<i64> is aligned: {}", v_aligned);
         println!("Minarrow Vec64<i64> is aligned: {}", v64_aligned);
-        println!("Minarrow IntegerArray<i64> is aligned: {}", int_array_aligned);
+        println!(
+            "Minarrow IntegerArray<i64> is aligned: {}",
+            int_array_aligned
+        );
         println!("Arrow ArrowI64Array is aligned: {}", i64_arrow_aligned);
-        println!("Minarrow Array::NumericArray<i64> is aligned: {}", arr_int_enum_aligned);
+        println!(
+            "Minarrow Array::NumericArray<i64> is aligned: {}",
+            arr_int_enum_aligned
+        );
         println!("Arrow ArrayRef<int> is aligned: {}", array_ref_int_aligned);
 
         println!("\nVerify SIMD pointer alignment for Float calculations (based on lane width):");
@@ -543,7 +555,10 @@ mod avg_simd {
         println!("Vec64<f64> is aligned: {}", v64_float_aligned);
         println!("FloatArray<f64> is aligned: {}", float_arr_aligned);
         println!("ArrowF64Array is aligned: {}", arrow_f64_aligned);
-        println!("Array::NumericArray<f64> is aligned: {}", float_enum_aligned);
+        println!(
+            "Array::NumericArray<f64> is aligned: {}",
+            float_enum_aligned
+        );
         println!("ArrayRef is aligned: {}", arrow_f64_arr_aligned);
 
         println!("\n---------------------- END OF SIMD AVG BENCHMARKS ---------------------------");

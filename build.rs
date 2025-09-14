@@ -8,12 +8,13 @@ fn has_feature(list: &str, feature: &str) -> bool {
 }
 
 fn main() {
-
     ////////////////////////////////////////////////////////////////
     // C-FFI Integration tests
     ////////////////////////////////////////////////////////////////
     #[cfg(feature = "c_ffi_tests")]
-    cc::Build::new().file("tests/c_inspect_arrow.c").compile("cinspect_arrow");
+    cc::Build::new()
+        .file("tests/c_inspect_arrow.c")
+        .compile("cinspect_arrow");
 
     #[cfg(feature = "c_ffi_tests")]
     println!("cargo:rerun-if-changed=tests/c_inspect_arrow.c");
@@ -25,7 +26,7 @@ fn main() {
     ////////////////////////////////////////////////////////////////
     // SIMD Build constants for Arithmetic and Bitmask Kernels
     ////////////////////////////////////////////////////////////////
-    
+
     // w8 == 8-bits, w16 == 16-bits, w32 == 32-bits, w64 == 64-bits.
     //
     // ==> for u8, u16, u32/f32, u64/f64 lane counts
@@ -44,7 +45,9 @@ fn main() {
             println!("cargo:warning=SIMD_LANES_OVERRIDE applied: {:?}", vals);
             (vals[0], vals[1], vals[2], vals[3])
         } else {
-            panic!("Invalid SIMD_LANES_OVERRIDE. Expected 4 comma-separated integers, e.g., \"64,32,16,8\"");
+            panic!(
+                "Invalid SIMD_LANES_OVERRIDE. Expected 4 comma-separated integers, e.g., \"64,32,16,8\""
+            );
         }
     } else {
         match arch.as_str() {

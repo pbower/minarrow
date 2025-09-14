@@ -79,25 +79,26 @@
 //!
 //! _Construction time for Vec<i64> (87 ns) and Vec64<i64> (84 ns) excluded from benchmarks._
 
-
 #![feature(allocator_api)]
 #![feature(slice_ptr_get)]
 #![feature(portable_simd)]
 
+pub use vec64::{Vec64, vec64};
+
 /// **Array**, **TextArray**, **NumericArray**...- *All the *High-Level Array containers* are here.*
 pub mod enums {
-    pub mod time_units;
-    #[cfg(feature = "scalar_type")]
-    pub mod scalar;
-    #[cfg(feature = "value_type")]
-    pub mod value;
     pub mod array;
     pub mod error;
+    #[cfg(feature = "scalar_type")]
+    pub mod scalar;
+    pub mod time_units;
+    #[cfg(feature = "value_type")]
+    pub mod value;
     pub mod collections {
         pub mod numeric_array;
-        pub mod text_array;
         #[cfg(feature = "datetime")]
         pub mod temporal_array;
+        pub mod text_array;
     }
     pub mod operators;
     pub mod shape_dim;
@@ -109,6 +110,10 @@ pub mod enums {
 pub mod kernels {
     pub mod arithmetic;
     pub mod bitmask;
+    #[cfg(feature = "broadcast")]
+    pub mod broadcast;
+    #[cfg(feature = "views")]
+    pub mod routing;
     pub mod string;
 }
 
@@ -151,18 +156,16 @@ pub mod structs {
         #[cfg(feature = "views")]
         pub mod table_view;
     }
-    pub mod buffer;
-    pub mod shared_buffer;
-    pub mod allocator;
     pub mod bitmask;
-    pub mod field;
-    pub mod field_array;
-    pub mod table;
+    pub mod buffer;
     #[cfg(feature = "cube")]
     pub mod cube;
+    pub mod field;
+    pub mod field_array;
     #[cfg(feature = "matrix")]
     pub mod matrix;
-    pub mod vec64;
+    pub mod shared_buffer;
+    pub mod table;
 }
 
 /// **Shared Memory** - *Sending data over FFI like a Pro? Look here.*
@@ -171,57 +174,55 @@ pub mod ffi {
     pub mod arrow_dtype;
     pub mod schema;
 }
-    
+
 /// **Type Standardisation** - `MaskedArray`, `View`, `Print` traits + more,
 pub mod traits {
+    #[cfg(feature = "size")]
+    pub mod byte_size;
+    pub mod concatenate;
+    pub mod custom_value;
     pub mod masked_array;
+    pub mod print;
+    pub mod shape;
+    pub mod type_unions;
     #[cfg(feature = "views")]
     pub mod view;
-    pub mod print;
-    pub mod type_unions;
-    pub mod custom_value;
-    pub mod shape;
 }
 
 pub mod aliases;
+pub mod conversions;
 pub mod macros;
 pub mod utils;
-pub mod conversions;
 
 pub use aliases::{
-    BytesLength, 
-    DictLength, Length,
-    Offset, ArrayVT, BitmaskVT, StringAVT, StringAVTExt,
-    CategoricalAVT, CategoricalAVTExt, IntegerAVT, FloatAVT,
-    BooleanAVT
+    ArrayVT, BitmaskVT, BooleanAVT, BytesLength, CategoricalAVT, CategoricalAVTExt, DictLength,
+    FloatAVT, IntegerAVT, Length, Offset, StringAVT, StringAVTExt,
 };
 
 #[cfg(feature = "datetime")]
 pub use aliases::DatetimeAVT;
-#[cfg(feature = "datetime")]
-pub use enums::time_units::{IntervalUnit, TimeUnit};
-#[cfg(feature = "value_type")]
-pub use enums::value::Value;
-#[cfg(feature = "scalar_type")]
-pub use enums::scalar::Scalar;
 pub use enums::array::Array;
 pub use enums::collections::numeric_array::NumericArray;
 #[cfg(feature = "datetime")]
 pub use enums::collections::temporal_array::TemporalArray;
 pub use enums::collections::text_array::TextArray;
+#[cfg(feature = "scalar_type")]
+pub use enums::scalar::Scalar;
+#[cfg(feature = "datetime")]
+pub use enums::time_units::{IntervalUnit, TimeUnit};
+#[cfg(feature = "value_type")]
+pub use enums::value::Value;
 
-pub use structs::buffer::Buffer;
 pub use structs::bitmask::Bitmask;
-pub use structs::views::bitmask_view::BitmaskV;
+pub use structs::buffer::Buffer;
 #[cfg(feature = "chunked")]
 pub use structs::chunked::{super_array::SuperArray, super_table::SuperTable};
 #[cfg(feature = "views")]
-#[cfg(feature = "chunked")]
-pub use structs::views::chunked::{
-    super_array_view::SuperArrayV, super_table_view::SuperTableV
-};
-#[cfg(feature = "views")]
 pub use structs::views::array_view::ArrayV;
+pub use structs::views::bitmask_view::BitmaskV;
+#[cfg(feature = "views")]
+#[cfg(feature = "chunked")]
+pub use structs::views::chunked::{super_array_view::SuperArrayV, super_table_view::SuperTableV};
 #[cfg(feature = "views")]
 pub use structs::views::collections::numeric_array_view::NumericArrayV;
 #[cfg(feature = "views")]
@@ -230,13 +231,15 @@ pub use structs::views::collections::temporal_array_view::TemporalArrayV;
 #[cfg(feature = "views")]
 pub use structs::views::collections::text_array_view::TextArrayV;
 
-pub use structs::field::Field;
-pub use structs::field_array::FieldArray;
-pub use structs::table::Table;
+pub use ffi::arrow_dtype::ArrowType;
 #[cfg(feature = "cube")]
 pub use structs::cube::Cube;
+pub use structs::field::Field;
+pub use structs::field_array::FieldArray;
 #[cfg(feature = "matrix")]
 pub use structs::matrix::Matrix;
+pub use structs::shared_buffer::SharedBuffer;
+pub use structs::table::Table;
 pub use structs::variants::boolean::BooleanArray;
 pub use structs::variants::categorical::CategoricalArray;
 #[cfg(feature = "datetime")]
@@ -244,11 +247,11 @@ pub use structs::variants::datetime::DatetimeArray;
 pub use structs::variants::float::FloatArray;
 pub use structs::variants::integer::IntegerArray;
 pub use structs::variants::string::StringArray;
-pub use structs::vec64::Vec64;
 #[cfg(feature = "views")]
 pub use structs::views::table_view::TableV;
+#[cfg(feature = "size")]
+pub use traits::byte_size::ByteSize;
+pub use traits::concatenate::Concatenate;
 pub use traits::masked_array::MaskedArray;
 pub use traits::print::Print;
 pub use traits::type_unions::{Float, Integer, Numeric, Primitive};
-pub use ffi::arrow_dtype::ArrowType;
-pub use structs::shared_buffer::SharedBuffer;

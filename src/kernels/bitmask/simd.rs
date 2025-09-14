@@ -8,14 +8,14 @@
 //! SIMD-parallel processing of multiple 64-bit words simultaneously.
 //!
 //! ## Overview
-//! 
-//! This module contains vectorised implementations of all bitmask operations. 
+//!
+//! This module contains vectorised implementations of all bitmask operations.
 //! it uses configurable SIMD lane counts to adapt to different CPU architectures whilst maintaining code portability.
 //!
-//! We do not check for SIMD alignment here because it is guaranteed by the `Bitmask` as it is backed by *Minarrow*'s `Vec64`. 
-//! 
+//! We do not check for SIMD alignment here because it is guaranteed by the `Bitmask` as it is backed by *Minarrow*'s `Vec64`.
+//!
 //! ## Architecture Principles
-//! 
+//!
 //! - **Portable SIMD**: Uses `std::simd` for cross-platform vectorisation without target-specific code
 //! - **Configurable lanes**: Lane counts determined at build time for optimal performance per architecture
 //! - **Hybrid processing**: SIMD inner loops with scalar tail handling for non-aligned lengths
@@ -30,7 +30,7 @@
 //! - Streaming patterns for large bitmask operations
 //!
 //! ## Specialised Algorithms
-//! 
+//!
 //! ### **Population Count (Popcount)**
 //! Uses SIMD reduction for optimal performance:
 //! ```rust,ignore
@@ -49,31 +49,31 @@ use core::simd::{LaneCount, Simd, SupportedLaneCount};
 
 use crate::{Bitmask, BitmaskVT};
 
+use crate::enums::operators::{LogicalOperator, UnaryOperator};
 use crate::kernels::bitmask::{
     bitmask_window_bytes, bitmask_window_bytes_mut, clear_trailing_bits, mask_bits_as_words,
     mask_bits_as_words_mut,
 };
-use crate::enums::operators::{LogicalOperator, UnaryOperator};
 
 /// Primitive bit ops
 
 /// Performs vectorised bitwise binary operations (AND/OR/XOR) with configurable lane counts.
-/// 
+///
 /// Core SIMD implementation for logical operations between bitmask windows. Processes data using
 /// vectorised instructions with automatic scalar tail handling for optimal performance across
 /// different data sizes and architectures.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously (typically 8, 16, 32, or 64)
-/// 
+///
 /// # Parameters
 /// - `lhs`: Left-hand side bitmask window as `(mask, offset, length)` tuple
 /// - `rhs`: Right-hand side bitmask window as `(mask, offset, length)` tuple
 /// - `op`: Logical operation to perform (AND, OR, XOR)
-/// 
+///
 /// # Returns
 /// A new `Bitmask` containing the vectorised operation results with proper trailing bit handling.
-/// 
+///
 /// # Performance Characteristics
 /// - Vectorised inner loop processes `LANES` words per iteration
 /// - Scalar tail handling ensures correctness for non-aligned lengths
@@ -125,27 +125,27 @@ where
 }
 
 /// Performs vectorised bitwise unary operations (NOT) with configurable lane counts.
-/// 
+///
 /// Core SIMD implementation for unary logical operations on bitmask windows. Processes data using
 /// vectorised instructions with automatic scalar tail handling for optimal performance across
 /// different data sizes and CPU architectures.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously (typically 8, 16, 32, or 64)
-/// 
+///
 /// # Parameters
 /// - `src`: Source bitmask window as `(mask, offset, length)` tuple
 /// - `op`: Unary operation to perform (currently only NOT supported)
-/// 
+///
 /// # Returns
 /// A new `Bitmask` containing the vectorised operation results with proper trailing bit handling.
-/// 
+///
 /// # Implementation Details
 /// - Vectorised inner loop processes `LANES` words per iteration using SIMD NOT operations
 /// - Scalar tail handling ensures correctness for non-aligned lengths
 /// - Memory access patterns optimised for cache efficiency and sequential processing
 /// - Lane count scaling provides architecture-specific optimisation for different CPU capabilities
-/// 
+///
 /// # Performance Characteristics
 /// - Memory bandwidth: Vectorised loads/stores improve memory subsystem utilisation
 /// - Instruction throughput: Reduced total instruction count for large operations
@@ -188,25 +188,25 @@ where
 
 // ---- Entry points ----
 /// Performs vectorised bitwise AND operation between two bitmask windows.
-/// 
+///
 /// High-performance SIMD implementation of logical AND using configurable lane counts for optimal
 /// CPU architecture utilisation. Delegates to the core `bitmask_binop_simd` implementation with
 /// the AND operator.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously for vectorised operations
-/// 
+///
 /// # Parameters
 /// - `lhs`: Left-hand side bitmask window as `(mask, offset, length)` tuple
 /// - `rhs`: Right-hand side bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// A new `Bitmask` containing bitwise AND results with proper trailing bit masking.
-/// 
+///
 /// # Usage Example
 /// ```rust,ignore
 /// use simd_kernels::kernels::bitmask::simd::and_masks_simd;
-/// 
+///
 /// // Process 8 lanes simultaneously (512 bits per instruction)
 /// let result = and_masks_simd::<8>(lhs_window, rhs_window);
 /// ```
@@ -219,25 +219,25 @@ where
 }
 
 /// Performs vectorised bitwise OR operation between two bitmask windows.
-/// 
+///
 /// High-performance SIMD implementation of logical OR using configurable lane counts for optimal
 /// CPU architecture utilisation. Delegates to the core `bitmask_binop_simd` implementation with
 /// the OR operator.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously for vectorised operations
-/// 
+///
 /// # Parameters
 /// - `lhs`: Left-hand side bitmask window as `(mask, offset, length)` tuple
 /// - `rhs`: Right-hand side bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// A new `Bitmask` containing bitwise OR results with proper trailing bit masking.
-/// 
+///
 /// # Usage Example
 /// ```rust,ignore
 /// use simd_kernels::kernels::bitmask::simd::or_masks_simd;
-/// 
+///
 /// // Process 16 lanes simultaneously (1024 bits per instruction)
 /// let result = or_masks_simd::<16>(lhs_window, rhs_window);
 /// ```
@@ -250,25 +250,25 @@ where
 }
 
 /// Performs vectorised bitwise XOR operation between two bitmask windows.
-/// 
+///
 /// High-performance SIMD implementation of logical exclusive-OR using configurable lane counts
 /// for optimal CPU architecture utilisation. Delegates to the core `bitmask_binop_simd`
 /// implementation with the XOR operator.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously for vectorised operations
-/// 
+///
 /// # Parameters
 /// - `lhs`: Left-hand side bitmask window as `(mask, offset, length)` tuple
 /// - `rhs`: Right-hand side bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// A new `Bitmask` containing bitwise XOR results with proper trailing bit masking.
-/// 
+///
 /// # Usage Example
 /// ```rust,ignore
 /// use simd_kernels::kernels::bitmask::simd::xor_masks_simd;
-/// 
+///
 /// // Process 32 lanes simultaneously (2048 bits per instruction)
 /// let result = xor_masks_simd::<32>(lhs_window, rhs_window);
 /// ```
@@ -281,24 +281,24 @@ where
 }
 
 /// Performs vectorised bitwise NOT operation on a bitmask window.
-/// 
+///
 /// High-performance SIMD implementation of logical NOT using configurable lane counts for optimal
 /// CPU architecture utilisation. Delegates to the core `bitmask_unop_simd` implementation with
 /// the NOT operator.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously for vectorised operations
-/// 
+///
 /// # Parameters
 /// - `src`: Source bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// A new `Bitmask` containing bitwise NOT results with proper trailing bit masking.
-/// 
+///
 /// # Usage Example
 /// ```rust,ignore
 /// use simd_kernels::kernels::bitmask::simd::not_mask_simd;
-/// 
+///
 /// // Process 8 lanes simultaneously (512 bits per instruction)
 /// let inverted = not_mask_simd::<8>(source_window);
 /// ```
@@ -356,18 +356,18 @@ where
 }
 
 /// Performs vectorised bitwise "not in" membership test for boolean bitmasks.
-/// 
+///
 /// Computes the logical complement of the "in" operation where each output bit is true if the
 /// corresponding lhs bit is NOT in the set of bits defined by rhs. This function delegates to
 /// `in_mask_simd` followed by `not_mask_simd` for optimal performance.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously for vectorised operations
-/// 
+///
 /// # Parameters
 /// - `lhs`: Left-hand side bitmask window as `(mask, offset, length)` tuple (test values)
 /// - `rhs`: Right-hand side bitmask window as `(mask, offset, length)` tuple (set definition)
-/// 
+///
 /// # Returns
 /// A new `Bitmask` where each bit is true if the corresponding lhs bit is not in the rhs set.
 #[inline]
@@ -445,18 +445,18 @@ where
 }
 
 /// Performs vectorised bitwise inequality comparison between two bitmask windows.
-/// 
+///
 /// Computes the logical complement of equality where each output bit is true if the corresponding
 /// bits from the two input windows are different. This function delegates to `eq_mask_simd`
 /// followed by bitwise NOT for optimal performance.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously for vectorised operations
-/// 
+///
 /// # Parameters
 /// - `a`: First bitmask window as `(mask, offset, length)` tuple
 /// - `b`: Second bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// A new `Bitmask` where each bit is true if the corresponding input bits are different.
 #[inline]
@@ -468,18 +468,18 @@ where
 }
 
 /// Tests if all corresponding bits between two bitmask windows are different.
-/// 
+///
 /// Performs bulk inequality comparison across entire bitmask windows by computing the logical
 /// complement of `all_eq_mask_simd`. Returns true only if every corresponding bit pair differs
 /// between the two input windows.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously for vectorised comparison
-/// 
+///
 /// # Parameters
 /// - `a`: First bitmask window as `(mask, offset, length)` tuple
 /// - `b`: Second bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// `true` if all corresponding bits are different, `false` if any bits are equal.
 #[inline]
@@ -491,18 +491,18 @@ where
 }
 
 /// Vectorised equality test across entire bitmask windows with early termination optimisation.
-/// 
+///
 /// Performs bulk equality comparison between two bitmask windows using SIMD comparison operations.
 /// The implementation processes multiple words simultaneously and uses early termination to avoid
 /// unnecessary work when differences are detected.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously for vectorised comparison
-/// 
+///
 /// # Parameters
 /// - `a`: First bitmask window as `(mask, offset, length)` tuple
 /// - `b`: Second bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// `true` if all corresponding bits are equal (ignoring slack bits), `false` otherwise.
 #[inline]
@@ -575,17 +575,17 @@ where
 }
 
 /// Vectorised population count (number of set bits) with SIMD reduction for optimal performance.
-/// 
+///
 /// Computes the total number of set bits in a bitmask window using SIMD population count instructions
 /// followed by horizontal reduction. This implementation provides significant performance improvements
 /// for large bitmasks through parallel processing of multiple words.
-/// 
+///
 /// # Type Parameters
 /// - `LANES`: Number of u64 lanes to process simultaneously for vectorised popcount operations
-/// 
+///
 /// # Parameters
 /// - `m`: Bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// The total count of set bits in the specified window.
 #[inline]

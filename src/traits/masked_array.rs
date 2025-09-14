@@ -1,5 +1,5 @@
 //! # **MaskedArray Module** - *Standardises all Inner Array types and null handling in Minarrow*
-//! 
+//!
 //! Defines the `MaskedArray` trait — the common interface for all nullable array types in Minarrow.
 //!
 //! This module standardises how arrays store and manage optional null bitmasks,
@@ -9,9 +9,9 @@
 use crate::{Bitmask, Length, Offset};
 
 /// # MaskedArray
-/// 
+///
 /// MaskedArray is implemented by all inner, nullable arrays.
-/// 
+///
 /// ### Purpose
 /// - MaskedArray ensures interface consistency across `BooleanArray`,
 /// `CategoricalArray`, `DatetimeArray`, `FloatArray`, `IntegerArray`
@@ -71,18 +71,18 @@ pub trait MaskedArray {
     unsafe fn set_unchecked(&mut self, idx: usize, value: Self::LogicalType);
 
     /// Low-level accessor for when working directly with
-    /// mutable array variants. 
-    /// 
-    /// Borrows with window parameters as a tuple, 
+    /// mutable array variants.
+    ///
+    /// Borrows with window parameters as a tuple,
     /// for 'DIY' window access, retaining access to the whole original array.
-    /// 
+    ///
     /// `Offset` and `Length` are `usize` aliases.
-    /// 
+    ///
     /// For the standard zero-copy accessors, see the `View` trait.
     fn tuple_ref(&self, offset: usize, len: usize) -> (&Self, Offset, Length) {
         (&self, offset, len)
     }
-    
+
     /// Returns an iterator over the T values in this array.
     fn iter(&self) -> impl Iterator<Item = Self::CopyType> + '_;
 
@@ -93,14 +93,18 @@ pub trait MaskedArray {
     fn iter_range(&self, offset: usize, len: usize) -> impl Iterator<Item = Self::CopyType> + '_;
 
     /// Returns an iterator over a range of T values, as `Option<T>`.
-    fn iter_opt_range(&self, offset: usize, len: usize) -> impl Iterator<Item = Option<Self::CopyType>> + '_;
+    fn iter_opt_range(
+        &self,
+        offset: usize,
+        len: usize,
+    ) -> impl Iterator<Item = Option<Self::CopyType>> + '_;
 
     /// Appends a value to the array, updating masks if present.
     fn push(&mut self, value: Self::LogicalType);
 
-    /// Appends a value to the array, updating masks if present, 
+    /// Appends a value to the array, updating masks if present,
     /// without bounds checks.
-    /// 
+    ///
     /// # Safety
     /// The caller must make sure there is enough pre-allocated
     /// size in the array, and no thread contention.
@@ -108,7 +112,7 @@ pub trait MaskedArray {
 
     /// Returns a logical slice of the MaskedArray<Self::T> [offset, offset+len)
     /// as a new MaskedArray<Self::T> object via clone.
-    /// 
+    ///
     /// Prefer `View` trait slicers for zero-copy.
     fn slice_clone(&self, offset: usize, len: usize) -> Self;
 
@@ -133,7 +137,7 @@ pub trait MaskedArray {
     fn is_null(&self, idx: usize) -> bool {
         match &self.null_mask() {
             Some(mask) => !mask.get(idx),
-            None => false
+            None => false,
         }
     }
 
@@ -146,7 +150,7 @@ pub trait MaskedArray {
     fn null_count(&self) -> usize {
         match self.null_mask().as_ref() {
             Some(mask) => mask.count_zeros(),
-            None => 0
+            None => 0,
         }
     }
 
@@ -267,14 +271,14 @@ pub trait MaskedArray {
     /// Appends all values (and null mask if present) from `other` to `self`.
     ///
     /// The appended array must be of the same concrete type and element type.
-    /// 
+    ///
     /// If this array is wrapped in a `FieldArray`, it will not be possible to
     /// mutate the array without reconstructing first, and a `ChunkedArray`
     /// is an alternative option.
     fn append_array(&mut self, other: &Self);
 
     /// Extends the array from an iterator with pre-allocated capacity.
-    /// 
+    ///
     /// Pre-allocates the specified additional capacity to avoid reallocations during bulk insertion,
     /// providing optimal performance for large datasets where the final size is known in advance.
     fn extend_from_iter_with_capacity<I>(&mut self, iter: I, additional_capacity: usize)
@@ -282,17 +286,16 @@ pub trait MaskedArray {
         I: Iterator<Item = Self::LogicalType>;
 
     /// Extends the array from a slice of values.
-    /// 
+    ///
     /// More efficient than individual `push` operations as it pre-allocates capacity
     /// and can use bulk copy operations for compatible data types. For variable-length
     /// types like strings, calculates total byte requirements upfront.
     fn extend_from_slice(&mut self, slice: &[Self::LogicalType]);
 
     /// Creates a new array filled with the specified value repeated `count` times.
-    /// 
-    /// Pre-allocates exact capacity to avoid reallocations and uses 
+    ///
+    /// Pre-allocates exact capacity to avoid reallocations and uses
     /// efficient bulk operations where possible. For string types,
     /// calculates total byte requirements to minimise memory overhead.
     fn fill(value: Self::LogicalType, count: usize) -> Self;
-
 }
