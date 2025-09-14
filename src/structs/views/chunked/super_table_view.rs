@@ -33,6 +33,8 @@
 //!   within its underlying table batch.
 
 use crate::structs::chunked::super_table::SuperTable;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::{Table, TableV};
 
 /// # SuperTableView
@@ -139,6 +141,32 @@ impl SuperTableV {
     pub fn row_slice(&self, row: usize) -> TableV {
         let (ci, ri) = self.locate(row);
         self.slices[ci].from_self(ri, 1)
+    }
+ 
+    /// Returns the total number of rows in the Super table across all chunks
+    #[inline]
+    pub fn n_rows(&self) -> usize {
+        self.len
+    }
+
+    /// Returns the number of columns in the Super table.
+    /// 
+    /// Assumes that every chunk has the same column schema as per
+    /// the semantic requirement.
+    #[inline]
+    pub fn n_cols(&self) -> usize {
+        let n_batches = self.slices.len();
+        if n_batches > 0 {
+           self.slices[0].fields.len()
+        } else {
+            0
+        }
+    }
+}
+
+impl Shape for SuperTableV {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank2 { rows: self.n_rows(), cols: self.n_cols() }
     }
 }
 

@@ -13,6 +13,8 @@ use std::iter::FromIterator;
 #[cfg(feature = "views")]
 use std::sync::Arc;
 
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 #[cfg(feature = "views")]
 use crate::ArrayV;
 #[cfg(feature = "views")]
@@ -716,6 +718,12 @@ impl FromIterator<FieldArray> for SuperArray {
 impl From<FieldArray> for SuperArray {
     fn from(field_array: FieldArray) -> Self {
         SuperArray { arrays: vec![field_array] }
+    }
+}
+
+impl Shape for SuperArray {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

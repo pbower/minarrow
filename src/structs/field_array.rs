@@ -21,6 +21,8 @@ use polars::series::Series;
 #[cfg(feature = "views")]
 use crate::aliases::FieldAVT;
 use crate::ffi::arrow_dtype::ArrowType;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::{Array, Field};
 
 
@@ -242,6 +244,12 @@ impl Display for FieldArray {
             self.field.dtype
         )?;
         self.array.fmt(f)
+    }
+}
+
+impl Shape for FieldArray {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

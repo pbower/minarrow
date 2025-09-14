@@ -33,7 +33,7 @@
 //! - `field` is the schema for the underlying array and is shared by all slices.
 use std::sync::Arc;
 
-use crate::{Array, ArrayV, ArrayVT, Field, SuperArray};
+use crate::{enums::shape_dim::ShapeDim, traits::shape::Shape, Array, ArrayV, ArrayVT, Field, SuperArray};
 
 /// # SuperArrayView
 /// 
@@ -67,6 +67,7 @@ impl SuperArrayV {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+    
     #[inline]
     pub fn n_slices(&self) -> usize {
         self.slices.len()
@@ -166,6 +167,17 @@ impl SuperArrayV {
         let (ci, ri) = self.locate(row);
         let (array, base_offset, _) = self.slices[ci].as_tuple();
         ArrayV::new(array, base_offset + ri, 1)
+    }
+
+    /// Returns the total number of elements in the array
+    pub fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl Shape for SuperArrayV {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

@@ -100,6 +100,7 @@ pub mod enums {
         pub mod temporal_array;
     }
     pub mod operators;
+    pub mod shape_dim;
 }
 
 /// Contains SIMD-accelerated kernels for the 'essentials' that are highly coupled to this crate
@@ -179,6 +180,7 @@ pub mod traits {
     pub mod print;
     pub mod type_unions;
     pub mod custom_value;
+    pub mod shape;
 }
 
 pub mod aliases;

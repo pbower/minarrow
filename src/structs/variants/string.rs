@@ -39,6 +39,8 @@ use rayon::iter::ParallelIterator;
 use crate::structs::vec64::Vec64;
 use crate::traits::masked_array::MaskedArray;
 use crate::traits::print::MAX_PREVIEW;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::traits::type_unions::Integer;
 use crate::utils::validate_null_mask_len;
 use crate::{
@@ -1281,6 +1283,12 @@ impl_arc_masked_array!(
     Variant = TextArray,
     Bound = Integer,
 );
+
+impl<T: Integer> Shape for StringArray<T> {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
+    }
+}
 
 impl<T: Zero> Default for StringArray<T> {
     fn default() -> Self {

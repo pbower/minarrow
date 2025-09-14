@@ -32,6 +32,8 @@ use super::field_array::FieldArray;
 #[cfg(feature = "views")]
 use crate::aliases::CubeV;
 use crate::ffi::arrow_dtype::ArrowType;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::{Field, Table};
 #[cfg(feature = "views")]
 use crate::TableV;
@@ -64,6 +66,7 @@ pub struct Cube {
     pub tables: Vec<Table>,
     /// Number of rows in each table
     pub n_rows: Vec<usize>,
+    
     /// Cube name
     pub name: String,
     // Third-dimensional index column names
@@ -158,6 +161,11 @@ impl Cube {
     /// Returns the number of tables.
     pub fn n_tables(&self) -> usize {
         self.tables.len()
+    }
+
+    /// Returns the number of rows
+    pub fn n_rows(&self) -> Vec<usize> {
+        self.n_rows.clone()
     }
 
     /// Returns the number of columns.
@@ -438,6 +446,13 @@ impl IntoIterator for Cube {
         self.tables.into_iter()
     }
 }
+
+impl Shape for Cube {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Collection(self.tables.iter().map(|t| t.shape()).collect())
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

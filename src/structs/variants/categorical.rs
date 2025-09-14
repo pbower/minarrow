@@ -30,6 +30,8 @@ use rayon::iter::ParallelIterator;
 use crate::aliases::CategoricalAVT;
 use crate::structs::allocator::Alloc64;
 use crate::structs::vec64::Vec64;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::traits::type_unions::Integer;
 use crate::utils::validate_null_mask_len;
 use crate::{
@@ -1019,6 +1021,12 @@ impl<T: Integer + Send + Sync> CategoricalArray<T> {
             let idx = unsafe { *idx_buf.get_unchecked(i) }.to_usize();
             Some(unsafe { dict.get_unchecked(idx).as_str() })
         })
+    }
+}
+
+impl<T: Integer> Shape for CategoricalArray<T> {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

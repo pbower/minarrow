@@ -45,6 +45,8 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 #[cfg(feature = "views")]
 use crate::ArrayV;
 use crate::traits::print::MAX_PREVIEW;
@@ -304,6 +306,12 @@ impl Display for TableV {
         }
 
         Ok(())
+    }
+}
+
+impl Shape for TableV {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank2 { rows: self.n_rows(), cols: self.n_cols() } 
     }
 }
 

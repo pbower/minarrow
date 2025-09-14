@@ -34,6 +34,8 @@ use std::fmt::{self, Debug, Display, Formatter};
 
 use crate::structs::views::bitmask_view::BitmaskV;
 use crate::traits::print::MAX_PREVIEW;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::{Array, ArrayV, FieldArray, MaskedArray, NumericArray};
 
 /// # NumericArrayView
@@ -342,6 +344,12 @@ impl Display for NumericArrayV {
         }
 
         Ok(())
+    }
+}
+
+impl Shape for NumericArrayV {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
     }
 }
 

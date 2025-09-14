@@ -18,6 +18,8 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::ops::{BitAnd, BitOr, Deref, DerefMut, Index, Not};
 
 use crate::structs::vec64::Vec64;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 use crate::{BitmaskV, Buffer, Length, Offset};
 
 /// TODO: Move bitmask kernels here
@@ -731,6 +733,11 @@ impl Display for Bitmask {
     }
 }
 
+impl Shape for Bitmask {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
+    }
+}
 
 #[cfg(test)]
 mod tests {

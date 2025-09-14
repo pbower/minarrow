@@ -27,6 +27,8 @@ use std::sync::Arc;
 use crate::structs::field::Field;
 use crate::structs::field_array::FieldArray;
 use crate::structs::table::Table;
+use crate::traits::shape::Shape;
+use crate::enums::shape_dim::ShapeDim;
 #[cfg(feature = "views")]
 use crate::{SuperTableV, TableV};
 
@@ -154,6 +156,12 @@ impl SuperTable {
     pub fn n_cols(&self) -> usize {
         self.schema.len()
     }
+
+    #[inline]
+    pub fn n_rows(&self) -> usize {
+        self.n_rows
+    }
+
     #[inline]
     pub fn n_batches(&self) -> usize {
         self.batches.len()
@@ -223,6 +231,7 @@ impl SuperTable {
             name
         }
     }
+
 }
 
 impl Default for SuperTable {
@@ -235,6 +244,12 @@ impl FromIterator<Table> for SuperTable {
     fn from_iter<T: IntoIterator<Item = Table>>(iter: T) -> Self {
         let batches: Vec<Arc<Table>> = iter.into_iter().map(|x| x.into()).collect();
         SuperTable::from_batches(batches, None)
+    }
+}
+
+impl Shape for SuperTable {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank2 { rows: self.n_rows(), cols: self.n_cols() }
     }
 }
 
