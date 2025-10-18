@@ -11,36 +11,42 @@
 //! - centralises dispatch
 //! - preserves SIMD-aligned buffers across all temporal variants.
 
-use std::{fmt::{Display, Formatter}, sync::Arc};
+use std::{
+    fmt::{Display, Formatter},
+    sync::Arc,
+};
 
-use crate::enums::error::MinarrowError;
 use crate::{Bitmask, DatetimeArray, MaskedArray};
+use crate::{
+    enums::{error::MinarrowError, shape_dim::ShapeDim},
+    traits::{concatenate::Concatenate, shape::Shape},
+};
 
 /// Temporal Array
-/// 
+///
 /// Unified datetime array container
-/// 
+///
 /// ## Purpose
 /// Exists to unify datetime operations,
 /// simplify API's and streamline user ergonomics.
-/// 
+///
 /// ## Usage:
 /// - It is accessible from `Array` using `.dt()`,
 /// and provides typed variant access via for e.g.,
 /// `.dt32()`, so one can drill down to the required
 /// granularity via `myarr.dt().dt32()`
-/// - This streamlines function implementations *(at least for the `NumericArray` 
+/// - This streamlines function implementations *(at least for the `NumericArray`
 /// case where this pattern is the most useful)*,
 /// and, despite the additional `enum` layer,
 /// matching lanes in many real-world scenarios.
-/// This is because one can for e.g., unify a 
+/// This is because one can for e.g., unify a
 /// function signature with `impl Into<TemporalArray>`,
 /// and all of the subtypes, plus `Array` and `TemporalArray`,
-/// all qualify. 
+/// all qualify.
 /// - Additionally, you can then use one `Temporal` implementation
 /// on the enum dispatch arm for all `Temporal` variants, or,
 /// in many cases, for the entire datetime arm when they are the same.
-/// 
+///
 /// ### Handling Times, Durations, etc.
 /// We use one Physical type to hold all datetime variants,
 /// i.e., the *Apache Arrow* types `DATE32`, `TIME32`, `DURATION` etc.,
@@ -49,9 +55,9 @@ use crate::{Bitmask, DatetimeArray, MaskedArray};
 /// them differently in API usage, you can use the `TimeUnit` and `IntervalUnit`,
 /// along with the `ArrowType` that is stored on the `Field` in `Minarrow`,
 /// and match on these for any desired behaviour. The `Field` is packaged together
-/// with `Array` *(which then drill-down accesses `TemporalArray` on the fly, or 
+/// with `Array` *(which then drill-down accesses `TemporalArray` on the fly, or
 /// in dispatch routing scenarios)*.
-/// 
+///
 /// ### Typecasting behaviour
 /// - If the enum already holds the given type *(which should be known at compile-time)*,
 /// then using accessors like `.dt32()` is zero-cost, as it transfers ownership.
@@ -68,7 +74,7 @@ pub enum TemporalArray {
     // DATE64, TIMESTAMP (ms/us/ns), DURATION (ms/us/ns), TIME64, DURATION(us), DURATION(ns)
     Datetime64(Arc<DatetimeArray<i64>>),
     #[default]
-    Null // Default Marker for mem::take
+    Null, // Default Marker for mem::take
 }
 
 impl TemporalArray {
@@ -78,7 +84,7 @@ impl TemporalArray {
         match self {
             TemporalArray::Datetime32(arr) => arr.len(),
             TemporalArray::Datetime64(arr) => arr.len(),
-            TemporalArray::Null => 0
+            TemporalArray::Null => 0,
         }
     }
 
@@ -88,7 +94,7 @@ impl TemporalArray {
         match self {
             TemporalArray::Datetime32(arr) => arr.null_mask.as_ref(),
             TemporalArray::Datetime64(arr) => arr.null_mask.as_ref(),
-            TemporalArray::Null => None
+            TemporalArray::Null => None,
         }
     }
 
@@ -112,7 +118,7 @@ impl TemporalArray {
                 Arc::make_mut(a).append_array(b)
             }
             (TemporalArray::Null, TemporalArray::Null) => (),
-            (lhs, rhs) => panic!("Cannot append {:?} into {:?}", rhs, lhs)
+            (lhs, rhs) => panic!("Cannot append {:?} into {:?}", rhs, lhs),
         }
     }
 
@@ -124,7 +130,7 @@ impl TemporalArray {
                 Err(shared) => Ok((*shared).clone()),
             },
             TemporalArray::Datetime64(arr) => Ok(DatetimeArray::<i32>::try_from(&*arr)?),
-            TemporalArray::Null => Err(MinarrowError::NullError { message: None })
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
@@ -136,20 +142,63 @@ impl TemporalArray {
                 Err(shared) => Ok((*shared).clone()),
             },
             TemporalArray::Datetime32(arr) => Ok(DatetimeArray::<i64>::from(&*arr)),
-            TemporalArray::Null => Err(MinarrowError::NullError { message: None })
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
         }
+    }
+}
+
+impl Shape for TemporalArray {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
+    }
+}
+
+impl Concatenate for TemporalArray {
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        match (self, other) {
+            (TemporalArray::Datetime32(a), TemporalArray::Datetime32(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(TemporalArray::Datetime32(Arc::new(a.concat(b)?)))
+            }
+            (TemporalArray::Datetime64(a), TemporalArray::Datetime64(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(TemporalArray::Datetime64(Arc::new(a.concat(b)?)))
+            }
+            (TemporalArray::Null, TemporalArray::Null) => Ok(TemporalArray::Null),
+            (lhs, rhs) => Err(MinarrowError::IncompatibleTypeError {
+                from: "TemporalArray",
+                to: "TemporalArray",
+                message: Some(format!(
+                    "Cannot concatenate mismatched TemporalArray variants: {:?} and {:?}",
+                    temporal_variant_name(&lhs),
+                    temporal_variant_name(&rhs)
+                )),
+            }),
+        }
+    }
+}
+
+/// Helper function to get the variant name for error messages
+fn temporal_variant_name(arr: &TemporalArray) -> &'static str {
+    match arr {
+        TemporalArray::Datetime32(_) => "Datetime32",
+        TemporalArray::Datetime64(_) => "Datetime64",
+        TemporalArray::Null => "Null",
     }
 }
 
 impl Display for TemporalArray {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            TemporalArray::Datetime32(arr) =>
-                write_temporal_array_with_header(f, "Datetime32", arr.as_ref()),
-            TemporalArray::Datetime64(arr) =>
-                write_temporal_array_with_header(f, "Datetime64", arr.as_ref()),
-            TemporalArray::Null =>
-                writeln!(f, "TemporalArray::Null [0 values]"),
+            TemporalArray::Datetime32(arr) => {
+                write_temporal_array_with_header(f, "Datetime32", arr.as_ref())
+            }
+            TemporalArray::Datetime64(arr) => {
+                write_temporal_array_with_header(f, "Datetime64", arr.as_ref())
+            }
+            TemporalArray::Null => writeln!(f, "TemporalArray::Null [0 values]"),
         }
     }
 }

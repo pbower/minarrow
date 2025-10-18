@@ -36,19 +36,20 @@
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
-use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 #[cfg(feature = "datetime")]
 use crate::Buffer;
+use crate::enums::shape_dim::ShapeDim;
 use crate::enums::time_units::TimeUnit;
-use crate::structs::allocator::Alloc64;
-use crate::structs::vec64::Vec64;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::masked_array::MaskedArray;
+use crate::traits::shape::Shape;
 use crate::traits::type_unions::Integer;
 use crate::utils::validate_null_mask_len;
 use crate::{
-    Bitmask, Length, Offset, impl_arc_masked_array, impl_array_ref_deref, impl_masked_array
+    Bitmask, Length, Offset, impl_arc_masked_array, impl_array_ref_deref, impl_masked_array,
 };
+use vec64::Vec64;
+use vec64::alloc64::Alloc64;
 
 /// # DatetimeArray
 ///
@@ -56,9 +57,9 @@ use crate::{
 ///
 /// ## Role
 /// - Many will prefer the higher level `Array` type, which dispatches to this when
-/// necessary. 
+/// necessary.
 /// - Can be used as a standalone datetime array or as the datetime arm of `TemporalArray` / `Array`.
-/// 
+///
 /// ## Description
 /// - Stores temporal values as numeric offsets (`T: Integer`) from the UNIX epoch or a base date,
 ///   with units defined by [`TimeUnit`].
@@ -101,7 +102,7 @@ pub struct DatetimeArray<T> {
     /// Optional null mask (bit-packed; 1=valid, 0=null).
     pub null_mask: Option<Bitmask>,
     /// The time units associated with the datatype
-    pub time_unit: TimeUnit
+    pub time_unit: TimeUnit,
 }
 
 impl<T: Integer> DatetimeArray<T> {
@@ -110,14 +111,14 @@ impl<T: Integer> DatetimeArray<T> {
     pub fn new(
         data: impl Into<Buffer<T>>,
         null_mask: Option<Bitmask>,
-        time_unit: Option<TimeUnit>
+        time_unit: Option<TimeUnit>,
     ) -> Self {
         let data: Buffer<T> = data.into();
         validate_null_mask_len(data.len(), &null_mask);
         Self {
             data: data.into(),
             null_mask: null_mask,
-            time_unit: time_unit.unwrap_or_default()
+            time_unit: time_unit.unwrap_or_default(),
         }
     }
 
@@ -131,8 +132,12 @@ impl<T: Integer> DatetimeArray<T> {
     pub fn with_capacity(cap: usize, null_mask: bool, time_unit: Option<TimeUnit>) -> Self {
         Self {
             data: Vec64::with_capacity(cap).into(),
-            null_mask: if null_mask { Some(Bitmask::with_capacity(cap)) } else { None },
-            time_unit: time_unit.unwrap_or_default()
+            null_mask: if null_mask {
+                Some(Bitmask::with_capacity(cap))
+            } else {
+                None
+            },
+            time_unit: time_unit.unwrap_or_default(),
         }
     }
 
@@ -142,7 +147,7 @@ impl<T: Integer> DatetimeArray<T> {
         Self {
             data: Vec64::new().into(),
             null_mask: None,
-            time_unit: time_unit.unwrap_or_default()
+            time_unit: time_unit.unwrap_or_default(),
         }
     }
 
@@ -152,7 +157,7 @@ impl<T: Integer> DatetimeArray<T> {
         Self {
             data: Vec64(slice.to_vec_in(Alloc64)).into(),
             null_mask: None,
-            time_unit: time_unit.unwrap_or_default()
+            time_unit: time_unit.unwrap_or_default(),
         }
     }
 
@@ -185,12 +190,12 @@ impl<T: Integer> DatetimeArray<T> {
     pub fn from_vec64(
         data: Vec64<T>,
         null_mask: Option<Bitmask>,
-        time_unit: Option<TimeUnit>
+        time_unit: Option<TimeUnit>,
     ) -> Self {
         Self {
             data: data.into(),
             null_mask,
-            time_unit: time_unit.unwrap_or_default()
+            time_unit: time_unit.unwrap_or_default(),
         }
     }
 
@@ -235,7 +240,7 @@ impl DatetimeArray<i64> {
                 dt.time().minute(),
                 dt.time().second(),
                 dt.time().nanosecond() / 1_000_000, // ms
-                dt.time().nanosecond()
+                dt.time().nanosecond(),
             )
         })
     }
@@ -260,7 +265,7 @@ impl_arc_masked_array!(
 #[cfg(feature = "datetime")]
 impl<T> Display for DatetimeArray<T>
 where
-    T: Integer + Display
+    T: Integer + Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use crate::traits::print::MAX_PREVIEW;
@@ -322,11 +327,11 @@ where
                             let date = base.checked_add_signed(Duration::days(days));
                             match date {
                                 Some(d) => write!(f, "{d}"),
-                                None => write!(f, "{}d", val)
+                                None => write!(f, "{}d", val),
                             }
                         }
                     },
-                    None => write!(f, "null")
+                    None => write!(f, "null"),
                 }?;
             }
         }
@@ -339,7 +344,7 @@ where
                 TimeUnit::Milliseconds => "ms",
                 TimeUnit::Microseconds => "µs",
                 TimeUnit::Nanoseconds => "ns",
-                TimeUnit::Days => "d"
+                TimeUnit::Days => "d",
             };
             for i in 0..usize::min(len, MAX_PREVIEW) {
                 if i > 0 {
@@ -347,7 +352,7 @@ where
                 }
                 match self.value(i) {
                     Some(val) => write!(f, "{}{}", val, suffix)?,
-                    None => write!(f, "null")?
+                    None => write!(f, "null")?,
                 }
             }
         }
@@ -363,6 +368,29 @@ where
 impl<T: Integer> Shape for DatetimeArray<T> {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
+    }
+}
+
+impl<T: Integer> Concatenate for DatetimeArray<T> {
+    fn concat(
+        mut self,
+        other: Self,
+    ) -> core::result::Result<Self, crate::enums::error::MinarrowError> {
+        // Check that time units match
+        if self.time_unit != other.time_unit {
+            return Err(crate::enums::error::MinarrowError::IncompatibleTypeError {
+                from: "DatetimeArray",
+                to: "DatetimeArray",
+                message: Some(format!(
+                    "Cannot concatenate DatetimeArrays with different time units: {:?} and {:?}",
+                    self.time_unit, other.time_unit
+                )),
+            });
+        }
+
+        // Consume other and extend self with its data
+        self.append_array(&other);
+        Ok(self)
     }
 }
 
@@ -557,9 +585,9 @@ mod tests {
     fn test_batch_extend_from_iter_with_capacity() {
         let mut arr = DatetimeArray::<i64>::with_default_unit(Some(TimeUnit::Seconds));
         let data: Vec<i64> = (1_000_000_000..1_000_000_100).collect(); // Unix timestamps
-        
+
         arr.extend_from_iter_with_capacity(data.into_iter(), 100);
-        
+
         assert_eq!(arr.len(), 100);
         for i in 0..100 {
             assert_eq!(arr.value(i), Some(1_000_000_000 + i as i64));
@@ -572,10 +600,10 @@ mod tests {
         let mut arr = DatetimeArray::<i32>::with_capacity(10, true, Some(TimeUnit::Milliseconds));
         arr.push(1000);
         arr.push_null();
-        
+
         let data = &[2000i32, 3000, 4000];
         arr.extend_from_slice(data);
-        
+
         assert_eq!(arr.len(), 5);
         assert_eq!(arr.value(0), Some(1000));
         assert_eq!(arr.value(1), None);
@@ -590,15 +618,22 @@ mod tests {
     fn test_batch_fill_datetime() {
         let timestamp = 1_700_000_000i64; // Recent timestamp
         let arr = DatetimeArray::<i64>::fill(timestamp, 200);
-        
+
         assert_eq!(arr.len(), 200);
         assert_eq!(arr.null_count(), 0);
         for i in 0..200 {
             assert_eq!(arr.value(i), Some(timestamp));
         }
-        // Default time unit from fill() 
+        // Default time unit from fill()
         // Let's check what it actually is rather than assume
-        assert!(matches!(arr.time_unit, TimeUnit::Nanoseconds | TimeUnit::Milliseconds | TimeUnit::Seconds | TimeUnit::Microseconds | TimeUnit::Days));
+        assert!(matches!(
+            arr.time_unit,
+            TimeUnit::Nanoseconds
+                | TimeUnit::Milliseconds
+                | TimeUnit::Seconds
+                | TimeUnit::Microseconds
+                | TimeUnit::Days
+        ));
     }
 
     #[test]
@@ -606,9 +641,9 @@ mod tests {
         // Test with microseconds
         let mut arr_micro = DatetimeArray::<i64>::with_default_unit(Some(TimeUnit::Microseconds));
         let micro_data = &[1_000_000i64, 2_000_000, 3_000_000]; // 1, 2, 3 seconds in microseconds
-        
+
         arr_micro.extend_from_slice(micro_data);
-        
+
         assert_eq!(arr_micro.len(), 3);
         assert_eq!(arr_micro.time_unit, TimeUnit::Microseconds);
         for (i, &expected) in micro_data.iter().enumerate() {
@@ -620,10 +655,17 @@ mod tests {
     fn test_batch_fill_preserves_time_unit() {
         let _arr = DatetimeArray::<i32>::with_default_unit(Some(TimeUnit::Milliseconds));
         let filled = DatetimeArray::<i32>::fill(1000, 50);
-        
+
         // Note: fill() creates a new array with default time unit
         // This test documents current behavior
-        assert!(matches!(filled.time_unit, TimeUnit::Nanoseconds | TimeUnit::Milliseconds | TimeUnit::Seconds | TimeUnit::Microseconds | TimeUnit::Days));
+        assert!(matches!(
+            filled.time_unit,
+            TimeUnit::Nanoseconds
+                | TimeUnit::Milliseconds
+                | TimeUnit::Seconds
+                | TimeUnit::Microseconds
+                | TimeUnit::Days
+        ));
         assert_eq!(filled.len(), 50);
     }
 
@@ -631,13 +673,73 @@ mod tests {
     fn test_batch_operations_large_timestamps() {
         let mut arr = DatetimeArray::<i64>::with_default_unit(Some(TimeUnit::Nanoseconds));
         let large_timestamps: Vec<i64> = (0..10).map(|i| 1_000_000_000_000_000_000 + i).collect();
-        
+
         arr.extend_from_iter_with_capacity(large_timestamps.into_iter(), 10);
-        
+
         assert_eq!(arr.len(), 10);
         for i in 0..10 {
             assert_eq!(arr.value(i), Some(1_000_000_000_000_000_000 + i as i64));
         }
+    }
+
+    #[test]
+    fn test_datetime_array_concat() {
+        use crate::traits::concatenate::Concatenate;
+
+        let arr1 =
+            DatetimeArray::<i64>::from_slice(&[1000, 2000, 3000], Some(TimeUnit::Milliseconds));
+        let arr2 = DatetimeArray::<i64>::from_slice(&[4000, 5000], Some(TimeUnit::Milliseconds));
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.value(0), Some(1000));
+        assert_eq!(result.value(1), Some(2000));
+        assert_eq!(result.value(2), Some(3000));
+        assert_eq!(result.value(3), Some(4000));
+        assert_eq!(result.value(4), Some(5000));
+        assert_eq!(result.time_unit, TimeUnit::Milliseconds);
+    }
+
+    #[test]
+    fn test_datetime_array_concat_with_nulls() {
+        use crate::traits::concatenate::Concatenate;
+
+        let mut arr1 = DatetimeArray::<i64>::with_capacity(3, true, Some(TimeUnit::Seconds));
+        arr1.push(100);
+        arr1.push_null();
+        arr1.push(300);
+
+        let mut arr2 = DatetimeArray::<i64>::with_capacity(2, true, Some(TimeUnit::Seconds));
+        arr2.push(400);
+        arr2.push_null();
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.value(0), Some(100));
+        assert_eq!(result.value(1), None);
+        assert_eq!(result.value(2), Some(300));
+        assert_eq!(result.value(3), Some(400));
+        assert_eq!(result.value(4), None);
+        assert_eq!(result.null_count(), 2);
+        assert_eq!(result.time_unit, TimeUnit::Seconds);
+    }
+
+    #[test]
+    fn test_datetime_array_concat_incompatible_time_units() {
+        use crate::traits::concatenate::Concatenate;
+
+        let arr1 = DatetimeArray::<i64>::from_slice(&[1000, 2000], Some(TimeUnit::Milliseconds));
+        let arr2 = DatetimeArray::<i64>::from_slice(&[3, 4], Some(TimeUnit::Seconds));
+
+        let result = arr1.concat(arr2);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::enums::error::MinarrowError::IncompatibleTypeError { .. }
+        ));
     }
 }
 
@@ -704,7 +806,7 @@ mod parallel_tests {
     fn test_datetimearray_par_iter_range_unchecked() {
         let arr = DatetimeArray::<i64>::from_slice(
             &[100, 200, 300, 400],
-            Some(crate::enums::time_units::TimeUnit::Milliseconds)
+            Some(crate::enums::time_units::TimeUnit::Milliseconds),
         );
         let out: Vec<&i64> = unsafe { arr.par_iter_range_unchecked(1, 3).collect() };
         assert_eq!(*out[0], 200);

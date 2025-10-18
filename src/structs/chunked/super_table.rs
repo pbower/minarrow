@@ -24,11 +24,11 @@ use std::fmt::{Display, Formatter};
 use std::iter::FromIterator;
 use std::sync::Arc;
 
+use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
 use crate::structs::field::Field;
 use crate::structs::field_array::FieldArray;
 use crate::structs::table::Table;
-use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
+use crate::traits::{concatenate::Concatenate, shape::Shape};
 #[cfg(feature = "views")]
 use crate::{SuperTableV, TableV};
 
@@ -60,7 +60,7 @@ pub struct SuperTable {
     pub batches: Vec<Arc<Table>>,
     pub schema: Vec<Arc<Field>>,
     pub n_rows: usize,
-    pub name: String
+    pub name: String,
 }
 
 impl SuperTable {
@@ -70,7 +70,7 @@ impl SuperTable {
             batches: Vec::new(),
             schema: Vec::new(),
             n_rows: 0,
-            name
+            name,
         }
     }
 
@@ -89,11 +89,18 @@ impl SuperTable {
 
         // Validate all batches.
         for (b_idx, batch) in batches.iter().enumerate() {
-            assert_eq!(batch.n_cols(), n_cols, "Batch {b_idx} column-count mismatch");
+            assert_eq!(
+                batch.n_cols(),
+                n_cols,
+                "Batch {b_idx} column-count mismatch"
+            );
             for col_idx in 0..n_cols {
                 let field = &schema[col_idx];
                 let fa = &batch.cols[col_idx];
-                assert_eq!(&fa.field, field, "Batch {b_idx} col {col_idx} schema mismatch");
+                assert_eq!(
+                    &fa.field, field,
+                    "Batch {b_idx} col {col_idx} schema mismatch"
+                );
             }
             total_rows += batch.n_rows;
         }
@@ -102,7 +109,7 @@ impl SuperTable {
             batches,
             schema,
             n_rows: total_rows,
-            name
+            name,
         }
     }
 
@@ -118,7 +125,10 @@ impl SuperTable {
         for col_idx in 0..n_cols {
             let field = &self.schema[col_idx];
             let fa = &batch.cols[col_idx];
-            assert_eq!(&fa.field, field, "Pushed batch col {col_idx} schema mismatch");
+            assert_eq!(
+                &fa.field, field,
+                "Pushed batch col {col_idx} schema mismatch"
+            );
         }
         self.n_rows += batch.n_rows;
         self.batches.push(batch);
@@ -140,13 +150,19 @@ impl SuperTable {
                 arr.concat_array(&batch.cols[col_idx].array);
             }
             let null_count = arr.null_count();
-            unified_cols.push(FieldArray { field, array: arr.clone(), null_count });
+            unified_cols.push(FieldArray {
+                field,
+                array: arr.clone(),
+                null_count,
+            });
         }
 
         Table {
             cols: unified_cols,
             n_rows: self.n_rows,
-            name: name.map(str::to_owned).unwrap_or_else(|| "unified_table".to_string())
+            name: name
+                .map(str::to_owned)
+                .unwrap_or_else(|| "unified_table".to_string()),
         }
     }
 
@@ -155,6 +171,20 @@ impl SuperTable {
     #[inline]
     pub fn n_cols(&self) -> usize {
         self.schema.len()
+    }
+
+    // TODO: Add test, confirm null case
+
+    /// Returns the columns of the Super Table
+    ///
+    /// Holds an assumption that all inner tables have the same fields
+    #[inline]
+    pub fn cols(&self) -> Vec<Arc<Field>> {
+        self.batches[0]
+            .cols()
+            .iter()
+            .map(|x| x.field.clone())
+            .collect()
     }
 
     #[inline]
@@ -228,10 +258,9 @@ impl SuperTable {
             batches,
             schema,
             n_rows: total_rows,
-            name
+            name,
         }
     }
-
 }
 
 impl Default for SuperTable {
@@ -249,7 +278,104 @@ impl FromIterator<Table> for SuperTable {
 
 impl Shape for SuperTable {
     fn shape(&self) -> ShapeDim {
-        ShapeDim::Rank2 { rows: self.n_rows(), cols: self.n_cols() }
+        ShapeDim::Rank2 {
+            rows: self.n_rows(),
+            cols: self.n_cols(),
+        }
+    }
+}
+
+impl Concatenate for SuperTable {
+    /// Concatenates two SuperTables by appending all batches from `other` to `self`.
+    ///
+    /// # Requirements
+    /// - Both SuperTables must have the same schema (column names and types)
+    ///
+    /// # Returns
+    /// A new SuperTable containing all batches from `self` followed by all batches from `other`
+    ///
+    /// # Errors
+    /// - `IncompatibleTypeError` if schemas don't match
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // If both are empty, return empty
+        if self.batches.is_empty() && other.batches.is_empty() {
+            return Ok(SuperTable::new(format!("{}+{}", self.name, other.name)));
+        }
+
+        // If one is empty, return the other
+        if self.batches.is_empty() {
+            let mut result = other;
+            result.name = format!("{}+{}", self.name, result.name);
+            return Ok(result);
+        }
+        if other.batches.is_empty() {
+            let mut result = self;
+            result.name = format!("{}+{}", result.name, other.name);
+            return Ok(result);
+        }
+
+        // Validate schemas match
+        if self.schema.len() != other.schema.len() {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "SuperTable",
+                to: "SuperTable",
+                message: Some(format!(
+                    "Cannot concatenate SuperTables with different column counts: {} vs {}",
+                    self.schema.len(),
+                    other.schema.len()
+                )),
+            });
+        }
+
+        // Check schema compatibility field by field
+        for (col_idx, (self_field, other_field)) in
+            self.schema.iter().zip(other.schema.iter()).enumerate()
+        {
+            if self_field.name != other_field.name {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "SuperTable",
+                    to: "SuperTable",
+                    message: Some(format!(
+                        "Column {} name mismatch: '{}' vs '{}'",
+                        col_idx, self_field.name, other_field.name
+                    )),
+                });
+            }
+
+            if self_field.dtype != other_field.dtype {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "SuperTable",
+                    to: "SuperTable",
+                    message: Some(format!(
+                        "Column '{}' type mismatch: {:?} vs {:?}",
+                        self_field.name, self_field.dtype, other_field.dtype
+                    )),
+                });
+            }
+
+            if self_field.nullable != other_field.nullable {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "SuperTable",
+                    to: "SuperTable",
+                    message: Some(format!(
+                        "Column '{}' nullable mismatch: {} vs {}",
+                        self_field.name, self_field.nullable, other_field.nullable
+                    )),
+                });
+            }
+        }
+
+        // Concatenate batches
+        let mut result_batches = self.batches;
+        result_batches.extend(other.batches);
+        let total_rows = self.n_rows + other.n_rows;
+
+        Ok(SuperTable {
+            batches: result_batches,
+            schema: self.schema,
+            n_rows: total_rows,
+            name: format!("{}+{}", self.name, other.name),
+        })
     }
 }
 
@@ -288,6 +414,16 @@ impl Display for SuperTable {
     }
 }
 
+#[cfg(feature = "views")]
+impl From<SuperTableV> for SuperTable {
+    fn from(super_table_v: SuperTableV) -> Self {
+        if super_table_v.is_empty() {
+            return SuperTable::new("".to_string());
+        }
+        SuperTable::from_views(&super_table_v.slices, "SuperTable".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,7 +441,11 @@ mod tests {
         for c in &cols {
             assert_eq!(c.len(), n_rows, "all columns must have same len for Table");
         }
-        Table { cols, n_rows, name: "batch".to_string() }
+        Table {
+            cols,
+            n_rows,
+            name: "batch".to_string(),
+        }
     }
 
     #[test]
@@ -454,7 +594,9 @@ mod tests {
         // Validate data for each column
         let expected_x = [1, 2, 5, 6];
         let expected_y = [3, 4, 7, 8];
-        for (col_idx, expected) in [expected_x.as_slice(), expected_y.as_slice()].iter().enumerate()
+        for (col_idx, expected) in [expected_x.as_slice(), expected_y.as_slice()]
+            .iter()
+            .enumerate()
         {
             let arr = rebuilt.to_table(None).cols[col_idx].array.clone();
             if let Array::NumericArray(NumericArray::Int32(ints)) = arr {

@@ -39,22 +39,22 @@
 //! Some conversions are available only with `extended_numeric_types`, `extended_categorical`,
 //! `large_string`, `datetime`, or `views`. Enable the features you need in `Cargo.toml`.
 
-use std::marker::PhantomData;
-use std::convert::{TryFrom, From};
 use std::collections::HashMap;
+use std::convert::{From, TryFrom};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
-use num_traits::FromPrimitive;
+use crate::enums::error::MinarrowError;
 #[cfg(feature = "views")]
 use crate::traits::view::View;
 use crate::{
-    Array, Bitmask, BooleanArray, CategoricalArray, FloatArray, Integer, IntegerArray, NumericArray, StringArray, TextArray, Vec64
+    Array, Bitmask, BooleanArray, CategoricalArray, FloatArray, Integer, IntegerArray,
+    NumericArray, StringArray, TextArray, Vec64,
 };
-use crate::enums::error::MinarrowError;
+use num_traits::FromPrimitive;
 
 #[cfg(feature = "datetime")]
-use crate::{TemporalArray, DatetimeArray};
-
+use crate::{DatetimeArray, TemporalArray};
 
 // Integer <-> Float
 
@@ -63,35 +63,38 @@ macro_rules! int_to_float_from {
         impl From<&IntegerArray<$src>> for FloatArray<$dst> {
             fn from(src: &IntegerArray<$src>) -> Self {
                 let data = src.data.iter().map(|&x| x as $dst).collect();
-                FloatArray { data, null_mask: src.null_mask.clone() }
+                FloatArray {
+                    data,
+                    null_mask: src.null_mask.clone(),
+                }
             }
         }
     };
 }
 
 #[cfg(feature = "extended_numeric_types")]
-int_to_float_from!(i8, f32); 
+int_to_float_from!(i8, f32);
 #[cfg(feature = "extended_numeric_types")]
 int_to_float_from!(i8, f64);
 #[cfg(feature = "extended_numeric_types")]
-int_to_float_from!(i16, f32); 
+int_to_float_from!(i16, f32);
 #[cfg(feature = "extended_numeric_types")]
 int_to_float_from!(i16, f64);
-int_to_float_from!(i32, f32); 
+int_to_float_from!(i32, f32);
 int_to_float_from!(i32, f64);
-int_to_float_from!(i64, f32); 
+int_to_float_from!(i64, f32);
 int_to_float_from!(i64, f64);
 #[cfg(feature = "extended_numeric_types")]
-int_to_float_from!(u8, f32); 
+int_to_float_from!(u8, f32);
 #[cfg(feature = "extended_numeric_types")]
 int_to_float_from!(u8, f64);
 #[cfg(feature = "extended_numeric_types")]
-int_to_float_from!(u16, f32); 
+int_to_float_from!(u16, f32);
 #[cfg(feature = "extended_numeric_types")]
 int_to_float_from!(u16, f64);
-int_to_float_from!(u32, f32); 
+int_to_float_from!(u32, f32);
 int_to_float_from!(u32, f64);
-int_to_float_from!(u64, f32); 
+int_to_float_from!(u64, f32);
 int_to_float_from!(u64, f64);
 
 macro_rules! int_to_int_from {
@@ -99,56 +102,59 @@ macro_rules! int_to_int_from {
         impl From<&IntegerArray<$src>> for IntegerArray<$dst> {
             fn from(src: &IntegerArray<$src>) -> Self {
                 let data = src.data.iter().map(|&x| x as $dst).collect();
-                IntegerArray { data, null_mask: src.null_mask.clone() }
+                IntegerArray {
+                    data,
+                    null_mask: src.null_mask.clone(),
+                }
             }
         }
     };
 }
 
-int_to_int_from!(i32, i64); 
+int_to_int_from!(i32, i64);
 int_to_int_from!(i32, u64);
-int_to_int_from!(u32, u64); 
+int_to_int_from!(u32, u64);
 int_to_int_from!(u32, i64);
 
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(i8, i16); 
+int_to_int_from!(i8, i16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(i8, i32); 
+int_to_int_from!(i8, i32);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(i8, i64); 
+int_to_int_from!(i8, i64);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(i8, u16); 
+int_to_int_from!(i8, u16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(i8, u32); 
+int_to_int_from!(i8, u32);
 #[cfg(feature = "extended_numeric_types")]
 int_to_int_from!(i8, u64);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(i16, i32); 
+int_to_int_from!(i16, i32);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(i16, i64); 
+int_to_int_from!(i16, i64);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(i16, u32); 
+int_to_int_from!(i16, u32);
 #[cfg(feature = "extended_numeric_types")]
 int_to_int_from!(i16, u64);
 
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(u8, u16); 
+int_to_int_from!(u8, u16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(u8, u32); 
+int_to_int_from!(u8, u32);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(u8, u64); 
+int_to_int_from!(u8, u64);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(u8, i16); 
+int_to_int_from!(u8, i16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(u8, i32); 
+int_to_int_from!(u8, i32);
 #[cfg(feature = "extended_numeric_types")]
 int_to_int_from!(u8, i64);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(u16, u32); 
+int_to_int_from!(u16, u32);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(u16, u64); 
+int_to_int_from!(u16, u64);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_from!(u16, i32); 
+int_to_int_from!(u16, i32);
 #[cfg(feature = "extended_numeric_types")]
 int_to_int_from!(u16, i64);
 
@@ -167,10 +173,13 @@ macro_rules! int_to_int_tryfrom {
                     })?;
                     data.push(v);
                 }
-                Ok(IntegerArray { data: data.into(), null_mask: src.null_mask.clone() })
+                Ok(IntegerArray {
+                    data: data.into(),
+                    null_mask: src.null_mask.clone(),
+                })
             }
         }
-    }
+    };
 }
 
 // All lossily/narrowing/signedness-changing combinations
@@ -184,67 +193,71 @@ int_to_int_tryfrom!(u64, i64);
 int_to_int_tryfrom!(i32, u32);
 
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i16, i8); 
+int_to_int_tryfrom!(i16, i8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i32, i8); 
+int_to_int_tryfrom!(i32, i8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i32, i16); 
+int_to_int_tryfrom!(i32, i16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i64, i8); 
+int_to_int_tryfrom!(i64, i8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i64, i16); 
+int_to_int_tryfrom!(i64, i16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u16, u8); 
+int_to_int_tryfrom!(u16, u8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u32, u8); 
+int_to_int_tryfrom!(u32, u8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u32, u16); 
+int_to_int_tryfrom!(u32, u16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u64, u8); 
+int_to_int_tryfrom!(u64, u8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u64, u16); 
+int_to_int_tryfrom!(u64, u16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i8, u8); 
+int_to_int_tryfrom!(i8, u8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i16, u8); 
+int_to_int_tryfrom!(i16, u8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i16, u16); 
+int_to_int_tryfrom!(i16, u16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i32, u8); 
+int_to_int_tryfrom!(i32, u8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i32, u16); 
+int_to_int_tryfrom!(i32, u16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(i64, u8); 
+int_to_int_tryfrom!(i64, u8);
 #[cfg(feature = "extended_numeric_types")]
 int_to_int_tryfrom!(i64, u16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u8, i8); 
+int_to_int_tryfrom!(u8, i8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u16, i8); 
+int_to_int_tryfrom!(u16, i8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u16, i16); 
+int_to_int_tryfrom!(u16, i16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u32, i8); 
+int_to_int_tryfrom!(u32, i8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u32, i16); 
+int_to_int_tryfrom!(u32, i16);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u64, i8); 
+int_to_int_tryfrom!(u64, i8);
 #[cfg(feature = "extended_numeric_types")]
-int_to_int_tryfrom!(u64, i16); 
-
+int_to_int_tryfrom!(u64, i16);
 
 macro_rules! float_to_float_from {
     ($src:ty, $dst:ty) => {
         impl From<&FloatArray<$src>> for FloatArray<$dst> {
             fn from(src: &FloatArray<$src>) -> Self {
                 let data = src.data.iter().map(|&x| x as $dst).collect();
-                FloatArray { data, null_mask: src.null_mask.clone() }
+                FloatArray {
+                    data,
+                    null_mask: src.null_mask.clone(),
+                }
             }
         }
-    }
+    };
 }
-float_to_float_from!(f32, f32); float_to_float_from!(f32, f64);
-float_to_float_from!(f64, f32); float_to_float_from!(f64, f64);
+float_to_float_from!(f32, f32);
+float_to_float_from!(f32, f64);
+float_to_float_from!(f64, f32);
+float_to_float_from!(f64, f64);
 
 macro_rules! float_to_int_tryfrom {
     ($src:ty, $dst:ty) => {
@@ -270,10 +283,13 @@ macro_rules! float_to_int_tryfrom {
                     }
                     data.push(cast);
                 }
-                Ok(IntegerArray { data: data.into(), null_mask: src.null_mask.clone() })
+                Ok(IntegerArray {
+                    data: data.into(),
+                    null_mask: src.null_mask.clone(),
+                })
             }
         }
-    }
+    };
 }
 
 float_to_int_tryfrom!(f32, i64);
@@ -323,7 +339,6 @@ bool_to_primitive_from!(
     f64 => 1.0, 0.0
 );
 
-
 // IntegerArray<T> -> BooleanArray<u8>
 macro_rules! int_to_bool_from {
     ($src:ty) => {
@@ -343,7 +358,7 @@ macro_rules! int_to_bool_from {
                 }
             }
         }
-    }
+    };
 }
 
 int_to_bool_from!(i32);
@@ -377,12 +392,11 @@ macro_rules! float_to_bool_from {
                 }
             }
         }
-    }
+    };
 }
 
 float_to_bool_from!(f32);
 float_to_bool_from!(f64);
-
 
 // Primitive to string
 macro_rules! numeric_to_string {
@@ -400,7 +414,11 @@ macro_rules! numeric_to_string {
                     offset += bytes.len() as u32;
                     offsets.push(offset);
                 }
-                StringArray { offsets: offsets.into(), data: data.into(), null_mask: src.null_mask.clone() }
+                StringArray {
+                    offsets: offsets.into(),
+                    data: data.into(),
+                    null_mask: src.null_mask.clone(),
+                }
             }
         }
     };
@@ -428,18 +446,25 @@ impl From<&BooleanArray<u8>> for StringArray<u32> {
         let mut offset = 0u32;
         offsets.push(offset);
         for i in 0..src.len {
-            let s = if unsafe { src.data.get_unchecked(i) } { "1" } else { "0" };
+            let s = if unsafe { src.data.get_unchecked(i) } {
+                "1"
+            } else {
+                "0"
+            };
             let bytes = s.as_bytes();
             data.extend_from_slice(bytes);
             offset += bytes.len() as u32;
             offsets.push(offset);
         }
-        StringArray { offsets: offsets.into(), data: data.into(), null_mask: src.null_mask.clone() }
+        StringArray {
+            offsets: offsets.into(),
+            data: data.into(),
+            null_mask: src.null_mask.clone(),
+        }
     }
 }
 
 // Categorical <-> String
-
 
 // ---------- String<Idx>  →  Categorical<Idx> ----------
 macro_rules! string_to_cat {
@@ -448,28 +473,27 @@ macro_rules! string_to_cat {
             type Error = MinarrowError;
 
             fn try_from(src: &StringArray<$off>) -> Result<Self, Self::Error> {
-                let mut dict   = HashMap::<&str, $idx>::new();
-                let mut uniq   = Vec64::new();
-                let mut codes  = Vec64::with_capacity(src.offsets.len().saturating_sub(1));
+                let mut dict = HashMap::<&str, $idx>::new();
+                let mut uniq = Vec64::new();
+                let mut codes = Vec64::with_capacity(src.offsets.len().saturating_sub(1));
 
                 for win in src.offsets.windows(2) {
-                    let (start, end) = (
-                        win[0].to_usize(),
-                        win[1].to_usize(),
-                    );
+                    let (start, end) = (win[0].to_usize(), win[1].to_usize());
                     let slice = &src.data[start..end];
                     let s = std::str::from_utf8(slice).map_err(|e| MinarrowError::TypeError {
                         from: "String",
-                        to:   "Categorical",
+                        to: "Categorical",
                         message: Some(e.to_string()),
                     })?;
 
                     let code = *dict.entry(s).or_insert_with(|| {
                         let next = uniq.len();
-                        let idx_val: $idx = FromPrimitive::from_usize(next).ok_or_else(|| MinarrowError::Overflow {
-                            value: next.to_string(),
-                            target: stringify!($idx),
-                        }).unwrap(); // checked above
+                        let idx_val: $idx = FromPrimitive::from_usize(next)
+                            .ok_or_else(|| MinarrowError::Overflow {
+                                value: next.to_string(),
+                                target: stringify!($idx),
+                            })
+                            .unwrap(); // checked above
                         uniq.push(s.to_owned());
                         idx_val
                     });
@@ -487,24 +511,23 @@ macro_rules! string_to_cat {
 }
 
 #[cfg(feature = "extended_categorical")]
-string_to_cat!(u32, u8);   
+string_to_cat!(u32, u8);
 #[cfg(feature = "extended_categorical")]
-string_to_cat!(u32, u16);  
+string_to_cat!(u32, u16);
 string_to_cat!(u32, u32);
 #[cfg(feature = "extended_categorical")]
-string_to_cat!(u32, u64);  
+string_to_cat!(u32, u64);
 #[cfg(feature = "extended_categorical")]
 #[cfg(feature = "large_string")]
-string_to_cat!(u64, u8);  
+string_to_cat!(u64, u8);
 #[cfg(feature = "extended_categorical")]
 #[cfg(feature = "large_string")]
-string_to_cat!(u64, u16); 
+string_to_cat!(u64, u16);
 #[cfg(feature = "large_string")]
 string_to_cat!(u64, u32);
 #[cfg(feature = "extended_categorical")]
 #[cfg(feature = "large_string")]
-string_to_cat!(u64, u64); 
-
+string_to_cat!(u64, u64);
 
 macro_rules! cat_to_string {
     ($idx:ty, $off:ty) => {
@@ -512,9 +535,9 @@ macro_rules! cat_to_string {
             type Error = MinarrowError;
 
             fn try_from(src: &CategoricalArray<$idx>) -> Result<Self, Self::Error> {
-                let mut data    = Vec64::new();
+                let mut data = Vec64::new();
                 let mut offsets = Vec64::with_capacity(src.data.len() + 1);
-                let mut pos: $off = <$off>::from(0u8);   // starting offset = 0
+                let mut pos: $off = <$off>::from(0u8); // starting offset = 0
                 offsets.push(pos);
 
                 for &code in &src.data {
@@ -524,10 +547,11 @@ macro_rules! cat_to_string {
                     data.extend_from_slice(bytes);
 
                     // checked add in native width
-                    let added = <$off>::try_from(bytes.len()).map_err(|_| MinarrowError::Overflow {
-                        value: bytes.len().to_string(),
-                        target: stringify!($off),
-                    })?;
+                    let added =
+                        <$off>::try_from(bytes.len()).map_err(|_| MinarrowError::Overflow {
+                            value: bytes.len().to_string(),
+                            target: stringify!($off),
+                        })?;
                     pos = pos.checked_add(added).ok_or(MinarrowError::Overflow {
                         value: added.to_string(),
                         target: stringify!($off),
@@ -546,23 +570,23 @@ macro_rules! cat_to_string {
 }
 
 #[cfg(feature = "extended_categorical")]
-cat_to_string!(u8,  u32);   
+cat_to_string!(u8, u32);
 #[cfg(feature = "extended_categorical")]
-cat_to_string!(u16, u32);   
+cat_to_string!(u16, u32);
 cat_to_string!(u32, u32);
 #[cfg(feature = "extended_categorical")]
-cat_to_string!(u64, u32);   
+cat_to_string!(u64, u32);
 #[cfg(feature = "extended_categorical")]
 #[cfg(feature = "large_string")]
-cat_to_string!(u8,  u64);  
+cat_to_string!(u8, u64);
 #[cfg(feature = "large_string")]
 #[cfg(feature = "extended_categorical")]
-cat_to_string!(u16, u64);  
+cat_to_string!(u16, u64);
 #[cfg(feature = "large_string")]
-cat_to_string!(u32, u64); 
+cat_to_string!(u32, u64);
 #[cfg(feature = "large_string")]
 #[cfg(feature = "extended_categorical")]
-cat_to_string!(u64, u64);  
+cat_to_string!(u64, u64);
 
 // =============================================================================
 // StringArray<T>  ⇄  StringArray<U>
@@ -612,7 +636,7 @@ macro_rules! cat_to_cat_widen {
                 CategoricalArray {
                     data,
                     unique_values: src.unique_values.clone(),
-                    null_mask:     src.null_mask.clone(),
+                    null_mask: src.null_mask.clone(),
                 }
             }
         }
@@ -624,8 +648,7 @@ macro_rules! cat_to_cat_narrow {
     ($src:ty, $dst:ty) => {
         impl TryFrom<&CategoricalArray<$src>> for CategoricalArray<$dst> {
             type Error = MinarrowError;
-            fn try_from(src: &CategoricalArray<$src>)
-                        -> Result<Self, Self::Error> {
+            fn try_from(src: &CategoricalArray<$src>) -> Result<Self, Self::Error> {
                 let mut data = Vec64::with_capacity(src.data.len());
                 for &v in &src.data {
                     data.push(<$dst>::try_from(v).map_err(|_| MinarrowError::Overflow {
@@ -636,34 +659,33 @@ macro_rules! cat_to_cat_narrow {
                 Ok(CategoricalArray {
                     data: data.into(),
                     unique_values: src.unique_values.clone(),
-                    null_mask:     src.null_mask.clone(),
+                    null_mask: src.null_mask.clone(),
                 })
             }
         }
     };
 }
 
-
 #[cfg(feature = "extended_categorical")]
-cat_to_cat_widen!(u8 , u16);  
+cat_to_cat_widen!(u8, u16);
 #[cfg(feature = "extended_categorical")]
-cat_to_cat_widen!(u8 , u32);  
+cat_to_cat_widen!(u8, u32);
 #[cfg(feature = "extended_categorical")]
-cat_to_cat_widen!(u8 , u64);
+cat_to_cat_widen!(u8, u64);
 #[cfg(feature = "extended_categorical")]
-cat_to_cat_widen!(u16, u32);  
+cat_to_cat_widen!(u16, u32);
 #[cfg(feature = "extended_categorical")]
 cat_to_cat_widen!(u16, u64);
 #[cfg(feature = "extended_categorical")]
 cat_to_cat_widen!(u32, u64);
 #[cfg(feature = "extended_categorical")]
-cat_to_cat_narrow!(u16, u8 ); 
+cat_to_cat_narrow!(u16, u8);
 #[cfg(feature = "extended_categorical")]
-cat_to_cat_narrow!(u32, u8 ); 
+cat_to_cat_narrow!(u32, u8);
 #[cfg(feature = "extended_categorical")]
-cat_to_cat_narrow!(u64, u8 );
+cat_to_cat_narrow!(u64, u8);
 #[cfg(feature = "extended_categorical")]
-cat_to_cat_narrow!(u32, u16); 
+cat_to_cat_narrow!(u32, u16);
 #[cfg(feature = "extended_categorical")]
 cat_to_cat_narrow!(u64, u16);
 #[cfg(feature = "extended_categorical")]
@@ -671,18 +693,32 @@ cat_to_cat_narrow!(u64, u32);
 
 // identity conversions (Arc-clone) for completeness
 #[cfg(feature = "extended_categorical")]
-impl From<&CategoricalArray<u8 >> for CategoricalArray<u8 > { fn from(c:&CategoricalArray<u8 >)->Self{c.clone()} }
+impl From<&CategoricalArray<u8>> for CategoricalArray<u8> {
+    fn from(c: &CategoricalArray<u8>) -> Self {
+        c.clone()
+    }
+}
 #[cfg(feature = "extended_categorical")]
-impl From<&CategoricalArray<u16>> for CategoricalArray<u16>{ fn from(c:&CategoricalArray<u16>)->Self{c.clone()} }
+impl From<&CategoricalArray<u16>> for CategoricalArray<u16> {
+    fn from(c: &CategoricalArray<u16>) -> Self {
+        c.clone()
+    }
+}
 #[cfg(feature = "extended_categorical")]
-impl From<&CategoricalArray<u64>> for CategoricalArray<u64>{ fn from(c:&CategoricalArray<u64>)->Self{c.clone()} }
-
+impl From<&CategoricalArray<u64>> for CategoricalArray<u64> {
+    fn from(c: &CategoricalArray<u64>) -> Self {
+        c.clone()
+    }
+}
 
 // Datetime -> Integer
 #[cfg(feature = "datetime")]
 impl<T: Copy> From<&DatetimeArray<T>> for IntegerArray<T> {
     fn from(src: &DatetimeArray<T>) -> Self {
-        IntegerArray { data: src.data.clone(), null_mask: src.null_mask.clone() }
+        IntegerArray {
+            data: src.data.clone(),
+            null_mask: src.null_mask.clone(),
+        }
     }
 }
 
@@ -863,7 +899,6 @@ impl View for Arc<DatetimeArray<i32>> {
 #[cfg(feature = "datetime")]
 impl From<Arc<DatetimeArray<i64>>> for Array {
     fn from(a: Arc<DatetimeArray<i64>>) -> Self {
-
         Array::TemporalArray(TemporalArray::Datetime64(a))
     }
 }
@@ -1103,7 +1138,6 @@ impl View for DatetimeArray<i32> {
 #[cfg(feature = "datetime")]
 impl From<DatetimeArray<i64>> for Array {
     fn from(a: DatetimeArray<i64>) -> Self {
-
         Array::TemporalArray(TemporalArray::Datetime64(a.into()))
     }
 }

@@ -7,13 +7,14 @@ mod arrow_c_integration {
     use std::os::raw::c_int;
     use std::sync::Arc;
 
-    use minarrow::ffi::arrow_c_ffi::{export_to_c, ArrowArray, ArrowSchema};
-    use minarrow::ffi::schema::Schema;
-    use minarrow::{
-        Array, ArrowType, MaskedArray, BooleanArray, Field, FloatArray, IntegerArray, StringArray, TextArray,
-    };
     #[cfg(feature = "datetime")]
     use minarrow::TimeUnit;
+    use minarrow::ffi::arrow_c_ffi::{ArrowArray, ArrowSchema, export_to_c};
+    use minarrow::ffi::schema::Schema;
+    use minarrow::{
+        Array, ArrowType, BooleanArray, Field, FloatArray, IntegerArray, MaskedArray, StringArray,
+        TextArray,
+    };
 
     // ---- C inspectors ----------------------------------------------------
     #[link(name = "cinspect_arrow", kind = "static")]
@@ -74,8 +75,7 @@ mod arrow_c_integration {
             // Also validate schema fields match (name + format)
             let cname = CString::new(name).unwrap();
             let cfmt = CString::new(expect_format_bytes(&$arrow_ty)).unwrap();
-            let sch_ok =
-                unsafe { c_arrow_check_schema(schema_ptr, cname.as_ptr(), cfmt.as_ptr()) };
+            let sch_ok = unsafe { c_arrow_check_schema(schema_ptr, cname.as_ptr(), cfmt.as_ptr()) };
             assert_eq!(sch_ok, 1, "schema check failed for {:?}", $arrow_ty);
 
             unsafe {
@@ -88,43 +88,78 @@ mod arrow_c_integration {
     #[test]
     fn rt_i32() {
         let arr = IntegerArray::<i32>::from_slice(&[11, 22, 33]);
-        roundtrip!(Array::from_int32(arr), ArrowType::Int32, false, c_arrow_check_i32);
+        roundtrip!(
+            Array::from_int32(arr),
+            ArrowType::Int32,
+            false,
+            c_arrow_check_i32
+        );
     }
 
     #[test]
     fn rt_i64() {
         let arr = IntegerArray::<i64>::from_slice(&[1001, -42, 777]);
-        roundtrip!(Array::from_int64(arr), ArrowType::Int64, false, c_arrow_check_i64);
+        roundtrip!(
+            Array::from_int64(arr),
+            ArrowType::Int64,
+            false,
+            c_arrow_check_i64
+        );
     }
 
     #[test]
     fn rt_u32() {
         let arr = IntegerArray::<u32>::from_slice(&[1, 2, 3]);
-        roundtrip!(Array::from_uint32(arr), ArrowType::UInt32, false, c_arrow_check_u32);
+        roundtrip!(
+            Array::from_uint32(arr),
+            ArrowType::UInt32,
+            false,
+            c_arrow_check_u32
+        );
     }
 
     #[test]
     fn rt_f32() {
         let arr = FloatArray::<f32>::from_slice(&[1.5, -2.0, 3.25]);
-        roundtrip!(Array::from_float32(arr), ArrowType::Float32, false, c_arrow_check_f32);
+        roundtrip!(
+            Array::from_float32(arr),
+            ArrowType::Float32,
+            false,
+            c_arrow_check_f32
+        );
     }
 
     #[test]
     fn rt_f64() {
         let arr = FloatArray::<f64>::from_slice(&[0.1, 0.2, 0.3]);
-        roundtrip!(Array::from_float64(arr), ArrowType::Float64, false, c_arrow_check_f64);
+        roundtrip!(
+            Array::from_float64(arr),
+            ArrowType::Float64,
+            false,
+            c_arrow_check_f64
+        );
     }
 
     #[test]
     fn rt_bool() {
         let arr = BooleanArray::<()>::from_slice(&[true, false, true]);
-        roundtrip!(Array::BooleanArray(arr.into()), ArrowType::Boolean, false, c_arrow_check_bool);
+        roundtrip!(
+            Array::BooleanArray(arr.into()),
+            ArrowType::Boolean,
+            false,
+            c_arrow_check_bool
+        );
     }
 
     #[test]
     fn rt_utf8() {
         let arr = StringArray::<u32>::from_slice(&["foo", "bar"]);
-        roundtrip!(Array::TextArray(TextArray::String32(Arc::new(arr))), ArrowType::String, false, c_arrow_check_str);
+        roundtrip!(
+            Array::TextArray(TextArray::String32(Arc::new(arr))),
+            ArrowType::String,
+            false,
+            c_arrow_check_str
+        );
     }
 
     #[test]
@@ -133,7 +168,12 @@ mod arrow_c_integration {
         arr.push(42);
         arr.push_null();
         arr.push(88);
-        roundtrip!(Array::from_int32(arr), ArrowType::Int32, true, c_arrow_check_i32_null);
+        roundtrip!(
+            Array::from_int32(arr),
+            ArrowType::Int32,
+            true,
+            c_arrow_check_i32_null
+        );
     }
 
     #[cfg(feature = "datetime")]
@@ -143,7 +183,12 @@ mod arrow_c_integration {
         dt.push(1);
         dt.push(2);
         dt.time_unit = TimeUnit::Milliseconds; // Date64 == ms since epoch
-        roundtrip!(Array::from_datetime_i64(dt), ArrowType::Date64, false, c_arrow_check_dt64);
+        roundtrip!(
+            Array::from_datetime_i64(dt),
+            ArrowType::Date64,
+            false,
+            c_arrow_check_dt64
+        );
     }
 
     #[test]
@@ -153,6 +198,11 @@ mod arrow_c_integration {
             &["A".to_string(), "B".to_string()],
         );
         let arr = Array::TextArray(TextArray::Categorical32(Arc::new(cat)));
-        roundtrip!(arr, ArrowType::Dictionary(minarrow::ffi::arrow_dtype::CategoricalIndexType::UInt32), false, c_arrow_check_dict32);
+        roundtrip!(
+            arr,
+            ArrowType::Dictionary(minarrow::ffi::arrow_dtype::CategoricalIndexType::UInt32),
+            false,
+            c_arrow_check_dict32
+        );
     }
 }

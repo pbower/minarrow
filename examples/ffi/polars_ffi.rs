@@ -1,9 +1,9 @@
 //! ---------------------------------------------------------
 //! Minarrow ↔️ Polars (via polars_arrow/arrow2) FFI roundtrip
-//! 
+//!
 //! Run with:
 //!    cargo run --example polars_ffi --features cast_polars
-//! 
+//!
 //! This is for custom FFI - you can instead also directly go to polars
 //! via `to_polars()` from the `Array`, `FieldArray` or `Table`
 //! types when the *cast_polars* feature is activated.
@@ -37,8 +37,9 @@ mod polars_roundtrip {
             Arc::new(minarrow::IntegerArray::<i16>::from_slice(&[10, 20, -10])) as Arc<_>;
         let arr_int32 =
             Arc::new(minarrow::IntegerArray::<i32>::from_slice(&[100, 200, -100])) as Arc<_>;
-        let arr_int64 =
-            Arc::new(minarrow::IntegerArray::<i64>::from_slice(&[1000, 2000, -1000])) as Arc<_>;
+        let arr_int64 = Arc::new(minarrow::IntegerArray::<i64>::from_slice(&[
+            1000, 2000, -1000,
+        ])) as Arc<_>;
 
         #[cfg(feature = "extended_numeric_types")]
         let arr_uint8 = Arc::new(minarrow::IntegerArray::<u8>::from_slice(&[1, 2, 255]))
@@ -46,22 +47,27 @@ mod polars_roundtrip {
         #[cfg(feature = "extended_numeric_types")]
         let arr_uint16 = Arc::new(minarrow::IntegerArray::<u16>::from_slice(&[1, 2, 65535]))
             as Arc<minarrow::IntegerArray<u16>>;
-        let arr_uint32 = Arc::new(minarrow::IntegerArray::<u32>::from_slice(&[1, 2, 4294967295]))
-            as Arc<minarrow::IntegerArray<u32>>;
-        let arr_uint64 =
-            Arc::new(minarrow::IntegerArray::<u64>::from_slice(&[1, 2, 18446744073709551615]))
-                as Arc<minarrow::IntegerArray<u64>>;
+        let arr_uint32 = Arc::new(minarrow::IntegerArray::<u32>::from_slice(&[
+            1, 2, 4294967295,
+        ])) as Arc<minarrow::IntegerArray<u32>>;
+        let arr_uint64 = Arc::new(minarrow::IntegerArray::<u64>::from_slice(&[
+            1,
+            2,
+            18446744073709551615,
+        ])) as Arc<minarrow::IntegerArray<u64>>;
 
         let arr_float32 = Arc::new(minarrow::FloatArray::<f32>::from_slice(&[1.5, -0.5, 0.0]))
             as Arc<minarrow::FloatArray<f32>>;
         let arr_float64 = Arc::new(minarrow::FloatArray::<f64>::from_slice(&[1.0, -2.0, 0.0]))
             as Arc<minarrow::FloatArray<f64>>;
 
-        let arr_bool = Arc::new(minarrow::BooleanArray::<()>::from_slice(&[true, false, true]))
-            as Arc<minarrow::BooleanArray<()>>;
+        let arr_bool = Arc::new(minarrow::BooleanArray::<()>::from_slice(&[
+            true, false, true,
+        ])) as Arc<minarrow::BooleanArray<()>>;
 
-        let arr_string32 = Arc::new(minarrow::StringArray::<u32>::from_slice(&["abc", "def", ""]))
-            as Arc<minarrow::StringArray<u32>>;
+        let arr_string32 = Arc::new(minarrow::StringArray::<u32>::from_slice(&[
+            "abc", "def", "",
+        ])) as Arc<minarrow::StringArray<u32>>;
         let arr_categorical32 = Arc::new(minarrow::CategoricalArray::<u32>::from_slices(
             &[0, 1, 2],
             &["A".to_string(), "B".to_string(), "C".to_string()],
@@ -218,10 +224,7 @@ mod polars_roundtrip {
     }
 
     // Polars -> C
-    fn export_series_to_c(
-        name: &str,
-        s: &Series,
-    ) -> (pa::ffi::ArrowArray, pa::ffi::ArrowSchema) {
+    fn export_series_to_c(name: &str, s: &Series) -> (pa::ffi::ArrowArray, pa::ffi::ArrowSchema) {
         let arr2 = s.to_arrow(0, CompatLevel::oldest());
         let out_arr: pa::ffi::ArrowArray = pa::ffi::export_array_to_c(arr2.clone());
         let fld = pa::datatypes::Field::new(name.into(), arr2.dtype().clone(), false);
@@ -247,8 +250,14 @@ mod polars_roundtrip {
             return true;
         }
         match (left, right) {
-            (Array::TextArray(TextArray::String32(a)), Array::TextArray(TextArray::String64(b)))
-            | (Array::TextArray(TextArray::String64(b)), Array::TextArray(TextArray::String32(a))) => {
+            (
+                Array::TextArray(TextArray::String32(a)),
+                Array::TextArray(TextArray::String64(b)),
+            )
+            | (
+                Array::TextArray(TextArray::String64(b)),
+                Array::TextArray(TextArray::String32(a)),
+            ) => {
                 let a = a.as_ref();
                 let b = b.as_ref();
                 a.len() == b.len()

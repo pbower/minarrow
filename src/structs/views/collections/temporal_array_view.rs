@@ -28,12 +28,14 @@
 //! - `offset + len <= array.len()`
 //! - `len` is the logical element count of this view.
 
-use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Formatter};
+use std::sync::OnceLock;
 
+use crate::enums::error::MinarrowError;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::{Array, ArrayV, BitmaskV, MaskedArray, TemporalArray};
 
 /// # TemporalArrayView
@@ -65,7 +67,7 @@ pub struct TemporalArrayV {
     pub array: TemporalArray,
     pub offset: usize,
     len: usize,
-    null_count: Cell<Option<usize>>
+    null_count: OnceLock<usize>,
 }
 
 impl TemporalArrayV {
@@ -81,7 +83,7 @@ impl TemporalArrayV {
             array,
             offset,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 
@@ -90,7 +92,7 @@ impl TemporalArrayV {
         array: TemporalArray,
         offset: usize,
         len: usize,
-        null_count: usize
+        null_count: usize,
     ) -> Self {
         assert!(
             offset + len <= array.len(),
@@ -98,11 +100,13 @@ impl TemporalArrayV {
             offset + len,
             array.len()
         );
+        let lock = OnceLock::new();
+        let _ = lock.set(null_count); // Pre-initialize with the provided count
         Self {
             array,
             offset,
             len,
-            null_count: Cell::new(Some(null_count))
+            null_count: lock,
         }
     }
 
@@ -122,7 +126,7 @@ impl TemporalArrayV {
         match &self.array {
             TemporalArray::Datetime32(arr) => arr.get(phys_idx).map(|v| v as i64),
             TemporalArray::Datetime64(arr) => arr.get(phys_idx),
-            TemporalArray::Null => None
+            TemporalArray::Null => None,
         }
     }
 
@@ -136,19 +140,22 @@ impl TemporalArrayV {
         match &self.array {
             TemporalArray::Datetime32(arr) => arr.get(phys_idx),
             TemporalArray::Datetime64(_) => None,
-            TemporalArray::Null => None
+            TemporalArray::Null => None,
         }
     }
 
     /// Returns a sliced `TemporalArrayView` from the current view.
     #[inline]
     pub fn slice(&self, offset: usize, len: usize) -> Self {
-        assert!(offset + len <= self.len, "TemporalArrayView::slice: out of bounds");
+        assert!(
+            offset + len <= self.len,
+            "TemporalArrayView::slice: out of bounds"
+        );
         Self {
             array: self.array.clone(),
             offset: self.offset + offset,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 
@@ -186,27 +193,26 @@ impl TemporalArrayV {
     /// Returns the number of nulls in the view.
     #[inline]
     pub fn null_count(&self) -> usize {
-        if let Some(count) = self.null_count.get() {
-            return count;
-        }
-        let count = match self.array.null_mask() {
-            Some(mask) => mask.view(self.offset, self.len).count_zeros(),
-            None => 0
-        };
-        self.null_count.set(Some(count));
-        count
+        *self
+            .null_count
+            .get_or_init(|| match self.array.null_mask() {
+                Some(mask) => mask.view(self.offset, self.len).count_zeros(),
+                None => 0,
+            })
     }
 
     /// Returns the null mask as a windowed `BitmaskView`.
     #[inline]
     pub fn null_mask_view(&self) -> Option<BitmaskV> {
-        self.array.null_mask().map(|mask| mask.view(self.offset, self.len))
+        self.array
+            .null_mask()
+            .map(|mask| mask.view(self.offset, self.len))
     }
 
     /// Sets the cached null count for the view.
     #[inline]
-    pub fn set_null_count(&self, count: usize) {
-        self.null_count.set(Some(count));
+    pub fn set_null_count(&self, count: usize) -> Result<(), usize> {
+        self.null_count.set(count).map_err(|_| count)
     }
 }
 
@@ -217,7 +223,7 @@ impl From<TemporalArray> for TemporalArrayV {
             array,
             offset: 0,
             len,
-            null_count: Cell::new(None)
+            null_count: OnceLock::new(),
         }
     }
 }
@@ -231,10 +237,10 @@ impl From<Array> for TemporalArrayV {
                     array: arr,
                     offset: 0,
                     len,
-                    null_count: Cell::new(None)
+                    null_count: OnceLock::new(),
                 }
             }
-            _ => panic!("Array is not a TemporalArray")
+            _ => panic!("Array is not a TemporalArray"),
         }
     }
 }
@@ -248,9 +254,9 @@ impl From<ArrayV> for TemporalArrayV {
                 array: inner,
                 offset,
                 len,
-                null_count: Cell::new(None)
+                null_count: OnceLock::new(),
             },
-            _ => panic!("From<ArrayView>: expected TemporalArray variant")
+            _ => panic!("From<ArrayView>: expected TemporalArray variant"),
         }
     }
 }
@@ -271,7 +277,7 @@ impl Display for TemporalArrayV {
         let dtype = match &self.array {
             TemporalArray::Datetime32(_) => "Datetime32<i32>",
             TemporalArray::Datetime64(_) => "Datetime64<i64>",
-            TemporalArray::Null => "Null"
+            TemporalArray::Null => "Null",
         };
 
         writeln!(
@@ -292,7 +298,7 @@ impl Display for TemporalArrayV {
             let unit = match &self.array {
                 TemporalArray::Datetime32(arr) => &arr.time_unit,
                 TemporalArray::Datetime64(arr) => &arr.time_unit,
-                TemporalArray::Null => &TimeUnit::Milliseconds
+                TemporalArray::Null => &TimeUnit::Milliseconds,
             };
             for i in 0..max {
                 match self.get_i64(i) {
@@ -329,11 +335,11 @@ impl Display for TemporalArrayV {
                             let date = base.checked_add_signed(Duration::days(days));
                             match date {
                                 Some(d) => writeln!(f, "  {d}")?,
-                                None => writeln!(f, "  {days}d")?
+                                None => writeln!(f, "  {days}d")?,
                             }
                         }
                     },
-                    None => writeln!(f, "  null")?
+                    None => writeln!(f, "  null")?,
                 }
             }
         }
@@ -345,19 +351,19 @@ impl Display for TemporalArrayV {
             let unit = match &self.array {
                 TemporalArray::Datetime32(arr) => &arr.time_unit,
                 TemporalArray::Datetime64(arr) => &arr.time_unit,
-                TemporalArray::Null => &TimeUnit::Milliseconds
+                TemporalArray::Null => &TimeUnit::Milliseconds,
             };
             let suffix = match unit {
                 TimeUnit::Seconds => "s",
                 TimeUnit::Milliseconds => "ms",
                 TimeUnit::Microseconds => "µs",
                 TimeUnit::Nanoseconds => "ns",
-                TimeUnit::Days => "d"
+                TimeUnit::Days => "d",
             };
             for i in 0..max {
                 match self.get_i64(i) {
                     Some(val) => writeln!(f, "  {}{}", val, suffix)?,
-                    None => writeln!(f, "  null")?
+                    None => writeln!(f, "  null")?,
                 }
             }
         }
@@ -373,6 +379,26 @@ impl Display for TemporalArrayV {
 impl Shape for TemporalArrayV {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
+    }
+}
+
+impl Concatenate for TemporalArrayV {
+    /// Concatenates two temporal array views by materializing both to owned temporal arrays,
+    /// concatenating them, and wrapping the result back in a view.
+    ///
+    /// # Notes
+    /// - This operation copies data from both views to create owned temporal arrays.
+    /// - The resulting view has offset=0 and length equal to the combined length.
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Materialize both views to owned temporal arrays
+        let self_array = self.to_temporal_array();
+        let other_array = other.to_temporal_array();
+
+        // Concatenate the owned temporal arrays
+        let concatenated = self_array.concat(other_array)?;
+
+        // Wrap the result in a new view
+        Ok(TemporalArrayV::from(concatenated))
     }
 }
 
@@ -425,8 +451,10 @@ mod tests {
         let temporal = TemporalArray::Datetime64(Arc::new(arr));
         let view = TemporalArrayV::with_null_count(temporal, 0, 2, 99);
         assert_eq!(view.null_count(), 99);
-        view.set_null_count(101);
-        assert_eq!(view.null_count(), 101);
+        // Trying to set again should fail since it\'s already initialized
+        assert!(view.set_null_count(101).is_err());
+        // Still returns original value
+        assert_eq!(view.null_count(), 99);
     }
 
     #[test]

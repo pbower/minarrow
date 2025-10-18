@@ -38,7 +38,7 @@ macro_rules! impl_numeric_array_constructors {
     ($array:ident, $bound:ident) => {
         impl<T> $array<T>
         where
-            T: $bound
+            T: $bound,
         {
             /// Constructs a new, empty array.
             #[inline]
@@ -62,19 +62,19 @@ macro_rules! impl_numeric_array_constructors {
                         Some($crate::structs::bitmask::Bitmask::with_capacity(cap))
                     } else {
                         None
-                    }
+                    },
                 }
             }
 
             /// Constructs a dense typed Array from a slice.
-            /// 
-            /// This is a streamlined constructor - if the Array has nulls the mask 
+            ///
+            /// This is a streamlined constructor - if the Array has nulls the mask
             /// must be applied after construction.
             #[inline]
             pub fn from_slice(slice: &[T]) -> Self {
                 Self {
-                    data: Vec64(slice.to_vec_in($crate::structs::allocator::Alloc64)).into(),
-                    null_mask: None
+                    data: Vec64(slice.to_vec_in(vec64::Alloc64)).into(),
+                    null_mask: None,
                 }
             }
         }
@@ -748,14 +748,14 @@ macro_rules! impl_arc_masked_array {
             fn iter_range(
                 &self,
                 offset: usize,
-                len: usize
+                len: usize,
             ) -> impl Iterator<Item = Self::CopyType> + '_ {
                 (**self).iter_range(offset, len)
             }
             fn iter_opt_range(
                 &self,
                 offset: usize,
-                len: usize
+                len: usize,
             ) -> impl Iterator<Item = Option<Self::CopyType>> + '_ {
                 (**self).iter_opt_range(offset, len)
             }
@@ -789,7 +789,8 @@ macro_rules! impl_arc_masked_array {
             where
                 I: Iterator<Item = Self::LogicalType>,
             {
-                ::std::sync::Arc::make_mut(self).extend_from_iter_with_capacity(iter, additional_capacity)
+                ::std::sync::Arc::make_mut(self)
+                    .extend_from_iter_with_capacity(iter, additional_capacity)
             }
             /// Extends the array from a slice of values.
             /// Uses copy-on-write semantics - clones array data if Arc reference count > 1.
@@ -853,14 +854,14 @@ macro_rules! impl_arc_masked_array {
             fn iter_range(
                 &self,
                 offset: usize,
-                len: usize
+                len: usize,
             ) -> impl Iterator<Item = Self::CopyType> + '_ {
                 (**self).iter_range(offset, len)
             }
             fn iter_opt_range(
                 &self,
                 offset: usize,
-                len: usize
+                len: usize,
             ) -> impl Iterator<Item = Option<Self::CopyType>> + '_ {
                 (**self).iter_opt_range(offset, len)
             }
@@ -894,7 +895,8 @@ macro_rules! impl_arc_masked_array {
             where
                 I: Iterator<Item = Self::LogicalType>,
             {
-                ::std::sync::Arc::make_mut(self).extend_from_iter_with_capacity(iter, additional_capacity)
+                ::std::sync::Arc::make_mut(self)
+                    .extend_from_iter_with_capacity(iter, additional_capacity)
             }
             /// Extends the array from a slice of values.
             /// Uses copy-on-write semantics - clones array data if Arc reference count > 1.

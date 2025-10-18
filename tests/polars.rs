@@ -4,12 +4,10 @@
 
 use std::sync::Arc;
 
-use minarrow::{
-    Array, ArrowType, Field, FieldArray, NumericArray, TextArray, Table
-};
-use polars::prelude::*;
+use minarrow::{Array, ArrowType, Field, FieldArray, NumericArray, Table, TextArray};
 #[cfg(feature = "datetime")]
 use minarrow::{TemporalArray, TimeUnit};
+use polars::prelude::*;
 
 #[test]
 fn test_array_to_polars_numeric() {
@@ -32,19 +30,25 @@ fn test_array_to_polars_string() {
     let s = a.to_polars("s");
     assert_eq!(s.dtype(), &DataType::String);
     assert_eq!(
-        s.str().unwrap().into_no_null_iter().map(|v| v.to_string()).collect::<Vec<_>>(),
+        s.str()
+            .unwrap()
+            .into_no_null_iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>(),
         vec!["a".to_string(), "b".to_string(), "".to_string()]
-    );    
+    );
 }
 
 #[cfg(feature = "datetime")]
 #[test]
 fn test_array_to_polars_datetime_infer_date32() {
-    let a = Array::TemporalArray(TemporalArray::Datetime32(Arc::new(minarrow::DatetimeArray::<i32> {
-        data: minarrow::Buffer::from_slice(&[1_600_000_000 / 86_400; 3]),
-        null_mask: None,
-        time_unit: TimeUnit::Days,
-    })));
+    let a = Array::TemporalArray(TemporalArray::Datetime32(Arc::new(
+        minarrow::DatetimeArray::<i32> {
+            data: minarrow::Buffer::from_slice(&[1_600_000_000 / 86_400; 3]),
+            null_mask: None,
+            time_unit: TimeUnit::Days,
+        },
+    )));
     let s = a.to_polars("d32");
     // Polars maps Arrow Date32 -> DataType::Date
     assert_eq!(s.dtype(), &DataType::Date);
@@ -54,11 +58,13 @@ fn test_array_to_polars_datetime_infer_date32() {
 #[cfg(feature = "datetime")]
 #[test]
 fn test_array_to_polars_datetime_infer_time32s() {
-    let a = Array::TemporalArray(TemporalArray::Datetime32(Arc::new(minarrow::DatetimeArray::<i32> {
-        data: minarrow::Buffer::from_slice(&[1, 2, 3]),
-        null_mask: None,
-        time_unit: TimeUnit::Seconds,
-    })));
+    let a = Array::TemporalArray(TemporalArray::Datetime32(Arc::new(
+        minarrow::DatetimeArray::<i32> {
+            data: minarrow::Buffer::from_slice(&[1, 2, 3]),
+            null_mask: None,
+            time_unit: TimeUnit::Seconds,
+        },
+    )));
     let s = a.to_polars("t32s");
     // Polars maps Arrow Time32(s) to Int32 logical time; exact dtype may vary, presence is sufficient
     assert_eq!(s.len(), 3);
@@ -67,20 +73,24 @@ fn test_array_to_polars_datetime_infer_time32s() {
 #[cfg(feature = "datetime")]
 #[test]
 fn test_array_to_polars_datetime_infer_date64_or_ts() {
-    let a_ms = Array::TemporalArray(TemporalArray::Datetime64(Arc::new(minarrow::DatetimeArray::<i64> {
-        data: minarrow::Buffer::from_slice(&[1_600_000_000_000, 1_600_000_000_001]),
-        null_mask: None,
-        time_unit: TimeUnit::Milliseconds,
-    })));
+    let a_ms = Array::TemporalArray(TemporalArray::Datetime64(Arc::new(
+        minarrow::DatetimeArray::<i64> {
+            data: minarrow::Buffer::from_slice(&[1_600_000_000_000, 1_600_000_000_001]),
+            null_mask: None,
+            time_unit: TimeUnit::Milliseconds,
+        },
+    )));
     let s_ms = a_ms.to_polars("d64");
     // In practice Polars treats Arrow Date64 as Datetime(Milliseconds)
     assert_eq!(s_ms.len(), 2);
 
-    let a_ns = Array::TemporalArray(TemporalArray::Datetime64(Arc::new(minarrow::DatetimeArray::<i64> {
-        data: minarrow::Buffer::from_slice(&[1, 2, 3]),
-        null_mask: None,
-        time_unit: TimeUnit::Nanoseconds,
-    })));
+    let a_ns = Array::TemporalArray(TemporalArray::Datetime64(Arc::new(
+        minarrow::DatetimeArray::<i64> {
+            data: minarrow::Buffer::from_slice(&[1, 2, 3]),
+            null_mask: None,
+            time_unit: TimeUnit::Nanoseconds,
+        },
+    )));
     let s_ns = a_ns.to_polars("ts_ns");
     // Arrow Timestamp(ns) → Polars Datetime(ns)
     assert_eq!(s_ns.len(), 3);
@@ -96,7 +106,7 @@ fn test_array_to_polars_with_field_explicit() {
     assert_eq!(
         s.i64().unwrap().into_no_null_iter().collect::<Vec<_>>(),
         vec![10, 20]
-    );    
+    );
 }
 
 #[test]

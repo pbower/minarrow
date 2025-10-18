@@ -17,22 +17,23 @@
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::ops::{BitAnd, BitOr, Deref, DerefMut, Index, Not};
 
-use crate::structs::vec64::Vec64;
-use crate::traits::shape::Shape;
 use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
+use crate::traits::shape::Shape;
 use crate::{BitmaskV, Buffer, Length, Offset};
+use vec64::Vec64;
 
 /// TODO: Move bitmask kernels here
 
 /// # Bitmask
-/// 
+///
 /// 64-byte–aligned packed bitmask.
 ///
 /// ### Description
 /// - Used for `BooleanArray` data and as the validity/null mask for all datatypes.
 /// - Arrow-compatible: LSB = first element, 1 = set/valid, 0 = cleared/null.
 /// - Automatically enforced alignment enables efficient bitwise filtering on SIMD targets.
-/// 
+///
 /// # Example
 /// ```rust
 /// use minarrow::Bitmask;
@@ -52,7 +53,7 @@ use crate::{BitmaskV, Buffer, Length, Offset};
 #[derive(Clone, PartialEq, Default)]
 pub struct Bitmask {
     pub bits: Buffer<u8>,
-    pub len: usize
+    pub len: usize,
 }
 
 impl Bitmask {
@@ -81,7 +82,10 @@ impl Bitmask {
         let mut data = Vec64::with_capacity(n_bytes);
         let fill = if set { 0xFF } else { 0 };
         data.resize(n_bytes, fill);
-        let mut mask = Self { bits: data.into(), len };
+        let mut mask = Self {
+            bits: data.into(),
+            len,
+        };
         mask.mask_trailing_bits();
         mask
     }
@@ -92,7 +96,10 @@ impl Bitmask {
         let n_bytes = (bits + 7) / 8;
         let mut data = Vec64::with_capacity(n_bytes);
         data.resize(n_bytes, 0);
-        let mut mask = Self { bits: data.into(), len: bits };
+        let mut mask = Self {
+            bits: data.into(),
+            len: bits,
+        };
         mask.mask_trailing_bits();
         mask
     }
@@ -113,7 +120,10 @@ impl Bitmask {
         let slice = unsafe { std::slice::from_raw_parts(ptr, n_bytes) };
         let mut buf = Vec64::with_capacity(n_bytes);
         buf.extend_from_slice(slice);
-        let mut out = Bitmask { bits: buf.into(), len };
+        let mut out = Bitmask {
+            bits: buf.into(),
+            len,
+        };
         out.mask_trailing_bits();
         out
     }
@@ -136,7 +146,7 @@ impl Bitmask {
     }
 
     /// Returns the logical length of the bitmask
-    /// 
+    ///
     /// *Excludes padding*
     #[inline]
     pub fn len(&self) -> usize {
@@ -189,7 +199,10 @@ impl Bitmask {
     #[inline]
     pub fn get(&self, idx: usize) -> bool {
         let cap_bits = self.bits.len() * 8;
-        assert!(idx < cap_bits, "Bitmask::get out of physical bounds (idx={idx}, cap={cap_bits})");
+        assert!(
+            idx < cap_bits,
+            "Bitmask::get out of physical bounds (idx={idx}, cap={cap_bits})"
+        );
         if idx >= self.len {
             return false;
         }
@@ -329,7 +342,10 @@ impl Bitmask {
                 data[i >> 3] |= 1u8 << (i & 7);
             }
         }
-        let mut mask = Self { bits: data.into(), len };
+        let mut mask = Self {
+            bits: data.into(),
+            len,
+        };
         mask.mask_trailing_bits();
         mask
     }
@@ -362,8 +378,10 @@ impl Bitmask {
     #[inline]
     pub fn count_ones(&self) -> usize {
         let full_bytes = self.len / 8;
-        let mut count =
-            self.bits[..full_bytes].iter().map(|&b| b.count_ones() as usize).sum::<usize>();
+        let mut count = self.bits[..full_bytes]
+            .iter()
+            .map(|&b| b.count_ones() as usize)
+            .sum::<usize>();
         let rem = self.len & 7;
         if rem != 0 {
             let mask = (1u8 << rem) - 1;
@@ -472,7 +490,10 @@ impl Bitmask {
     /// Slices by copying the data
     #[inline]
     pub fn slice_clone(&self, offset: usize, len: usize) -> Self {
-        assert!(offset + len <= self.len, "Bitmask::slice_clone out of bounds");
+        assert!(
+            offset + len <= self.len,
+            "Bitmask::slice_clone out of bounds"
+        );
         let mut out = Bitmask::new_set_all(len, false);
         let src = self.bits.as_slice();
         let dst = out.bits.as_mut_slice();
@@ -553,7 +574,11 @@ impl Bitmask {
             let base = byte_i * 8;
             (0..8).filter_map(move |bit| {
                 let idx = base + bit;
-                if idx < n && ((b >> bit) & 1) != 0 { Some(idx) } else { None }
+                if idx < n && ((b >> bit) & 1) != 0 {
+                    Some(idx)
+                } else {
+                    None
+                }
             })
         })
     }
@@ -565,7 +590,11 @@ impl Bitmask {
             let base = byte_i * 8;
             (0..8).filter_map(move |bit| {
                 let idx = base + bit;
-                if idx < n && ((b >> bit) & 1) == 0 { Some(idx) } else { None }
+                if idx < n && ((b >> bit) & 1) == 0 {
+                    Some(idx)
+                } else {
+                    None
+                }
             })
         })
     }
@@ -611,7 +640,9 @@ mod parallel {
         /// Parallel iterator over every bit in `[0, len)`.
         #[inline]
         pub fn par_iter(&self) -> impl ParallelIterator<Item = bool> + '_ {
-            (0..self.len).into_par_iter().map(move |i| unsafe { self.get_unchecked(i) })
+            (0..self.len)
+                .into_par_iter()
+                .map(move |i| unsafe { self.get_unchecked(i) })
         }
 
         /// Parallel iterator over the half-open window `[start, end)`.
@@ -619,10 +650,12 @@ mod parallel {
         pub fn par_iter_range(
             &self,
             start: usize,
-            end: usize
+            end: usize,
         ) -> impl ParallelIterator<Item = bool> + '_ {
             debug_assert!(start <= end && end <= self.len);
-            (start..end).into_par_iter().map(move |i| unsafe { self.get_unchecked(i) })
+            (start..end)
+                .into_par_iter()
+                .map(move |i| unsafe { self.get_unchecked(i) })
         }
     }
 }
@@ -633,7 +666,11 @@ impl Index<usize> for Bitmask {
     #[inline(always)]
     fn index(&self, index: usize) -> &Self::Output {
         // SAFETY: Caller guarantees index is within bounds.
-        if unsafe { self.get_unchecked(index) } { &true } else { &false }
+        if unsafe { self.get_unchecked(index) } {
+            &true
+        } else {
+            &false
+        }
     }
 }
 
@@ -713,7 +750,11 @@ impl Display for Bitmask {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let ones = self.count_ones();
         let zeros = self.count_zeros();
-        writeln!(f, "Bitmask [{} bits] (ones: {}, zeros: {})", self.len, ones, zeros)?;
+        writeln!(
+            f,
+            "Bitmask [{} bits] (ones: {}, zeros: {})",
+            self.len, ones, zeros
+        )?;
 
         const MAX_PREVIEW: usize = 64;
         write!(f, "[")?;
@@ -722,7 +763,15 @@ impl Display for Bitmask {
             if i > 0 {
                 write!(f, " ")?;
             }
-            write!(f, "{}", if unsafe { self.get_unchecked(i) } { '1' } else { '0' })?;
+            write!(
+                f,
+                "{}",
+                if unsafe { self.get_unchecked(i) } {
+                    '1'
+                } else {
+                    '0'
+                }
+            )?;
         }
 
         if self.len > MAX_PREVIEW {
@@ -850,7 +899,7 @@ mod tests {
         // i:    0 1 2 3 4 | 5 6 7 8 9 10 11
         let expected = [
             true, false, true, false, true, // original 5
-            false, true, true, false, false, true, true // appended 7
+            false, true, true, false, false, true, true, // appended 7
         ];
         for (i, &exp) in expected.iter().enumerate() {
             assert_eq!(mask.get(i), exp, "Mismatch at bit {}", i);
@@ -863,7 +912,7 @@ mod tests {
 
         let expected2 = [
             true, true, true, true, true, true, true, true, // original 8
-            false, false, true, true, false, true, false, true // appended 8
+            false, false, true, true, false, true, false, true, // appended 8
         ];
         for (i, &exp) in expected2.iter().enumerate() {
             assert_eq!(m2.get(i), exp, "Mismatch at bit {}", i);
@@ -874,5 +923,46 @@ mod tests {
         let empty_bytes = [0u8];
         m3.extend_from_slice(&empty_bytes, 0);
         assert_eq!(m3.len(), 3);
+    }
+
+    #[test]
+    fn test_concatenate() {
+        let mut m1 = Bitmask::new_set_all(5, false);
+        m1.set(0, true);
+        m1.set(2, true);
+        m1.set(4, true);
+
+        let mut m2 = Bitmask::new_set_all(4, false);
+        m2.set(1, true);
+        m2.set(3, true);
+
+        let result = m1.concat(m2).unwrap();
+        assert_eq!(result.len(), 9);
+        // First 5 bits from m1
+        assert!(result.get(0));
+        assert!(!result.get(1));
+        assert!(result.get(2));
+        assert!(!result.get(3));
+        assert!(result.get(4));
+        // Next 4 bits from m2
+        assert!(!result.get(5));
+        assert!(result.get(6));
+        assert!(!result.get(7));
+        assert!(result.get(8));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Concatenate Trait Implementation
+// ═══════════════════════════════════════════════════════════════════════════
+
+impl Concatenate for Bitmask {
+    fn concat(
+        mut self,
+        other: Self,
+    ) -> core::result::Result<Self, crate::enums::error::MinarrowError> {
+        // Consume other and extend self with its bits
+        self.extend_from_bitmask(&other);
+        Ok(self)
     }
 }

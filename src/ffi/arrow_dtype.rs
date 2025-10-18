@@ -32,13 +32,10 @@ use std::any::TypeId;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[cfg(feature = "datetime")]
-use crate::enums::time_units::{IntervalUnit, TimeUnit};
-#[cfg(feature = "datetime")]
 use crate::DatetimeArray;
-use crate::{
-    BooleanArray, CategoricalArray, Float, FloatArray, Integer,
-    StringArray
-};
+#[cfg(feature = "datetime")]
+use crate::enums::time_units::{IntervalUnit, TimeUnit};
+use crate::{BooleanArray, CategoricalArray, Float, FloatArray, Integer, StringArray};
 
 /// # ArrowType
 ///
@@ -60,7 +57,7 @@ use crate::{
 /// ## Interoperability
 /// - Directly compatible with the Apache Arrow C Data Interface type descriptors.
 /// - Preserves type and temporal unit information when arrays are transmitted over FFI.
-/// - Simplifies Minarrow’s type system *(e.g., one `DatetimeArray` type)* while tagging `ArrowType` on `Field` for ecosystem compatibility. 
+/// - Simplifies Minarrow’s type system *(e.g., one `DatetimeArray` type)* while tagging `ArrowType` on `Field` for ecosystem compatibility.
 ///
 /// ## Notes
 /// - For `DatetimeArray` types, `ArrowType` reflects only the physical encoding.  
@@ -107,7 +104,7 @@ pub enum ArrowType {
     // Integer size for the categorical dictionary key,
     // and therefore how much storage space for each entry there is,
     // on top of the base string collection.
-    Dictionary(CategoricalIndexType)
+    Dictionary(CategoricalIndexType),
 }
 
 /// # CategoricalIndexType
@@ -135,9 +132,8 @@ pub enum CategoricalIndexType {
     UInt16,
     UInt32,
     #[cfg(all(feature = "extended_categorical"))]
-    UInt64
+    UInt64,
 }
-
 
 // Design documentation: arrow_type()
 //
@@ -169,18 +165,18 @@ impl<T: Integer> CategoricalArray<T> {
         let t = TypeId::of::<T>();
         #[cfg(feature = "extended_categorical")]
         if t == TypeId::of::<u8>() {
-            return ArrowType::Dictionary(CategoricalIndexType::UInt8)
+            return ArrowType::Dictionary(CategoricalIndexType::UInt8);
         }
         #[cfg(feature = "extended_categorical")]
         if t == TypeId::of::<u16>() {
-            return ArrowType::Dictionary(CategoricalIndexType::UInt16)
+            return ArrowType::Dictionary(CategoricalIndexType::UInt16);
         }
         if t == TypeId::of::<u32>() {
-            return ArrowType::Dictionary(CategoricalIndexType::UInt32)
+            return ArrowType::Dictionary(CategoricalIndexType::UInt32);
         }
         #[cfg(feature = "extended_categorical")]
         if t == TypeId::of::<u64>() {
-            return ArrowType::Dictionary(CategoricalIndexType::UInt64)
+            return ArrowType::Dictionary(CategoricalIndexType::UInt64);
         }
         unsafe { std::hint::unreachable_unchecked() }
     }
@@ -205,12 +201,12 @@ impl<T: Integer> StringArray<T> {
     pub fn arrow_type() -> ArrowType {
         let t = TypeId::of::<T>();
         if t == TypeId::of::<u32>() {
-            return ArrowType::String
+            return ArrowType::String;
         }
         #[cfg(feature = "large_string")]
         if t == TypeId::of::<u64>() {
-            return ArrowType::LargeString
-        } 
+            return ArrowType::LargeString;
+        }
         unsafe { std::hint::unreachable_unchecked() }
     }
 }
@@ -219,13 +215,12 @@ impl<T: Integer> StringArray<T> {
 impl<T: Integer> DatetimeArray<T> {
     /// For DateTime, the logical type is undocumented until attached to the type with a `Field` via `Field::new`.
     /// At this stage, one can convert the array into a `FieldArray` which makes it immutable and hooks it into Arrow FFI-ready
-    /// format. This helps enable reducing 8 separate logical *Arrow* types down to 1 `DateTimeArray` data structure, 
+    /// format. This helps enable reducing 8 separate logical *Arrow* types down to 1 `DateTimeArray` data structure,
     /// keeping *MinArrow* minimal whilst retaining a compatibility path.
     pub fn arrow_type() -> ArrowType {
         ArrowType::Null
     }
 }
-
 
 impl Display for ArrowType {
     /// Render the ArrowType as its variant name, including associated units where applicable.
@@ -277,12 +272,11 @@ impl Display for ArrowType {
     }
 }
 
-
 impl Display for CategoricalIndexType {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             #[cfg(feature = "extended_categorical")]
-            CategoricalIndexType::UInt8  => f.write_str("UInt8"),
+            CategoricalIndexType::UInt8 => f.write_str("UInt8"),
             #[cfg(feature = "extended_categorical")]
             CategoricalIndexType::UInt16 => f.write_str("UInt16"),
             CategoricalIndexType::UInt32 => f.write_str("UInt32"),

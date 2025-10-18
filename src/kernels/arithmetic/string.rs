@@ -4,7 +4,7 @@
 //! # **String Arithmetic Module** - *String Operations with Numeric Interactions*
 //!
 //! String-specific arithmetic operations including string multiplication, concatenation, and manipulation.
-//! This unifies strings into a typical numeric-compatible workloads. E.g., "hello" + "there" = "hellothere". 
+//! This unifies strings into a typical numeric-compatible workloads. E.g., "hello" + "there" = "hellothere".
 //! These are opt-in via the "str_arithmetic" feature.
 //!
 //! ## Overview
@@ -27,11 +27,11 @@ use core::ptr::copy_nonoverlapping;
 #[cfg(not(feature = "fast_hash"))]
 use std::collections::HashMap;
 
-#[cfg(feature = "str_arithmetic")]
-use memchr::memmem::Finder;
-use crate::enums::error::{log_length_mismatch, KernelError};
+use crate::enums::error::{KernelError, log_length_mismatch};
 use crate::kernels::bitmask::merge_bitmasks_to_new;
 use crate::structs::variants::categorical::CategoricalArray;
+#[cfg(feature = "str_arithmetic")]
+use memchr::memmem::Finder;
 
 use crate::structs::variants::string::StringArray;
 use crate::traits::type_unions::Integer;
@@ -39,11 +39,11 @@ use crate::{Bitmask, Vec64};
 #[cfg(feature = "str_arithmetic")]
 use num_traits::ToPrimitive;
 
+use crate::enums::operators::ArithmeticOperator::{self};
 #[cfg(feature = "str_arithmetic")]
 use crate::kernels::string::string_predicate_masks;
-use crate::enums::operators::ArithmeticOperator::{self};
 
-#[cfg(feature = "str_arithmetic")] 
+#[cfg(feature = "str_arithmetic")]
 use crate::utils::{
     confirm_mask_capacity, estimate_categorical_cardinality, estimate_string_cardinality,
 };
@@ -1212,7 +1212,6 @@ where
     })
 }
 
-
 /// Strips '.0' from concatenated decimal values so 'Hello1.0' becomes 'Hello1'.
 #[inline]
 #[cfg(feature = "str_arithmetic")]
@@ -1271,7 +1270,6 @@ mod tests {
             (Some(_), None) => panic!("expected mask missing"),
         }
     }
-
 
     // String - Numeric Kernels
 
@@ -1366,7 +1364,6 @@ mod tests {
         assert_str(&div, &["foo", "bar|", "baz"], None);
     }
 
-
     // Dictionary Kernels
 
     #[cfg(feature = "str_arithmetic")]
@@ -1377,7 +1374,6 @@ mod tests {
     #[cfg(feature = "str_arithmetic")]
     #[test]
     fn dict32_dict32_add() {
-
         let lhs = cat(&["A", "B", ""]);
         let rhs = cat(&["1", "2", "3"]);
         let lhs_slice = (&lhs, 0, lhs.data.len());
@@ -1555,7 +1551,6 @@ mod tests {
         assert_eq!(divided.unique_values, expected_div.unique_values);
         assert_eq!(divided.data, expected_div.data);
     }
-
 
     // String arithmetic
 

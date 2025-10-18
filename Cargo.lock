@@ -1498,7 +1498,7 @@ dependencies = [
 
 [[package]]
 name = "minarrow"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "ahash",
  "arrow",
@@ -1513,6 +1513,7 @@ dependencies = [
  "regex",
  "ryu",
  "snappy",
+ "vec64",
  "zstd",
 ]
 
@@ -3348,6 +3349,12 @@ dependencies = [
  "itoa",
  "ryu",
 ]
+
+[[package]]
+name = "vec64"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ebb289f0524e49127de4d4226f1849d9ec293ec84d2de2f50a5c8ae55011bbb"
 
 [[package]]
 name = "version_check"

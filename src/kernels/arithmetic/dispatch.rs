@@ -18,11 +18,17 @@
 //! - **Datetime arithmetic**: Temporal operations with integer kernel delegation
 //!
 //! ## Performance Strategy
-//! - SIMD requires 64-byte aligned input data. This is automatic with `minarrow`'s Vec64.
+//! - SIMD requires 64-byte aligned input data. This is automatic with Vec64.
 //! - Scalar fallback ensures correctness regardless of input alignment
 
 include!(concat!(env!("OUT_DIR"), "/simd_lanes.rs"));
 
+#[cfg(feature = "datetime")]
+use crate::DatetimeAVT;
+#[cfg(feature = "datetime")]
+use crate::DatetimeArray;
+use crate::enums::error::KernelError;
+use crate::enums::operators::ArithmeticOperator::{self};
 #[cfg(feature = "simd")]
 use crate::kernels::arithmetic::simd::{
     float_dense_body_f32_simd, float_dense_body_f64_simd, float_masked_body_f32_simd,
@@ -32,20 +38,14 @@ use crate::kernels::arithmetic::simd::{
 use crate::kernels::arithmetic::std::{
     float_dense_body_std, float_masked_body_std, int_dense_body_std, int_masked_body_std,
 };
-use crate::enums::error::KernelError;
-use crate::enums::operators::ArithmeticOperator::{self};
+#[cfg(feature = "datetime")]
+use crate::kernels::bitmask::merge_bitmasks_to_new;
+use crate::structs::variants::float::FloatArray;
+use crate::structs::variants::integer::IntegerArray;
 use crate::utils::confirm_equal_len;
 #[cfg(feature = "simd")]
 use crate::utils::is_simd_aligned;
-#[cfg(feature = "datetime")]
-use crate::DatetimeAVT;
-#[cfg(feature = "datetime")]
-use crate::DatetimeArray;
-use crate::structs::variants::float::FloatArray;
-use crate::structs::variants::integer::IntegerArray;
 use crate::{Bitmask, Vec64};
-#[cfg(feature = "datetime")]
-use crate::kernels::bitmask::merge_bitmasks_to_new;
 // Kernels
 
 /// Generates element-wise integer arithmetic functions with SIMD/scalar dispatch.

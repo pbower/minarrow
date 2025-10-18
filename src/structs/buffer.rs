@@ -1,7 +1,7 @@
 //! # **Buffer** — *Unified owned/shared data storage*
 //!
 //! Buffer backs most inner Array types in *Minarrow* (`IntegerArray`, `FloatArray`, `CategoricalArray`, `StringArray`, `DatetimeArray`).
-//! 
+//!
 //! # Design
 //! `Buffer<T>` abstracts over two storage backends:
 //! - **Owned**: [`Vec64<T>`] — an internally aligned, 64-byte, heap-allocated vector optimised
@@ -73,7 +73,7 @@ use crate::structs::shared_buffer::SharedBuffer;
 use crate::traits::print::MAX_PREVIEW;
 
 /// # Buffer
-/// 
+///
 /// Data buffer abstraction that blends the standard 64-byte aligned Vec data buffer,
 /// with an externally backed and borrowed source such as memory-mapped files
 /// or network streams.
@@ -108,7 +108,7 @@ use crate::traits::print::MAX_PREVIEW;
 /// use 8-byte alignment, and may for e.g., check at kernel run-time.
 /// - The Arrow specification confirms both are valid, with 64-byte being the optimal format for SIMD.
 pub struct Buffer<T> {
-    storage: Storage<T>
+    storage: Storage<T>,
 }
 
 /// Internal memory ownership tracking store
@@ -118,8 +118,8 @@ enum Storage<T> {
     Shared {
         owner: SharedBuffer,
         offset: usize, // element index (not bytes)
-        len: usize     // element count
-    }
+        len: usize,    // element count
+    },
 }
 
 impl<T: Clone> Buffer<T> {
@@ -136,12 +136,14 @@ impl<T> Buffer<T> {
     /// Construct from an owned Vec64<T>.
     #[inline]
     pub fn from_vec64(v: Vec64<T>) -> Self {
-        Self { storage: Storage::Owned(v) }
+        Self {
+            storage: Storage::Owned(v),
+        }
     }
 
     /// Construct a buffer as a view over a SharedBuffer (zero-copy, read-only).
     /// Caller must ensure [u8] slice is valid and aligned for T.
-    /// 
+    ///
     /// # Behaviour
     /// - non-aligned copies into a fresh vec64
     /// - This is true even for memory mapped files, and is a notable trade-off, which can be avoided by
@@ -179,11 +181,22 @@ impl<T> Buffer<T> {
             return Buffer::from_vec64(v);
         }
 
-        assert!(correct_type_align, "Underlying SharedBuffer is not properly aligned for T");
-        assert_eq!(bytes.len() % size_of_t, 0, "Underlying SharedBuffer is not a valid T slice");
+        assert!(
+            correct_type_align,
+            "Underlying SharedBuffer is not properly aligned for T"
+        );
+        assert_eq!(
+            bytes.len() % size_of_t,
+            0,
+            "Underlying SharedBuffer is not a valid T slice"
+        );
         let len = bytes.len() / size_of_t;
         Self {
-            storage: Storage::Shared { owner, offset: 0, len }
+            storage: Storage::Shared {
+                owner,
+                offset: 0,
+                len,
+            },
         }
     }
 
@@ -215,7 +228,10 @@ impl<T> Buffer<T> {
         let correct_type_align = ptr_usize % align == 0;
 
         if !correct_type_align {
-            panic!("Buffer::from_shared_raw: pointer {ptr:p} is not aligned to {} bytes", align);
+            panic!(
+                "Buffer::from_shared_raw: pointer {ptr:p} is not aligned to {} bytes",
+                align
+            );
         }
 
         if needs_alignment {
@@ -235,15 +251,20 @@ impl<T> Buffer<T> {
         // Compute the byte‑offset into that shared slice
         let base = shared.as_slice().as_ptr() as usize;
         let p = ptr_usize;
-        let byte_offset =
-            p.checked_sub(base).expect("Buffer::from_shared_raw: pointer not in Arc<[u8]> region");
+        let byte_offset = p
+            .checked_sub(base)
+            .expect("Buffer::from_shared_raw: pointer not in Arc<[u8]> region");
 
         // Now slice out exactly `len` T‑elements
         let byte_len = len * std::mem::size_of::<T>();
         let owner_slice = shared.slice(byte_offset..byte_offset + byte_len);
 
         Self {
-            storage: Storage::Shared { owner: owner_slice, offset: 0, len }
+            storage: Storage::Shared {
+                owner: owner_slice,
+                offset: 0,
+                len,
+            },
         }
     }
 
@@ -299,7 +320,11 @@ impl<T> Buffer<T> {
     pub fn capacity(&self) -> usize {
         match &self.storage {
             Storage::Owned(vec) => vec.capacity(),
-            Storage::Shared { owner: _, offset: _, len } => {
+            Storage::Shared {
+                owner: _,
+                offset: _,
+                len,
+            } => {
                 // Only the viewed slice is available, no reserve
                 *len
             }
@@ -318,7 +343,7 @@ impl<T> Buffer<T> {
         let (owner, offset, len) =
             match mem::replace(&mut self.storage, Storage::Owned(Vec64::with_capacity(0))) {
                 Storage::Shared { owner, offset, len } => (owner, offset, len),
-                _ => unreachable!()
+                _ => unreachable!(),
             };
 
         // Build a new Vec64<T> from the shared slice
@@ -335,7 +360,11 @@ impl<T> Buffer<T> {
         self.storage = Storage::Owned(new_vec);
 
         // Now that storage is Owned, we can safely get a mutable reference
-        if let Storage::Owned(ref mut vec) = self.storage { vec } else { unreachable!() }
+        if let Storage::Owned(ref mut vec) = self.storage {
+            vec
+        } else {
+            unreachable!()
+        }
     }
 
     /// Identical semantics to `Vec::splice`.
@@ -347,7 +376,7 @@ impl<T> Buffer<T> {
     where
         R: RangeBounds<usize>,
         I: IntoIterator<Item = T> + 'a,
-        I::IntoIter: 'a
+        I::IntoIter: 'a,
     {
         let vec = self.make_owned_mut();
         vec.splice(range, replace_with)
@@ -428,9 +457,9 @@ impl<T: Clone> Clone for Buffer<T> {
                 storage: Storage::Shared {
                     owner: owner.clone(),
                     offset: *offset,
-                    len: *len
-                }
-            }
+                    len: *len,
+                },
+            },
         }
     }
 }
@@ -570,6 +599,7 @@ impl<T> AsMut<[T]> for Buffer<T> {
 
 #[cfg(feature = "parallel_proc")]
 impl<T: Send + Sync> Buffer<T> {
+    
     #[inline]
     pub fn par_iter(&self) -> rayon::slice::Iter<'_, T> {
         use rayon::iter::IntoParallelRefIterator;
@@ -578,6 +608,7 @@ impl<T: Send + Sync> Buffer<T> {
 
     #[inline]
     pub fn par_iter_mut(&mut self) -> rayon::slice::IterMut<'_, T> {
+        use rayon::iter::IntoParallelRefMutIterator;
         self.make_owned_mut().par_iter_mut()
     }
 }
@@ -605,7 +636,6 @@ impl<T: Display> Display for Buffer<T> {
         write!(f, "]")
     }
 }
-
 
 // SAFETY: Shared buffers are read-only and `Arc` ensures memory is valid.
 // `Owned` is already `Send + Sync` via `Vec64<T>`.

@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use crate::Field;
 
 /// # Schema
-/// 
+///
 /// Schema struct supporting `RecordBatch` construction for Arrow FFI compatibility only.
 ///
 /// ## Usage
@@ -32,19 +32,25 @@ use crate::Field;
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Schema {
     pub fields: Vec<Field>,
-    pub metadata: BTreeMap<String, String>
+    pub metadata: BTreeMap<String, String>,
 }
 
 impl Schema {
     #[inline]
     pub fn new(fields: Vec<Field>, metadata: BTreeMap<String, String>) -> Self {
-        Self { fields: fields, metadata }
+        Self {
+            fields: fields,
+            metadata,
+        }
     }
 }
 
 impl From<Vec<Field>> for Schema {
     fn from(fields: Vec<Field>) -> Self {
-        Self { fields, ..Default::default() }
+        Self {
+            fields,
+            ..Default::default()
+        }
     }
 }
 

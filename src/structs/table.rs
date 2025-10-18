@@ -8,7 +8,7 @@
 //!
 //! Great for in-memory analytics, transformation pipelines,
 //! and zero-copy FFI interchange.
-//! 
+//!
 //! Cast into *Polars* dataframe via `.to_polars()` or *Apache Arrow* RecordBatch via `.to_apache_arrow()`,
 //! zero-copy, via the `cast_polars` and `cast_arrow` features.
 
@@ -26,13 +26,14 @@ use polars::prelude::Column;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use super::field_array::FieldArray;
-use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::Field;
 #[cfg(feature = "views")]
 use crate::TableV;
-use crate::traits::print::{
-    MAX_PREVIEW, print_ellipsis_row, print_header_row, print_rule, value_to_string
+use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
+use crate::traits::{
+    concatenate::Concatenate,
+    print::{MAX_PREVIEW, print_ellipsis_row, print_header_row, print_rule, value_to_string},
+    shape::Shape,
 };
 
 // Global counter for unnamed table instances
@@ -58,7 +59,7 @@ static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 /// - For batched/partitioned tables, see [`SuperTable`] or windowed/chunked abstractions.
 /// - Cast into *Polars* dataframe via `.to_polars()` or *Apache Arrow* via `.to_apache_arrow()`
 /// - FFI-compatible
-/// 
+///
 /// # Notes
 /// - Table instances are typically lightweight to clone and pass by value.
 /// - For mutation, construct a new table or replace individual columns as needed.
@@ -82,7 +83,7 @@ pub struct Table {
     /// Number of rows in the table.
     pub n_rows: usize,
     /// Table name
-    pub name: String
+    pub name: String,
 }
 
 impl Table {
@@ -107,7 +108,11 @@ impl Table {
         let id = UNNAMED_COUNTER.fetch_add(1, Ordering::Relaxed);
         let name = format!("UnnamedTable{}", id);
 
-        Self { cols: Vec::new(), n_rows: 0, name }
+        Self {
+            cols: Vec::new(),
+            n_rows: 0,
+            name,
+        }
     }
 
     /// Adds a column with a name.
@@ -238,10 +243,17 @@ impl Table {
     pub fn slice_clone(&self, offset: usize, len: usize) -> Self {
         assert!(offset <= self.n_rows, "offset out of bounds");
         assert!(offset + len <= self.n_rows, "slice window out of bounds");
-        let cols: Vec<FieldArray> =
-            self.cols.iter().map(|fa| fa.slice_clone(offset, len)).collect();
+        let cols: Vec<FieldArray> = self
+            .cols
+            .iter()
+            .map(|fa| fa.slice_clone(offset, len))
+            .collect();
         let name = format!("{}[{}, {})", self.name, offset, offset + len);
-        Table { cols, n_rows: len, name }
+        Table {
+            cols,
+            n_rows: len,
+            name,
+        }
     }
 
     /// Returns a zero-copy view over rows `[offset, offset+len)`.
@@ -253,6 +265,72 @@ impl Table {
         TableV::from_table(self.clone(), offset, len)
     }
 
+    /// Maps a function over a single column by name, returning the result.
+    /// Returns None if the column doesn't exist.
+    pub fn map_col<T, F>(&self, col_name: &str, func: F) -> Option<T>
+    where
+        F: FnOnce(&FieldArray) -> T,
+    {
+        self.cols
+            .iter()
+            .find(|c| c.field.name == col_name)
+            .map(func)
+    }
+
+    /// Maps a function over multiple columns by name, returning a Vec of results.
+    /// Warns if any requested columns are missing.
+    pub fn map_cols_by_name<T, F>(&self, col_names: &[&str], mut func: F) -> Vec<T>
+    where
+        F: FnMut(&FieldArray) -> T,
+    {
+        let mut results = Vec::with_capacity(col_names.len());
+        for name in col_names {
+            match self.cols.iter().find(|c| c.field.name == *name) {
+                Some(col) => results.push(func(col)),
+                None => {
+                    eprintln!(
+                        "Warning: Column '{}' not found in table '{}'",
+                        name, self.name
+                    );
+                }
+            }
+        }
+        results
+    }
+
+    /// Maps a function over multiple columns by index, returning a Vec of results.
+    /// Warns if any requested indices are out of bounds.
+    pub fn map_cols_by_index<T, F>(&self, indices: &[usize], mut func: F) -> Vec<T>
+    where
+        F: FnMut(&FieldArray) -> T,
+    {
+        let mut results = Vec::with_capacity(indices.len());
+        for &idx in indices {
+            match self.cols.get(idx) {
+                Some(col) => results.push(func(col)),
+                None => {
+                    eprintln!(
+                        "Warning: Column index {} out of bounds in table '{}' (has {} columns)",
+                        idx,
+                        self.name,
+                        self.n_cols()
+                    );
+                }
+            }
+        }
+        results
+    }
+
+    /// Maps a function over all columns, returning a Vec of results.
+    pub fn map_all_cols<T, F>(&self, func: F) -> Vec<T>
+    where
+        F: FnMut(&FieldArray) -> T,
+    {
+        self.cols.iter().map(func).collect()
+    }
+}
+
+impl Table {
     #[cfg(feature = "parallel_proc")]
     #[inline]
     pub fn par_iter(&self) -> rayon::slice::Iter<'_, FieldArray> {
@@ -273,7 +351,10 @@ impl Table {
     #[inline]
     pub fn to_apache_arrow(&self) -> RecordBatch {
         use arrow::array::ArrayRef;
-        assert!(!self.cols.is_empty(), "Cannot build RecordBatch from an empty Table");
+        assert!(
+            !self.cols.is_empty(),
+            "Cannot build RecordBatch from an empty Table"
+        );
 
         // Convert columns
         let mut arrays: Vec<ArrayRef> = Vec::with_capacity(self.cols.len());
@@ -285,7 +366,11 @@ impl Table {
         let mut fields = Vec::with_capacity(self.cols.len());
         for (i, col) in self.cols.iter().enumerate() {
             let dt = arrays[i].data_type().clone();
-            fields.push(arrow_schema::Field::new(col.field.name.clone(), dt, col.field.nullable));
+            fields.push(arrow_schema::Field::new(
+                col.field.name.clone(),
+                dt,
+                col.field.nullable,
+            ));
         }
         let schema = Arc::new(arrow_schema::Schema::new(fields));
 
@@ -336,7 +421,108 @@ impl IntoIterator for Table {
 
 impl Shape for Table {
     fn shape(&self) -> ShapeDim {
-        ShapeDim::Rank2 { rows: self.n_rows(), cols: self.n_cols() } 
+        ShapeDim::Rank2 {
+            rows: self.n_rows(),
+            cols: self.n_cols(),
+        }
+    }
+}
+
+impl Concatenate for Table {
+    /// Concatenates two tables vertically (row-wise).
+    ///
+    /// # Requirements
+    /// - Both tables must have the same number of columns
+    /// - Column names, types, and nullability must match in order
+    ///
+    /// # Returns
+    /// A new Table with rows from `self` followed by rows from `other`
+    ///
+    /// # Errors
+    /// - `IncompatibleTypeError` if column schemas don't match
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Check column count
+        if self.n_cols() != other.n_cols() {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "Table",
+                to: "Table",
+                message: Some(format!(
+                    "Cannot concatenate tables with different column counts: {} vs {}",
+                    self.n_cols(),
+                    other.n_cols()
+                )),
+            });
+        }
+
+        // If both tables are empty, return empty table
+        if self.n_cols() == 0 {
+            return Ok(Table::new(format!("{}+{}", self.name, other.name), None));
+        }
+
+        // Validate column schemas match and concatenate arrays
+        let mut result_cols = Vec::with_capacity(self.n_cols());
+
+        for (col_idx, (self_col, other_col)) in self
+            .cols
+            .into_iter()
+            .zip(other.cols.into_iter())
+            .enumerate()
+        {
+            // Check field compatibility
+            if self_col.field.name != other_col.field.name {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "Table",
+                    to: "Table",
+                    message: Some(format!(
+                        "Column {} name mismatch: '{}' vs '{}'",
+                        col_idx, self_col.field.name, other_col.field.name
+                    )),
+                });
+            }
+
+            if self_col.field.dtype != other_col.field.dtype {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "Table",
+                    to: "Table",
+                    message: Some(format!(
+                        "Column '{}' type mismatch: {:?} vs {:?}",
+                        self_col.field.name, self_col.field.dtype, other_col.field.dtype
+                    )),
+                });
+            }
+
+            if self_col.field.nullable != other_col.field.nullable {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "Table",
+                    to: "Table",
+                    message: Some(format!(
+                        "Column '{}' nullable mismatch: {} vs {}",
+                        self_col.field.name, self_col.field.nullable, other_col.field.nullable
+                    )),
+                });
+            }
+
+            // Concatenate arrays
+            let concatenated_array = self_col.array.concat(other_col.array)?;
+            let null_count = concatenated_array.null_count();
+
+            // Create new FieldArray with concatenated data
+            result_cols.push(FieldArray {
+                field: self_col.field.clone(),
+                array: concatenated_array,
+                null_count,
+            });
+        }
+
+        // Create result table
+        let n_rows = result_cols.first().map(|c| c.len()).unwrap_or(0);
+        let name = format!("{}+{}", self.name, other.name);
+
+        Ok(Table {
+            cols: result_cols,
+            n_rows,
+            name,
+        })
     }
 }
 
@@ -382,11 +568,17 @@ impl Display for Table {
         // row-index column (“idx”)
         let idx_width = usize::max(
             3, // “idx”
-            ((self.n_rows - 1) as f64).log10().floor() as usize + 1
+            ((self.n_rows - 1) as f64).log10().floor() as usize + 1,
         );
 
         // Render header
-        writeln!(f, "Table \"{}\" [{} rows × {} cols]", self.name, self.n_rows, self.cols.len())?;
+        writeln!(
+            f,
+            "Table \"{}\" [{} rows × {} cols]",
+            self.name,
+            self.n_rows,
+            self.cols.len()
+        )?;
         print_rule(f, idx_width, &widths)?;
         print_header_row(f, idx_width, &headers, &widths)?;
         print_rule(f, idx_width, &widths)?;
@@ -450,7 +642,7 @@ mod tests {
         assert_eq!(fa.field.name, "ints");
         match &fa.array {
             Array::NumericArray(NumericArray::Int32(a)) => assert_eq!(a.len(), 2),
-            _ => panic!("ints column type mismatch")
+            _ => panic!("ints column type mismatch"),
         }
     }
 
@@ -578,6 +770,50 @@ mod tests {
 
         //     assert!(Arc::ptr_eq(&orig.field, &sliced.field), "FieldArc pointer mismatch");
         // }
+    }
+
+    #[test]
+    fn test_map_cols_by_name() {
+        let mut t = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(1);
+        col1.push(2);
+        let mut col2 = IntegerArray::<i32>::default();
+        col2.push(3);
+        col2.push(4);
+
+        t.add_col(field_array("a", Array::from_int32(col1)));
+        t.add_col(field_array("b", Array::from_int32(col2)));
+
+        // Test with all valid names
+        let results = t.map_cols_by_name(&["a", "b"], |fa| fa.field.name.clone());
+        assert_eq!(results, vec!["a", "b"]);
+
+        // Test with missing column (will warn but skip)
+        let results = t.map_cols_by_name(&["a", "missing", "b"], |fa| fa.field.name.clone());
+        assert_eq!(results, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn test_map_cols_by_index() {
+        let mut t = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(1);
+        col1.push(2);
+        let mut col2 = IntegerArray::<i32>::default();
+        col2.push(3);
+        col2.push(4);
+
+        t.add_col(field_array("a", Array::from_int32(col1)));
+        t.add_col(field_array("b", Array::from_int32(col2)));
+
+        // Test with all valid indices
+        let results = t.map_cols_by_index(&[0, 1], |fa| fa.field.name.clone());
+        assert_eq!(results, vec!["a", "b"]);
+
+        // Test with out-of-bounds index (will warn but skip)
+        let results = t.map_cols_by_index(&[0, 5, 1], |fa| fa.field.name.clone());
+        assert_eq!(results, vec!["a", "b"]);
     }
 }
 

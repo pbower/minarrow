@@ -6,14 +6,14 @@
 //! SIMD-optimised bitmask operations for Arrow-compatible nullable array processing with efficient null handling.
 //!
 //! ## Overview
-//! 
-//! This module provides the foundational bitmask operations that enable null-aware and bit-packed boolean computing 
-//! throughout the minarrow ecosystem, but can be applied to any bitmasking contenxt. 
+//!
+//! This module provides the foundational bitmask operations that enable null-aware and bit-packed boolean computing
+//! throughout the minarrow ecosystem, but can be applied to any bitmasking contenxt.
 //! These kernels handle bitwise logical operations, set membership tests, equality comparisons,
 //! and population counts on Arrow-format bitmasks with optimal performance characteristics.
 //!
 //! ## Architecture
-//! 
+//!
 //! The bitmask module follows a three-tier architecture:
 //! - **Dispatch layer**: Smart runtime selection between SIMD and scalar implementations
 //! - **SIMD kernels**: Vectorised implementations using `std::simd` with portable lane counts
@@ -25,7 +25,7 @@
 //! - **`std`**: Scalar fallback implementations for word-level operations on 64-bit boundaries
 //!
 //! ## Core Operations
-//! 
+//!
 //! ### **Logical Operations**
 //! - **`and_masks`**: Bitwise AND across two bitmasks for intersection operations
 //! - **`or_masks`**: Bitwise OR across two bitmasks for union operations  
@@ -48,7 +48,7 @@
 //! - **`all_false_mask`**: Test if all bits in bitmask are set to 0
 //!
 //! ## Arrow Compatibility
-//! 
+//!
 //! All operations maintain full compatibility with Apache Arrow's bitmask format:
 //! - **LSB bit ordering**: Bit 0 is the least significant bit in each byte
 //! - **Byte-packed storage**: 8 bits per byte with proper alignment handling
@@ -61,8 +61,8 @@ pub mod simd;
 #[cfg(not(feature = "simd"))]
 pub mod std;
 
-use core::mem;
 use crate::{Bitmask, BitmaskVT};
+use core::mem;
 
 /// Fundamental word type for bitmask operations on 64-bit architectures.
 ///

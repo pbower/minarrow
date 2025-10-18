@@ -6,8 +6,8 @@
 //! Portable scalar implementations of arithmetic operations for compatibility and unaligned data.
 //!
 //! Prefer dispatch.rs for easily handling the general case, otherwise you can use these inner functions
-//! directly (e.g., "dense_std") vs. "maybe masked, maybe std". 
-//! 
+//! directly (e.g., "dense_std") vs. "maybe masked, maybe std".
+//!
 //! ## Overview
 //! - **Scalar loops**: Standard element-wise operations without vectorisation
 //! - **Fallback role**: Used when SIMD alignment requirements aren't met or SIMD is disabled
@@ -19,8 +19,8 @@
 //! - Wrapping arithmetic for integers to prevent overflow panics
 //! - Division by zero handling: panics for integers, produces Inf/NaN for floats
 
-use crate::enums::operators::ArithmeticOperator;
 use crate::Bitmask;
+use crate::enums::operators::ArithmeticOperator;
 use num_traits::{Float, PrimInt, ToPrimitive, WrappingAdd, WrappingMul, WrappingSub};
 
 /// Scalar integer arithmetic kernel for dense arrays (no nulls).

@@ -15,10 +15,12 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use crate::enums::error::MinarrowError;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::{concatenate::Concatenate, shape::Shape};
 use crate::{Bitmask, CategoricalArray, MaskedArray, StringArray};
 
 /// # TextArray
-/// 
+///
 /// Unified Text array container
 ///
 /// ## Purpose
@@ -68,7 +70,7 @@ pub enum TextArray {
     #[cfg(feature = "extended_categorical")]
     Categorical64(Arc<CategoricalArray<u64>>),
     #[default]
-    Null // Default Marker for mem::take
+    Null, // Default Marker for mem::take
 }
 
 impl TextArray {
@@ -86,7 +88,7 @@ impl TextArray {
             TextArray::Categorical32(arr) => arr.len(),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(arr) => arr.len(),
-            TextArray::Null => 0
+            TextArray::Null => 0,
         }
     }
 
@@ -104,7 +106,7 @@ impl TextArray {
             TextArray::Categorical32(arr) => arr.null_mask.as_ref(),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(arr) => arr.null_mask.as_ref(),
-            TextArray::Null => None
+            TextArray::Null => None,
         }
     }
 
@@ -140,19 +142,19 @@ impl TextArray {
                 Arc::make_mut(a).append_array(b)
             }
             (TextArray::Null, TextArray::Null) => (),
-            (lhs, rhs) => panic!("Cannot append {:?} into {:?}", rhs, lhs)
+            (lhs, rhs) => panic!("Cannot append {:?} into {:?}", rhs, lhs),
         }
     }
 
     /// Casts to StringArray<u32>
-    /// 
+    ///
     /// - Converts via TryFrom,
     /// - Uses *CloneOnWrite (COW)* when it's already a `String32`.
     pub fn str32(self) -> Result<StringArray<u32>, MinarrowError> {
         match self {
             TextArray::String32(arr) => match Arc::try_unwrap(arr) {
                 Ok(inner) => Ok(inner),
-                Err(shared) => Ok((*shared).clone())
+                Err(shared) => Ok((*shared).clone()),
             },
             #[cfg(feature = "large_string")]
             TextArray::String64(arr) => Ok(StringArray::<u32>::try_from(&*arr)?),
@@ -163,12 +165,12 @@ impl TextArray {
             TextArray::Categorical32(arr) => Ok(StringArray::<u32>::try_from(&*arr)?),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(arr) => Ok(StringArray::<u32>::try_from(&*arr)?),
-            TextArray::Null => Err(MinarrowError::NullError { message: None })
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
     /// Casts to StringArray<u64>
-    /// 
+    ///
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `String64`.
     #[cfg(feature = "large_string")]
@@ -176,7 +178,7 @@ impl TextArray {
         match self {
             TextArray::String64(arr) => match Arc::try_unwrap(arr) {
                 Ok(inner) => Ok(inner),
-                Err(shared) => Ok((*shared).clone())
+                Err(shared) => Ok((*shared).clone()),
             },
             TextArray::String32(arr) => Ok(StringArray::<u64>::from(&*arr)),
             #[cfg(feature = "extended_categorical")]
@@ -186,19 +188,19 @@ impl TextArray {
             TextArray::Categorical32(arr) => Ok(StringArray::<u64>::try_from(&*arr)?),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(arr) => Ok(StringArray::<u64>::try_from(&*arr)?),
-            TextArray::Null => Err(MinarrowError::NullError { message: None })
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
     /// Casts to CategoricalArray<u32>
-    /// 
+    ///
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `Categorical32`.
     pub fn cat32(self) -> Result<CategoricalArray<u32>, MinarrowError> {
         match self {
             TextArray::Categorical32(arr) => match Arc::try_unwrap(arr) {
                 Ok(inner) => Ok(inner),
-                Err(shared) => Ok((*shared).clone())
+                Err(shared) => Ok((*shared).clone()),
             },
             TextArray::String32(arr) => Ok(CategoricalArray::<u32>::try_from(&*arr)?),
             #[cfg(feature = "large_string")]
@@ -209,12 +211,12 @@ impl TextArray {
             TextArray::Categorical16(arr) => Ok(CategoricalArray::<u32>::from(&*arr)),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(arr) => Ok(CategoricalArray::<u32>::try_from(&*arr)?),
-            TextArray::Null => Err(MinarrowError::NullError { message: None })
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
     /// Casts to CategoricalArray<u64>
-    /// 
+    ///
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `Categorical32`.
     #[cfg(feature = "extended_categorical")]
@@ -222,7 +224,7 @@ impl TextArray {
         match self {
             TextArray::Categorical64(arr) => match Arc::try_unwrap(arr) {
                 Ok(inner) => Ok(inner),
-                Err(shared) => Ok((*shared).clone())
+                Err(shared) => Ok((*shared).clone()),
             },
             TextArray::String32(arr) => Ok(CategoricalArray::<u64>::try_from(&*arr)?),
             #[cfg(feature = "large_string")]
@@ -232,12 +234,12 @@ impl TextArray {
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical16(arr) => Ok(CategoricalArray::<u64>::from(&*arr)),
             TextArray::Categorical32(arr) => Ok(CategoricalArray::<u64>::from(&*arr)),
-            TextArray::Null => Err(MinarrowError::NullError { message: None })
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
     /// Casts to CategoricalArray<u8>.
-    /// 
+    ///
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `Categorical8`.
     #[cfg(feature = "extended_categorical")]
@@ -245,7 +247,7 @@ impl TextArray {
         match self {
             TextArray::Categorical8(arr) => match Arc::try_unwrap(arr) {
                 Ok(inner) => Ok(inner),
-                Err(shared) => Ok((*shared).clone())
+                Err(shared) => Ok((*shared).clone()),
             },
             TextArray::String32(arr) => Ok(CategoricalArray::<u8>::try_from(&*arr)?),
             #[cfg(feature = "large_string")]
@@ -255,12 +257,12 @@ impl TextArray {
             TextArray::Categorical32(arr) => Ok(CategoricalArray::<u8>::try_from(&*arr)?),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(arr) => Ok(CategoricalArray::<u8>::try_from(&*arr)?),
-            TextArray::Null => Err(MinarrowError::NullError { message: None })
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
     /// Casts to CategoricalArray<u16>.
-    /// 
+    ///
     /// - Converts via `From` or `TryFrom`, depending on the inner type
     /// - Uses *CloneOnWrite (COW)* when it's already a `Categorical16`.
     #[cfg(feature = "extended_categorical")]
@@ -268,7 +270,7 @@ impl TextArray {
         match self {
             TextArray::Categorical16(arr) => match Arc::try_unwrap(arr) {
                 Ok(inner) => Ok(inner),
-                Err(shared) => Ok((*shared).clone())
+                Err(shared) => Ok((*shared).clone()),
             },
             TextArray::String32(arr) => Ok(CategoricalArray::<u16>::try_from(&*arr)?),
             #[cfg(feature = "large_string")]
@@ -278,7 +280,7 @@ impl TextArray {
             TextArray::Categorical32(arr) => Ok(CategoricalArray::<u16>::try_from(&*arr)?),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(arr) => Ok(CategoricalArray::<u16>::try_from(&*arr)?),
-            TextArray::Null => Err(MinarrowError::NullError { message: None })
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 }
@@ -286,24 +288,25 @@ impl TextArray {
 impl Display for TextArray {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            TextArray::String32(arr) =>
-                write_text_array_with_header(f, "String32", arr.as_ref()),
+            TextArray::String32(arr) => write_text_array_with_header(f, "String32", arr.as_ref()),
             #[cfg(feature = "large_string")]
-            TextArray::String64(arr) =>
-                write_text_array_with_header(f, "String64", arr.as_ref()),
+            TextArray::String64(arr) => write_text_array_with_header(f, "String64", arr.as_ref()),
             #[cfg(feature = "extended_categorical")]
-            TextArray::Categorical8(arr) =>
-                write_text_array_with_header(f, "Categorical8", arr.as_ref()),
+            TextArray::Categorical8(arr) => {
+                write_text_array_with_header(f, "Categorical8", arr.as_ref())
+            }
             #[cfg(feature = "extended_categorical")]
-            TextArray::Categorical16(arr) =>
-                write_text_array_with_header(f, "Categorical16", arr.as_ref()),
-            TextArray::Categorical32(arr) =>
-                write_text_array_with_header(f, "Categorical32", arr.as_ref()),
+            TextArray::Categorical16(arr) => {
+                write_text_array_with_header(f, "Categorical16", arr.as_ref())
+            }
+            TextArray::Categorical32(arr) => {
+                write_text_array_with_header(f, "Categorical32", arr.as_ref())
+            }
             #[cfg(feature = "extended_categorical")]
-            TextArray::Categorical64(arr) =>
-                write_text_array_with_header(f, "Categorical64", arr.as_ref()),
-            TextArray::Null =>
-                writeln!(f, "TextArray::Null [0 values]"),
+            TextArray::Categorical64(arr) => {
+                write_text_array_with_header(f, "Categorical64", arr.as_ref())
+            }
+            TextArray::Null => writeln!(f, "TextArray::Null [0 values]"),
         }
     }
 }
@@ -321,4 +324,78 @@ fn write_text_array_with_header<T>(
         arr.null_count()
     )?;
     Display::fmt(arr, f)
+}
+
+impl Shape for TextArray {
+    fn shape(&self) -> ShapeDim {
+        ShapeDim::Rank1(self.len())
+    }
+}
+
+impl Concatenate for TextArray {
+    fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        match (self, other) {
+            (TextArray::String32(a), TextArray::String32(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(TextArray::String32(Arc::new(a.concat(b)?)))
+            }
+            #[cfg(feature = "large_string")]
+            (TextArray::String64(a), TextArray::String64(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(TextArray::String64(Arc::new(a.concat(b)?)))
+            }
+            #[cfg(feature = "extended_categorical")]
+            (TextArray::Categorical8(a), TextArray::Categorical8(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(TextArray::Categorical8(Arc::new(a.concat(b)?)))
+            }
+            #[cfg(feature = "extended_categorical")]
+            (TextArray::Categorical16(a), TextArray::Categorical16(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(TextArray::Categorical16(Arc::new(a.concat(b)?)))
+            }
+            (TextArray::Categorical32(a), TextArray::Categorical32(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(TextArray::Categorical32(Arc::new(a.concat(b)?)))
+            }
+            #[cfg(feature = "extended_categorical")]
+            (TextArray::Categorical64(a), TextArray::Categorical64(b)) => {
+                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
+                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
+                Ok(TextArray::Categorical64(Arc::new(a.concat(b)?)))
+            }
+            (TextArray::Null, TextArray::Null) => Ok(TextArray::Null),
+            (lhs, rhs) => Err(MinarrowError::IncompatibleTypeError {
+                from: "TextArray",
+                to: "TextArray",
+                message: Some(format!(
+                    "Cannot concatenate mismatched TextArray variants: {:?} and {:?}",
+                    text_variant_name(&lhs),
+                    text_variant_name(&rhs)
+                )),
+            }),
+        }
+    }
+}
+
+/// Helper function to get the variant name for error messages
+fn text_variant_name(arr: &TextArray) -> &'static str {
+    match arr {
+        TextArray::String32(_) => "String32",
+        #[cfg(feature = "large_string")]
+        TextArray::String64(_) => "String64",
+        #[cfg(feature = "extended_categorical")]
+        TextArray::Categorical8(_) => "Categorical8",
+        #[cfg(feature = "extended_categorical")]
+        TextArray::Categorical16(_) => "Categorical16",
+        TextArray::Categorical32(_) => "Categorical32",
+        #[cfg(feature = "extended_categorical")]
+        TextArray::Categorical64(_) => "Categorical64",
+        TextArray::Null => "Null",
+    }
 }

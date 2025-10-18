@@ -7,7 +7,7 @@
 use crate::traits::shape::Shape;
 
 /// Recursively-describable dimensional rank for any `Value`.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShapeDim {
     /// Rank-0 - must always be `1`
     Rank0(usize),
@@ -49,7 +49,6 @@ pub enum ShapeDim {
     /// Shape could not be determined.
     Unknown,
 }
-
 
 /// Implement `Shape` for `ShapeDim` so recursive calls like `item.shape_3d()`
 /// compile when iterating `Collection(Vec<ShapeDim>)`.

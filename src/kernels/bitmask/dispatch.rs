@@ -5,8 +5,8 @@
 //!
 //! Dispatcher that selects between SIMD and scalar implementations
 //! at compile time based on feature flags and target architecture capabilities.
-//! 
-//! Prefer this unless you want to access the underlying kernel functions directly. 
+//!
+//! Prefer this unless you want to access the underlying kernel functions directly.
 
 include!(concat!(env!("OUT_DIR"), "/simd_lanes.rs"));
 
@@ -16,18 +16,18 @@ use crate::{Bitmask, BitmaskVT};
 // --- Binary/Unary Bitmask Operations ---
 
 /// Performs a binary logical operation (AND, OR, XOR) on two bitmask windows with automatic SIMD/scalar dispatch.
-/// 
+///
 /// Executes the specified logical operation element-wise across two bitmask windows, producing a new bitmask
 /// containing the results. The implementation is automatically selected based on compile-time feature flags.
-/// 
+///
 /// # Parameters
 /// - `lhs`: Left-hand side bitmask window as `(mask, offset, length)` tuple
 /// - `rhs`: Right-hand side bitmask window as `(mask, offset, length)` tuple  
 /// - `op`: Logical operation to perform (AND, OR, XOR)
-/// 
+///
 /// # Returns
 /// A new `Bitmask` containing the element-wise results of the logical operation.
-/// 
+///
 /// # Performance Notes
 /// - SIMD path processes multiple u64 words simultaneously for improved throughput
 /// - Scalar path provides universal compatibility with word-level optimisations
@@ -60,18 +60,18 @@ pub fn bitmask_unop(src: BitmaskVT<'_>, op: UnaryOperator) -> Bitmask {
 // --- Entry Points (Standard Logical Operations) ---
 
 /// Computes the element-wise bitwise AND of two bitmask windows for intersection operations.
-/// 
+///
 /// Performs logical AND across corresponding bits in two bitmask windows, commonly used for
 /// combining null masks in nullable array operations. The result bit is set only when both
 /// input bits are set.
-/// 
+///
 /// # Parameters
 /// - `lhs`: Left-hand side bitmask window as `(mask, offset, length)` tuple
 /// - `rhs`: Right-hand side bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// A new `Bitmask` where each bit represents `lhs[i] AND rhs[i]`.
-/// 
+///
 /// # Usage
 /// ```rust,ignore
 /// // Combine validity masks from two nullable arrays
@@ -217,22 +217,22 @@ pub fn all_ne(a: BitmaskVT<'_>, b: BitmaskVT<'_>) -> bool {
 // --- Popcount ---
 
 /// Returns the number of set bits (population count) in the bitmask window using fast SIMD reduction.
-/// 
+///
 /// Counts the number of `1` bits in the specified bitmask window, commonly used to determine
 /// the number of valid (non-null) elements in nullable arrays. The implementation uses
 /// vectorised population count instructions for optimal performance.
-/// 
+///
 /// # Parameters
 /// - `m`: Bitmask window as `(mask, offset, length)` tuple
-/// 
+///
 /// # Returns
 /// The count of set bits in the specified window as a `usize`.
-/// 
+///
 /// # Performance Characteristics
 /// - SIMD path uses vectorised `popcount` instructions with SIMD reduction
 /// - Automatically handles partial words and trailing bit masking
 /// - O(n/64) complexity for word-aligned operations
-/// 
+///
 /// # Usage
 /// ```rust,ignore
 /// // Determine if computation is worthwhile

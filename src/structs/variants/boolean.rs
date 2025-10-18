@@ -41,11 +41,12 @@ use rayon::iter::IntoParallelIterator;
 use rayon::prelude::ParallelIterator;
 
 use crate::aliases::BooleanAVT;
+use crate::enums::shape_dim::ShapeDim;
 use crate::structs::bitmask::Bitmask;
+use crate::traits::concatenate::Concatenate;
 use crate::traits::masked_array::MaskedArray;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::enums::shape_dim::ShapeDim;
 use crate::utils::validate_null_mask_len;
 use crate::{Length, Offset, Vec64, impl_arc_masked_array};
 
@@ -55,9 +56,9 @@ use crate::{Length, Offset, Vec64, impl_arc_masked_array};
 ///
 /// ## Role
 /// Many will prefer the higher level `Array` type, which dispatches to this when
-/// necessary. However, in nanosecond/microsecond critical situations, or where only a single 
+/// necessary. However, in nanosecond/microsecond critical situations, or where only a single
 /// buffer type is needed, one may prefer to use this directly.
-/// 
+///
 /// ## Description
 /// - Stores boolean values in a compact `Bitmask` for memory efficiency.
 ///   The first value is stored in the least significant bit (LSB).
@@ -99,7 +100,7 @@ pub struct BooleanArray<T> {
     /// Number of elements.
     pub len: usize,
 
-    pub _phantom: PhantomData<T>
+    pub _phantom: PhantomData<T>,
 }
 
 impl BooleanArray<()> {
@@ -112,7 +113,7 @@ impl BooleanArray<()> {
             data,
             null_mask,
             len,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 
@@ -121,9 +122,13 @@ impl BooleanArray<()> {
     pub fn with_capacity(cap: usize, null_mask: bool) -> Self {
         Self {
             data: Bitmask::with_capacity(cap),
-            null_mask: if null_mask { Some(Bitmask::with_capacity(cap)) } else { None },
+            null_mask: if null_mask {
+                Some(Bitmask::with_capacity(cap))
+            } else {
+                None
+            },
             len: 0,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 
@@ -136,7 +141,7 @@ impl BooleanArray<()> {
             data,
             null_mask: None,
             len: n,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 
@@ -148,7 +153,7 @@ impl BooleanArray<()> {
             data,
             null_mask,
             len,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 
@@ -162,7 +167,7 @@ impl BooleanArray<()> {
             data: bitmask,
             null_mask,
             len,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 
@@ -200,7 +205,7 @@ impl BooleanArray<()> {
             data: Bitmask::from_bytes(data, len),
             null_mask: null_mask.map(|nm| Bitmask::from_bytes(nm, len)),
             len,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 
@@ -236,7 +241,7 @@ impl BooleanArray<()> {
             let value_bit = (data[i / 8] >> (i % 8)) & 1;
             let valid = match null_mask {
                 Some(mask) => ((mask[i / 8] >> (i % 8)) & 1) != 0,
-                None => true
+                None => true,
             };
             if valid {
                 out.push(Some(value_bit == 1));
@@ -300,11 +305,15 @@ impl Display for BooleanArray<()> {
         // Compute null count
         let null_count = match &self.null_mask {
             Some(mask) => self.len - mask.count_ones(),
-            None => 0
+            None => 0,
         };
 
         // Header line: type, total rows, null count
-        writeln!(f, "BooleanArray [{} values] (dtype: bool, nulls: {})", self.len, null_count)?;
+        writeln!(
+            f,
+            "BooleanArray [{} values] (dtype: bool, nulls: {})",
+            self.len, null_count
+        )?;
 
         // Render preview (up to MAX_PREVIEW items)
         write!(f, "[")?;
@@ -315,7 +324,7 @@ impl Display for BooleanArray<()> {
             let val = match self.get(i) {
                 Some(true) => "true",
                 Some(false) => "false",
-                None => "null"
+                None => "null",
             };
             write!(f, "{val}")?;
         }
@@ -350,7 +359,11 @@ impl MaskedArray for BooleanArray<()> {
         if idx >= self.len {
             return None;
         }
-        if self.is_null(idx) { None } else { Some(self.data.get(idx)) }
+        if self.is_null(idx) {
+            None
+        } else {
+            Some(self.data.get(idx))
+        }
     }
 
     /// Sets the value at `idx`. Marks as valid.
@@ -390,7 +403,13 @@ impl MaskedArray for BooleanArray<()> {
 
     /// Returns an iterator over the Boolean values, as `Option<bool>`.
     fn iter_opt(&self) -> impl Iterator<Item = Option<bool>> + '_ {
-        (0..self.len).map(move |i| if self.is_null(i) { None } else { Some(self.data.get(i)) })
+        (0..self.len).map(move |i| {
+            if self.is_null(i) {
+                None
+            } else {
+                Some(self.data.get(i))
+            }
+        })
     }
 
     /// Returns an iterator over a range of Boolean values.
@@ -402,11 +421,13 @@ impl MaskedArray for BooleanArray<()> {
     /// Returns an iterator over a range of Boolean values, as `Option<bool>`.
     #[inline]
     fn iter_opt_range(&self, offset: usize, len: usize) -> impl Iterator<Item = Option<bool>> + '_ {
-        (offset..offset + len).map(
-            move |i| {
-                if self.is_null(i) { None } else { Some(self.data.get(i)) }
+        (offset..offset + len).map(move |i| {
+            if self.is_null(i) {
+                None
+            } else {
+                Some(self.data.get(i))
             }
-        )
+        })
     }
 
     /// Appends a Boolean value to the array, updating the null mask if present.
@@ -442,12 +463,15 @@ impl MaskedArray for BooleanArray<()> {
     fn slice_clone(&self, offset: usize, len: usize) -> Self {
         assert!(offset + len <= self.len, "slice out of bounds");
         let sliced_data = self.data.slice_clone(offset, len);
-        let sliced_mask = self.null_mask.as_ref().map(|mask| mask.slice_clone(offset, len));
+        let sliced_mask = self
+            .null_mask
+            .as_ref()
+            .map(|mask| mask.slice_clone(offset, len));
         BooleanArray {
             data: sliced_data,
             null_mask: sliced_mask,
             len,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 
@@ -560,7 +584,8 @@ impl MaskedArray for BooleanArray<()> {
         }
 
         // Append data: BooleanArray uses Bitmask for data.
-        self.data.extend_from_slice(other.data.as_slice(), other_len);
+        self.data
+            .extend_from_slice(other.data.as_slice(), other_len);
         self.len += other_len;
 
         // Handle null masks.
@@ -654,7 +679,7 @@ impl<T> Not for BooleanArray<T> {
             data: self.data.invert(),
             null_mask: self.null_mask,
             len: self.len,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 }
@@ -695,7 +720,7 @@ impl<T: Send + Sync> BooleanArray<T> {
     pub fn par_iter_range(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl ParallelIterator<Item = bool> + '_ {
         debug_assert!(start <= end && end <= self.len);
         let nmask = self.null_mask.as_ref();
@@ -713,7 +738,7 @@ impl<T: Send + Sync> BooleanArray<T> {
     pub fn par_iter_range_opt(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl ParallelIterator<Item = Option<bool>> + '_ {
         debug_assert!(start <= end && end <= self.len);
         let nmask = self.null_mask.as_ref();
@@ -731,7 +756,7 @@ impl<T: Send + Sync> BooleanArray<T> {
     pub unsafe fn par_iter_unchecked(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl ParallelIterator<Item = bool> + '_ {
         let nmask = self.null_mask.as_ref();
         (start..end).into_par_iter().map(move |i| {
@@ -748,7 +773,7 @@ impl<T: Send + Sync> BooleanArray<T> {
     pub unsafe fn par_iter_opt_unchecked(
         &self,
         start: usize,
-        end: usize
+        end: usize,
     ) -> impl ParallelIterator<Item = Option<bool>> + '_ {
         let nmask = self.null_mask.as_ref();
         (start..end).into_par_iter().map(move |i| {
@@ -768,13 +793,24 @@ impl Shape for BooleanArray<()> {
     }
 }
 
+impl Concatenate for BooleanArray<()> {
+    fn concat(
+        mut self,
+        other: Self,
+    ) -> core::result::Result<Self, crate::enums::error::MinarrowError> {
+        // Consume other and extend self with its data
+        self.append_array(&other);
+        Ok(self)
+    }
+}
+
 impl Default for BooleanArray<()> {
     fn default() -> Self {
         BooleanArray {
             data: Bitmask::default(),
             null_mask: None,
             len: 0,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 }
@@ -792,7 +828,7 @@ impl_arc_masked_array!(
 #[cfg(test)]
 mod tests {
     use crate::BooleanArray;
-    use crate::traits::masked_array::MaskedArray;
+    use crate::traits::{concatenate::Concatenate, masked_array::MaskedArray};
 
     #[test]
     fn new_and_with_capacity() {
@@ -895,7 +931,10 @@ mod tests {
         assert_eq!(v, vec![true, false, true, false, false]);
 
         let v_opt: Vec<_> = arr.iter_opt().collect();
-        assert_eq!(v_opt, vec![Some(true), Some(false), Some(true), None, Some(false)]);
+        assert_eq!(
+            v_opt,
+            vec![Some(true), Some(false), Some(true), None, Some(false)]
+        );
     }
 
     #[test]
@@ -966,9 +1005,9 @@ mod tests {
     fn test_batch_extend_from_iter_with_capacity() {
         let mut arr = BooleanArray::default();
         let data: Vec<bool> = (0..100).map(|i| i % 2 == 0).collect();
-        
+
         arr.extend_from_iter_with_capacity(data.into_iter(), 100);
-        
+
         assert_eq!(arr.len(), 100);
         for i in 0..100 {
             assert_eq!(arr.get(i), Some(i % 2 == 0));
@@ -981,10 +1020,10 @@ mod tests {
         let mut arr = BooleanArray::with_capacity(10, true);
         arr.push(true);
         arr.push_null();
-        
+
         let data = &[false, true, false, true];
         arr.extend_from_slice(data);
-        
+
         assert_eq!(arr.len(), 6);
         assert_eq!(arr.get(0), Some(true));
         assert_eq!(arr.get(1), None);
@@ -1000,7 +1039,7 @@ mod tests {
     #[test]
     fn test_batch_fill_all_true() {
         let arr = BooleanArray::fill(true, 200);
-        
+
         assert_eq!(arr.len(), 200);
         assert_eq!(arr.null_count(), 0);
         for i in 0..200 {
@@ -1011,7 +1050,7 @@ mod tests {
     #[test]
     fn test_batch_fill_all_false() {
         let arr = BooleanArray::fill(false, 150);
-        
+
         assert_eq!(arr.len(), 150);
         for i in 0..150 {
             assert_eq!(arr.get(i), Some(false));
@@ -1022,16 +1061,53 @@ mod tests {
     fn test_batch_operations_preserve_bitpacking() {
         let mut arr = BooleanArray::with_capacity(64, false);
         let data: Vec<bool> = (0..64).map(|i| i % 3 == 0).collect();
-        
+
         arr.extend_from_slice(&data);
-        
+
         // Verify bitpacking efficiency - should use minimal memory
         assert_eq!(arr.len(), 64);
         assert!(arr.data.bits.len() <= 8); // 64 bits = 8 bytes max
-        
+
         for (i, &expected) in data.iter().enumerate() {
             assert_eq!(arr.get(i), Some(expected));
         }
+    }
+
+    #[test]
+    fn test_boolean_array_concat() {
+        let arr1 = BooleanArray::from_slice(&[true, false, true]);
+        let arr2 = BooleanArray::from_slice(&[false, true]);
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.get(0), Some(true));
+        assert_eq!(result.get(1), Some(false));
+        assert_eq!(result.get(2), Some(true));
+        assert_eq!(result.get(3), Some(false));
+        assert_eq!(result.get(4), Some(true));
+    }
+
+    #[test]
+    fn test_boolean_array_concat_with_nulls() {
+        let mut arr1 = BooleanArray::with_capacity(3, true);
+        arr1.push(true);
+        arr1.push_null();
+        arr1.push(false);
+
+        let mut arr2 = BooleanArray::with_capacity(2, true);
+        arr2.push(true);
+        arr2.push_null();
+
+        let result = arr1.concat(arr2).unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result.get(0), Some(true));
+        assert_eq!(result.get(1), None);
+        assert_eq!(result.get(2), Some(false));
+        assert_eq!(result.get(3), Some(true));
+        assert_eq!(result.get(4), None);
+        assert_eq!(result.null_count(), 2);
     }
 }
 
@@ -1075,7 +1151,10 @@ mod tests_parallel {
         let mut arr = BooleanArray::from_slice(&[true, false, true, false, true]);
         arr.null_mask = Some(mask);
         let v: Vec<_> = arr.par_iter_range_opt(0, 5).collect();
-        assert_eq!(v, vec![Some(true), Some(false), None, Some(false), Some(true)]);
+        assert_eq!(
+            v,
+            vec![Some(true), Some(false), None, Some(false), Some(true)]
+        );
     }
 
     #[test]
@@ -1092,7 +1171,10 @@ mod tests_parallel {
         let mut arr = BooleanArray::from_slice(&[true, false, true, false, true, false]);
         arr.null_mask = Some(mask);
         let v: Vec<_> = unsafe { arr.par_iter_opt_unchecked(0, 6) }.collect();
-        assert_eq!(v, vec![Some(true), None, None, Some(false), Some(true), None]);
+        assert_eq!(
+            v,
+            vec![Some(true), None, None, Some(false), Some(true), None]
+        );
     }
 
     #[test]
@@ -1102,8 +1184,16 @@ mod tests_parallel {
         assert!(arr.par_iter_opt().collect::<Vec<_>>().is_empty());
         assert!(arr.par_iter_range(0, 0).collect::<Vec<_>>().is_empty());
         assert!(arr.par_iter_range_opt(0, 0).collect::<Vec<_>>().is_empty());
-        assert!(unsafe { arr.par_iter_unchecked(0, 0) }.collect::<Vec<_>>().is_empty());
-        assert!(unsafe { arr.par_iter_opt_unchecked(0, 0) }.collect::<Vec<_>>().is_empty());
+        assert!(
+            unsafe { arr.par_iter_unchecked(0, 0) }
+                .collect::<Vec<_>>()
+                .is_empty()
+        );
+        assert!(
+            unsafe { arr.par_iter_opt_unchecked(0, 0) }
+                .collect::<Vec<_>>()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1112,8 +1202,14 @@ mod tests_parallel {
         assert_eq!(arr.par_iter().collect::<Vec<_>>(), vec![true]);
         assert_eq!(arr.par_iter_opt().collect::<Vec<_>>(), vec![Some(true)]);
         assert_eq!(arr.par_iter_range(0, 1).collect::<Vec<_>>(), vec![true]);
-        assert_eq!(arr.par_iter_range_opt(0, 1).collect::<Vec<_>>(), vec![Some(true)]);
-        assert_eq!(unsafe { arr.par_iter_unchecked(0, 1) }.collect::<Vec<_>>(), vec![true]);
+        assert_eq!(
+            arr.par_iter_range_opt(0, 1).collect::<Vec<_>>(),
+            vec![Some(true)]
+        );
+        assert_eq!(
+            unsafe { arr.par_iter_unchecked(0, 1) }.collect::<Vec<_>>(),
+            vec![true]
+        );
         assert_eq!(
             unsafe { arr.par_iter_opt_unchecked(0, 1) }.collect::<Vec<_>>(),
             vec![Some(true)]
@@ -1166,7 +1262,10 @@ mod tests_parallel {
 
         // Value checks
         let values: Vec<Option<bool>> = (0..5).map(|i| arr1.get(i)).collect();
-        assert_eq!(values, vec![Some(true), Some(false), Some(true), Some(false), None,]);
+        assert_eq!(
+            values,
+            vec![Some(true), Some(false), Some(true), Some(false), None,]
+        );
 
         // Underlying bit correctness
         assert_eq!(arr1.data.get(0), true);
