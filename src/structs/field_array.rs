@@ -1,6 +1,6 @@
 //! # **FieldArray Module** - *De-Facto *Column* Array type w' Tagged Arrow Metadata*
 //!
-//! Couples a `Field` (array-level schema metadata) with an immutable `Array` of values.
+//! Couples a `Field` (i.e., array-level schema metadata) with an immutable `Array` of values.
 //!
 //! Used as the primary column representation in `Minarrow` tables, ensuring
 //! schema and data remain consistent.  
@@ -118,7 +118,7 @@ impl FieldArray {
 
     /// Constructs a new `FieldArray` from a name and any supported typed array,
     /// automatically wrapping as `Array` and inferring type and nullability.
-    pub fn from_inner<N, A>(name: N, arr: A) -> Self
+    pub fn from_arr<N, A>(name: N, arr: A) -> Self
     where
         N: Into<String>,
         A: Into<Array>,
@@ -164,6 +164,48 @@ impl FieldArray {
         self.field.dtype.clone()
     }
 
+    /// Returns a new FieldArray with updated timezone metadata.
+    ///
+    /// The underlying timestamp data (always UTC) remains unchanged. Only the timezone
+    /// metadata in the Field's ArrowType is updated for interpretation/display purposes.
+    ///
+    /// # Arguments
+    /// * `tz` - Timezone string in Arrow format (IANA like "America/New_York" or offset like "+05:00")
+    ///
+    /// # Errors
+    /// Returns an error if the array is not a Timestamp type.
+    #[cfg(feature = "datetime")]
+    pub fn tz(&self, tz: &str) -> Result<Self, MinarrowError> {
+        match &self.field.dtype {
+            ArrowType::Timestamp(unit, _) => {
+                let mut new_field = (*self.field).clone();
+                new_field.dtype = ArrowType::Timestamp(*unit, Some(tz.to_string()));
+                Ok(FieldArray {
+                    field: Arc::new(new_field),
+                    array: self.array.clone(),
+                    null_count: self.null_count,
+                })
+            }
+            _ => Err(MinarrowError::TypeError {
+                from: "FieldArray",
+                to: "Timestamp",
+                message: Some("tz() requires a Timestamp type".to_string()),
+            }),
+        }
+    }
+
+    /// Returns a new FieldArray with timezone metadata set to "UTC".
+    ///
+    /// The underlying timestamp data (always UTC) remains unchanged. Only the timezone
+    /// metadata in the Field's ArrowType is updated.
+    ///
+    /// # Errors
+    /// Returns an error if the array is not a Timestamp type.
+    #[cfg(feature = "datetime")]
+    pub fn utc(&self) -> Result<Self, MinarrowError> {
+        self.tz("UTC")
+    }
+
     /// Returns a zero-copy view (`FieldArraySlice`) into the window `[offset, offset+len)`.
     ///
     /// The returned object holds references into the original `FieldArray`.
@@ -172,7 +214,7 @@ impl FieldArray {
     /// is a once-off we avoid recommending.
     #[cfg(feature = "views")]
     #[inline]
-    pub fn view(&self, offset: usize, len: usize) -> FieldAVT {
+    pub fn view(&self, offset: usize, len: usize) -> FieldAVT<'_> {
         ((&self.array, offset, len), &self.field)
     }
 
@@ -295,7 +337,7 @@ pub fn create_field_for_array(
                 TimeUnit::Microseconds | TimeUnit::Nanoseconds => {
                     ArrowType::Time64(dt_arr.time_unit.clone())
                 }
-                unit => ArrowType::Timestamp(unit.clone()),
+                unit => ArrowType::Timestamp(unit.clone(), None), // TODO: extract timezone from metadata
             },
             TemporalArray::Null => ArrowType::Null,
         },
@@ -318,8 +360,82 @@ impl Display for FieldArray {
             self.array.len(),
             self.field.dtype
         )?;
+
+        // For Timestamp types with timezone, use custom printing
+        #[cfg(feature = "datetime")]
+        if let ArrowType::Timestamp(_unit, Some(ref tz)) = self.field.dtype {
+            return format_field_array_with_timezone(f, self, tz);
+        }
+
         self.array.fmt(f)
     }
+}
+
+#[cfg(feature = "datetime")]
+fn format_field_array_with_timezone(
+    f: &mut Formatter<'_>,
+    field_array: &FieldArray,
+    timezone: &str,
+) -> std::fmt::Result {
+    use crate::traits::print::MAX_PREVIEW;
+    use crate::{Array, TemporalArray};
+
+    let arr = &field_array.array;
+    let len = arr.len();
+    let nulls = arr.null_count();
+
+    if let Array::TemporalArray(TemporalArray::Datetime64(dt)) = arr {
+        writeln!(
+            f,
+            "DatetimeArray [{} values] (dtype: datetime[{:?}], timezone: {}, nulls: {})",
+            len, dt.time_unit, timezone, nulls
+        )?;
+
+        write!(f, "[")?;
+        for i in 0..usize::min(len, MAX_PREVIEW) {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", format_datetime_with_tz(dt.as_ref(), i, timezone))?;
+        }
+        if len > MAX_PREVIEW {
+            write!(f, ", ...")?;
+        }
+        writeln!(f, "]")
+    } else if let Array::TemporalArray(TemporalArray::Datetime32(dt)) = arr {
+        writeln!(
+            f,
+            "DatetimeArray [{} values] (dtype: datetime[{:?}], timezone: {}, nulls: {})",
+            len, dt.time_unit, timezone, nulls
+        )?;
+
+        write!(f, "[")?;
+        for i in 0..usize::min(len, MAX_PREVIEW) {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", format_datetime_with_tz(dt.as_ref(), i, timezone))?;
+        }
+        if len > MAX_PREVIEW {
+            write!(f, ", ...")?;
+        }
+        writeln!(f, "]")
+    } else {
+        field_array.array.fmt(f)
+    }
+}
+
+#[cfg(feature = "datetime")]
+fn format_datetime_with_tz<T>(
+    arr: &crate::DatetimeArray<T>,
+    idx: usize,
+    timezone: &str,
+) -> String
+where
+    T: crate::Integer + std::fmt::Display,
+{
+    use crate::traits::print::format_datetime_value;
+    format_datetime_value(arr, idx, Some(timezone))
 }
 
 impl Shape for FieldArray {

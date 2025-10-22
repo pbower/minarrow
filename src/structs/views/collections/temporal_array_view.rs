@@ -290,9 +290,9 @@ impl Display for TemporalArrayV {
 
         let max = self.len().min(MAX_PREVIEW);
 
-        #[cfg(feature = "chrono")]
+        #[cfg(feature = "datetime_ops")]
         {
-            use chrono::{DateTime, Duration, NaiveDate};
+            use time::OffsetDateTime;
 
             use crate::TimeUnit;
             let unit = match &self.array {
@@ -303,39 +303,38 @@ impl Display for TemporalArrayV {
             for i in 0..max {
                 match self.get_i64(i) {
                     Some(val) => match unit {
-                        TimeUnit::Seconds => {
-                            let dt = DateTime::from_timestamp(val, 0)
-                                .expect("Expected valid datetime value.");
-                            writeln!(f, "  {dt}")?
-                        }
+                        TimeUnit::Seconds => match OffsetDateTime::from_unix_timestamp(val) {
+                            Ok(dt) => writeln!(f, "  {dt}")?,
+                            Err(_) => writeln!(f, "  {val}s")?,
+                        },
                         TimeUnit::Milliseconds => {
-                            let secs = val / 1_000;
-                            let nsecs = ((val % 1_000) * 1_000_000) as u32;
-                            let dt = DateTime::from_timestamp(secs, nsecs)
-                                .expect("Expected valid datetime value.");
-                            writeln!(f, "  {dt}")?
+                            match OffsetDateTime::from_unix_timestamp_nanos(
+                                (val as i128) * 1_000_000,
+                            ) {
+                                Ok(dt) => writeln!(f, "  {dt}")?,
+                                Err(_) => writeln!(f, "  {val}ms")?,
+                            }
                         }
                         TimeUnit::Microseconds => {
-                            let secs = val / 1_000_000;
-                            let nsecs = ((val % 1_000_000) * 1_000) as u32;
-                            let dt = DateTime::from_timestamp(secs, nsecs)
-                                .expect("Expected valid datetime value.");
-                            writeln!(f, "  {dt}")?
+                            match OffsetDateTime::from_unix_timestamp_nanos((val as i128) * 1_000) {
+                                Ok(dt) => writeln!(f, "  {dt}")?,
+                                Err(_) => writeln!(f, "  {val}µs")?,
+                            }
                         }
                         TimeUnit::Nanoseconds => {
-                            let secs = val / 1_000_000_000;
-                            let nsecs = (val % 1_000_000_000) as u32;
-                            let dt = DateTime::from_timestamp(secs, nsecs)
-                                .expect("Expected valid datetime value.");
-                            writeln!(f, "  {dt}")?
+                            match OffsetDateTime::from_unix_timestamp_nanos(val as i128) {
+                                Ok(dt) => writeln!(f, "  {dt}")?,
+                                Err(_) => writeln!(f, "  {val}ns")?,
+                            }
                         }
                         TimeUnit::Days => {
+                            use crate::structs::variants::datetime::UNIX_EPOCH_JULIAN_DAY;
+
                             let days = val;
-                            let base = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
-                            let date = base.checked_add_signed(Duration::days(days));
-                            match date {
-                                Some(d) => writeln!(f, "  {d}")?,
-                                None => writeln!(f, "  {days}d")?,
+                            match time::Date::from_julian_day((days + UNIX_EPOCH_JULIAN_DAY) as i32)
+                            {
+                                Ok(d) => writeln!(f, "  {d}")?,
+                                Err(_) => writeln!(f, "  {days}d")?,
                             }
                         }
                     },
@@ -344,7 +343,7 @@ impl Display for TemporalArrayV {
             }
         }
 
-        #[cfg(not(feature = "chrono"))]
+        #[cfg(not(feature = "datetime_ops"))]
         {
             use crate::TimeUnit;
 

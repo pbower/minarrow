@@ -120,7 +120,7 @@ fn test_array_to_arrow_datetime_infer_date64_and_ts_ns() {
     )));
     let f_tsns = Field::new(
         "ts_ns",
-        ArrowType::Timestamp(TimeUnit::Nanoseconds),
+        ArrowType::Timestamp(TimeUnit::Nanoseconds, None),
         false,
         None,
     );

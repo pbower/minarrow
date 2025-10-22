@@ -132,7 +132,7 @@ pub fn value_power(lhs: Value, rhs: Value) -> Result<Value, MinarrowError> {
 }
 
 /// Implementation of Add operation for Value enum following the unified pattern
-/// 
+///
 /// # Notes:
 /// 1.⚠️ Best to keep this out of the binary by disabling value_type unless you
 /// require universal broadcasting compatibility.
@@ -563,7 +563,7 @@ pub fn broadcast_value(
                 .map(|tbl| Value::Table(Arc::new(tbl)))
         }
 
-        // Use the optimized TableView broadcasting function
+        // Use the optimised TableView broadcasting function
         #[cfg(feature = "views")]
         (Value::TableView(l), Value::TableView(r)) => {
             broadcast_tableview_to_tableview(op, &l, &r)

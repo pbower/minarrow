@@ -379,13 +379,13 @@ mod tests {
     use crate::{Array, FieldArray, IntegerArray, vec64};
 
     fn create_test_table(name: &str, data1: &[i32], data2: &[i32]) -> Table {
-        let col1 = FieldArray::from_inner(
+        let col1 = FieldArray::from_arr(
             "col1",
             Array::from_int32(IntegerArray::from_slice(&vec64![
                 data1[0], data1[1], data1[2]
             ])),
         );
-        let col2 = FieldArray::from_inner(
+        let col2 = FieldArray::from_arr(
             "col2",
             Array::from_int32(IntegerArray::from_slice(&vec64![
                 data2[0], data2[1], data2[2]
@@ -432,7 +432,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "column count mismatch")]
     fn test_mismatched_column_count() {
-        let col1 = FieldArray::from_inner(
+        let col1 = FieldArray::from_arr(
             "col1",
             Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3])),
         );
@@ -446,11 +446,11 @@ mod tests {
     #[test]
     #[should_panic(expected = "row count mismatch")]
     fn test_mismatched_row_count() {
-        let col1 = FieldArray::from_inner(
+        let col1 = FieldArray::from_arr(
             "col1",
             Array::from_int32(IntegerArray::from_slice(&vec64![1, 2])),
         );
-        let col2 = FieldArray::from_inner(
+        let col2 = FieldArray::from_arr(
             "col2",
             Array::from_int32(IntegerArray::from_slice(&vec64![10, 20])),
         );

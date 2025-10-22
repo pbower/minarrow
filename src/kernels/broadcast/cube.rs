@@ -1067,11 +1067,11 @@ mod tests {
 
     fn create_test_table(name: &str, base_val: i32) -> Table {
         // Create a simple table with 2 columns and 2 rows
-        let col1 = FieldArray::from_inner(
+        let col1 = FieldArray::from_arr(
             "col1",
             Array::from_int32(IntegerArray::from_slice(&vec64![base_val, base_val + 1])),
         );
-        let col2 = FieldArray::from_inner(
+        let col2 = FieldArray::from_arr(
             "col2",
             Array::from_int32(IntegerArray::from_slice(&vec64![
                 base_val * 10,

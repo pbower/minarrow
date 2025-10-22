@@ -193,7 +193,7 @@ impl BitmaskV {
 
     /// Returns the underlying window as a tuple: (&Bitmask, offset, len).
     #[inline]
-    pub fn as_tuple(&self) -> BitmaskVT {
+    pub fn as_tuple(&self) -> BitmaskVT<'_> {
         (&self.bitmask, self.offset, self.len)
     }
 }

@@ -25,8 +25,8 @@
 //! # use minarrow::{Table, TableV, Array, IntegerArray, FieldArray};
 //! # use std::sync::Arc;
 //! // Build a simple 2-column table
-//! let a = FieldArray::from_inner("a", Array::from_int32(IntegerArray::<i32>::from_slice(&[1,2,3,4,5])));
-//! let b = FieldArray::from_inner("b", Array::from_int32(IntegerArray::<i32>::from_slice(&[10,20,30,40,50])));
+//! let a = FieldArray::from_arr("a", Array::from_int32(IntegerArray::<i32>::from_slice(&[1,2,3,4,5])));
+//! let b = FieldArray::from_arr("b", Array::from_int32(IntegerArray::<i32>::from_slice(&[10,20,30,40,50])));
 //! let mut tbl = Table::new("T".to_string(), vec![a,b].into());
 //!
 //! // View rows 1..4 (3 rows total)

@@ -287,8 +287,8 @@ fn test_table_broadcasting() {
     // Create first table with two columns
     let arr1_col1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3]));
     let arr1_col2 = Array::from_int32(IntegerArray::from_slice(&vec64![4, 5, 6]));
-    let fa1_col1 = minarrow::FieldArray::from_inner("col1", arr1_col1);
-    let fa1_col2 = minarrow::FieldArray::from_inner("col2", arr1_col2);
+    let fa1_col1 = minarrow::FieldArray::from_arr("col1", arr1_col1);
+    let fa1_col2 = minarrow::FieldArray::from_arr("col2", arr1_col2);
     let mut table1 = Table::new("table1".to_string(), None);
     table1.add_col(fa1_col1);
     table1.add_col(fa1_col2);
@@ -296,8 +296,8 @@ fn test_table_broadcasting() {
     // Create second table with matching structure
     let arr2_col1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 10, 10]));
     let arr2_col2 = Array::from_int32(IntegerArray::from_slice(&vec64![20, 20, 20]));
-    let fa2_col1 = minarrow::FieldArray::from_inner("col1", arr2_col1);
-    let fa2_col2 = minarrow::FieldArray::from_inner("col2", arr2_col2);
+    let fa2_col1 = minarrow::FieldArray::from_arr("col1", arr2_col1);
+    let fa2_col2 = minarrow::FieldArray::from_arr("col2", arr2_col2);
     let mut table2 = Table::new("table2".to_string(), None);
     table2.add_col(fa2_col1);
     table2.add_col(fa2_col2);
@@ -364,14 +364,14 @@ fn test_super_array_broadcasting() {
         // Create chunked arrays (multiple field array chunks)
         let chunk1_a = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2]));
         let chunk2_a = Array::from_int32(IntegerArray::from_slice(&vec64![3, 4]));
-        let fa1 = minarrow::FieldArray::from_inner("chunk1", chunk1_a);
-        let fa2 = minarrow::FieldArray::from_inner("chunk1", chunk2_a);
+        let fa1 = minarrow::FieldArray::from_arr("chunk1", chunk1_a);
+        let fa2 = minarrow::FieldArray::from_arr("chunk1", chunk2_a);
         let super_arr1 = SuperArray::from_field_array_chunks(vec![fa1, fa2]);
 
         let chunk1_b = Array::from_int32(IntegerArray::from_slice(&vec64![2, 2]));
         let chunk2_b = Array::from_int32(IntegerArray::from_slice(&vec64![2, 2]));
-        let fa3 = minarrow::FieldArray::from_inner("chunk1", chunk1_b);
-        let fa4 = minarrow::FieldArray::from_inner("chunk1", chunk2_b);
+        let fa3 = minarrow::FieldArray::from_arr("chunk1", chunk1_b);
+        let fa4 = minarrow::FieldArray::from_arr("chunk1", chunk2_b);
         let super_arr2 = SuperArray::from_field_array_chunks(vec![fa3, fa4]);
 
         match Value::SuperArray(Arc::new(super_arr1)) * Value::SuperArray(Arc::new(super_arr2)) {
@@ -410,8 +410,8 @@ fn test_cube_broadcasting() {
         // First, create columns for table 1
         let t1_arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2]));
         let t1_arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![3, 4]));
-        let t1_fa1 = minarrow::FieldArray::from_inner("col1", t1_arr1);
-        let t1_fa2 = minarrow::FieldArray::from_inner("col2", t1_arr2);
+        let t1_fa1 = minarrow::FieldArray::from_arr("col1", t1_arr1);
+        let t1_fa2 = minarrow::FieldArray::from_arr("col2", t1_arr2);
 
         // Create columns for cube1 via constructor
         let mut cube1 = Cube::new("cube1".to_string(), Some(vec![t1_fa1, t1_fa2]), None);
@@ -419,8 +419,8 @@ fn test_cube_broadcasting() {
         // Add second table to cube1
         let t2_arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![5, 6]));
         let t2_arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![7, 8]));
-        let t2_fa1 = minarrow::FieldArray::from_inner("col1", t2_arr1);
-        let t2_fa2 = minarrow::FieldArray::from_inner("col2", t2_arr2);
+        let t2_fa1 = minarrow::FieldArray::from_arr("col1", t2_arr1);
+        let t2_fa2 = minarrow::FieldArray::from_arr("col2", t2_arr2);
         let mut table2 = Table::new("t2".to_string(), None);
         table2.add_col(t2_fa1);
         table2.add_col(t2_fa2);
@@ -429,14 +429,14 @@ fn test_cube_broadcasting() {
         // Create second cube
         let t3_arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 10]));
         let t3_arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![20, 20]));
-        let t3_fa1 = minarrow::FieldArray::from_inner("col1", t3_arr1);
-        let t3_fa2 = minarrow::FieldArray::from_inner("col2", t3_arr2);
+        let t3_fa1 = minarrow::FieldArray::from_arr("col1", t3_arr1);
+        let t3_fa2 = minarrow::FieldArray::from_arr("col2", t3_arr2);
         let mut cube2 = Cube::new("cube2".to_string(), Some(vec![t3_fa1, t3_fa2]), None);
 
         let t4_arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![30, 30]));
         let t4_arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![40, 40]));
-        let t4_fa1 = minarrow::FieldArray::from_inner("col1", t4_arr1);
-        let t4_fa2 = minarrow::FieldArray::from_inner("col2", t4_arr2);
+        let t4_fa1 = minarrow::FieldArray::from_arr("col1", t4_arr1);
+        let t4_fa2 = minarrow::FieldArray::from_arr("col2", t4_arr2);
         let mut table4 = Table::new("t4".to_string(), None);
         table4.add_col(t4_fa1);
         table4.add_col(t4_fa2);

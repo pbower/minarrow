@@ -38,7 +38,7 @@ pub fn validate_null_mask_len(data_len: usize, null_mask: &Option<Bitmask>) {
 /// Parses a string into a timestamp in milliseconds since the Unix epoch.
 /// Returns `Some(i64)` on success, or `None` if the string could not be parsed.
 ///
-/// Attempts common ISO8601/RFC3339 and `%Y-%m-%d` formats if the `chrono`
+/// Attempts common ISO8601/RFC3339 and custom date/time formats if the `time`
 /// feature is enabled.
 pub fn parse_datetime_str(s: &str) -> Option<i64> {
     // Empty string is always None/null
@@ -46,29 +46,51 @@ pub fn parse_datetime_str(s: &str) -> Option<i64> {
         return None;
     }
 
-    #[cfg(feature = "chrono")]
+    #[cfg(feature = "datetime_ops")]
     {
-        use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+        use time::{
+            Date, OffsetDateTime, PrimitiveDateTime, Time,
+            format_description::well_known::{Iso8601, Rfc3339},
+            macros::format_description,
+        };
 
-        // Try to parse as RFC3339/ISO8601 string
-        if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-            return Some(dt.timestamp_millis());
+        // Try to parse as RFC3339/ISO8601 string (with timezone)
+        if let Ok(dt) = OffsetDateTime::parse(s, &Rfc3339) {
+            return Some(dt.unix_timestamp() * 1_000 + (dt.nanosecond() / 1_000_000) as i64);
         }
-        // Try parsing as full date-time (no timezone)
-        if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
-            // Assume UTC
-            return Some(Utc.from_utc_datetime(&dt).timestamp_millis());
+
+        // Try ISO8601 format
+        if let Ok(dt) = OffsetDateTime::parse(s, &Iso8601::DEFAULT) {
+            return Some(dt.unix_timestamp() * 1_000 + (dt.nanosecond() / 1_000_000) as i64);
         }
-        // Try parsing as date only
-        if let Ok(date) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-            let dt = date.and_hms_opt(0, 0, 0)?;
-            return Some(Utc.from_utc_datetime(&dt).timestamp_millis());
+
+        // Try parsing as full date-time (no timezone) "%Y-%m-%d %H:%M:%S"
+        let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second]");
+        if let Ok(dt) = PrimitiveDateTime::parse(s, format) {
+            let dt_utc = dt.assume_utc();
+            return Some(
+                dt_utc.unix_timestamp() * 1_000 + (dt_utc.nanosecond() / 1_000_000) as i64,
+            );
         }
-        // Try parsing as time only (today's date)
-        if let Ok(time) = NaiveTime::parse_from_str(s, "%H:%M:%S") {
-            let today = Utc::now().date_naive();
-            let dt = NaiveDateTime::new(today, time);
-            return Some(Utc.from_utc_datetime(&dt).timestamp_millis());
+
+        // Try parsing as date only "%Y-%m-%d"
+        let date_format = format_description!("[year]-[month]-[day]");
+        if let Ok(date) = Date::parse(s, date_format) {
+            if let Ok(dt) = date.with_hms(0, 0, 0) {
+                let dt_utc = dt.assume_utc();
+                return Some(dt_utc.unix_timestamp() * 1_000);
+            }
+        }
+
+        // Try parsing as time only "%H:%M:%S" (use today's date)
+        let time_format = format_description!("[hour]:[minute]:[second]");
+        if let Ok(time) = Time::parse(s, time_format) {
+            let today = OffsetDateTime::now_utc().date();
+            let dt_primitive = today.with_time(time);
+            let dt_utc = dt_primitive.assume_utc();
+            return Some(
+                dt_utc.unix_timestamp() * 1_000 + (dt_utc.nanosecond() / 1_000_000) as i64,
+            );
         }
     }
 
