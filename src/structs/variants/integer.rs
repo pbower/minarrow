@@ -1,6 +1,6 @@
 //! # **IntegerArray Module**- *Mid-Level, Inner Typed Integer Array*
 //!
-//! Arrow-compatible, SIMD-aligned integer array optimized for analytical workloads.
+//! Arrow-compatible, SIMD-aligned integer array optimised for analytical workloads.
 //!
 //! ## Overview
 //! - Logical type: fixed-width signed/unsigned integers (`T: Integer`).

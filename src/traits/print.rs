@@ -92,8 +92,8 @@ pub(crate) fn value_to_string(arr: &Array, idx: usize) -> String {
         // ------------------------- datetime -----------------------------
         #[cfg(feature = "datetime")]
         Array::TemporalArray(inner) => match inner {
-            TemporalArray::Datetime32(dt) => format_datetime_value(dt, idx),
-            TemporalArray::Datetime64(dt) => format_datetime_value(dt, idx),
+            TemporalArray::Datetime32(dt) => format_datetime_value(dt, idx, None),
+            TemporalArray::Datetime64(dt) => format_datetime_value(dt, idx, None),
             TemporalArray::Null => "null".into(),
         },
         // ------------------------- fallback -----------------------------
@@ -166,66 +166,75 @@ pub(crate) fn format_float<T: Float + Display>(v: T) -> String {
 }
 
 #[cfg(feature = "datetime")]
-fn format_datetime_value<T>(arr: &DatetimeArray<T>, idx: usize) -> String
+pub(crate) fn format_datetime_value<T>(arr: &DatetimeArray<T>, idx: usize, timezone: Option<&str>) -> String
 where
     T: Integer + std::fmt::Display,
 {
-    // Null check
-
     use crate::MaskedArray;
     if arr.is_null(idx) {
         return "null".into();
     }
 
-    #[cfg(feature = "chrono")]
+    #[cfg(feature = "datetime_ops")]
     {
-        use chrono::{DateTime, NaiveDate, Utc};
-
         use crate::TimeUnit;
+        use time::OffsetDateTime;
 
-        match arr.time_unit {
+        let utc_dt = match arr.time_unit {
             TimeUnit::Seconds => {
                 let secs = arr.data[idx].to_i64().unwrap();
-                DateTime::<Utc>::from_timestamp(secs, 0)
-                    .map(|dt| dt.to_string())
-                    .unwrap_or_else(|| format!("{secs}s"))
+                OffsetDateTime::from_unix_timestamp(secs).ok()
             }
             TimeUnit::Milliseconds => {
                 let v = arr.data[idx].to_i64().unwrap();
-                let secs = v / 1_000;
-                let nsecs = ((v % 1_000) * 1_000_000) as u32;
-                DateTime::<Utc>::from_timestamp(secs, nsecs)
-                    .map(|dt| dt.to_string())
-                    .unwrap_or_else(|| format!("{v}ms"))
+                OffsetDateTime::from_unix_timestamp_nanos((v as i128) * 1_000_000).ok()
             }
             TimeUnit::Microseconds => {
                 let v = arr.data[idx].to_i64().unwrap();
-                let secs = v / 1_000_000;
-                let nsecs = ((v % 1_000_000) * 1_000) as u32;
-                DateTime::<Utc>::from_timestamp(secs, nsecs)
-                    .map(|dt| dt.to_string())
-                    .unwrap_or_else(|| format!("{v}µs"))
+                OffsetDateTime::from_unix_timestamp_nanos((v as i128) * 1_000).ok()
             }
             TimeUnit::Nanoseconds => {
                 let v = arr.data[idx].to_i64().unwrap();
-                let secs = v / 1_000_000_000;
-                let nsecs = (v % 1_000_000_000) as u32;
-                DateTime::<Utc>::from_timestamp(secs, nsecs)
-                    .map(|dt| dt.to_string())
-                    .unwrap_or_else(|| format!("{v}ns"))
+                OffsetDateTime::from_unix_timestamp_nanos(v as i128).ok()
             }
             TimeUnit::Days => {
+                use crate::structs::variants::datetime::UNIX_EPOCH_JULIAN_DAY;
                 let days = arr.data[idx].to_i64().unwrap();
-                let base = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
-                base.checked_add_signed(chrono::Duration::days(days))
-                    .map(|d| d.to_string())
-                    .unwrap_or_else(|| format!("{days}d"))
+                time::Date::from_julian_day((days + UNIX_EPOCH_JULIAN_DAY) as i32)
+                    .ok()
+                    .and_then(|d| d.with_hms(0, 0, 0).ok())
+                    .map(|dt| dt.assume_utc())
             }
+        };
+
+        if let Some(dt) = utc_dt {
+            if let Some(tz) = timezone {
+                format_with_timezone(dt, tz)
+            } else {
+                dt.to_string()
+            }
+        } else {
+            let v = arr.data[idx];
+            let suffix = match arr.time_unit {
+                TimeUnit::Seconds => "s",
+                TimeUnit::Milliseconds => "ms",
+                TimeUnit::Microseconds => "µs",
+                TimeUnit::Nanoseconds => "ns",
+                TimeUnit::Days => "d",
+            };
+            format!("{v}{suffix}")
         }
     }
-    #[cfg(not(feature = "chrono"))]
+    #[cfg(not(feature = "datetime_ops"))]
     {
         use crate::TimeUnit;
+
+        if timezone.is_some() {
+            panic!(
+                "Timezone functionality requires the 'datetime_ops' feature. \
+                Enable it in Cargo.toml with: features = [\"datetime_ops\"]"
+            );
+        }
 
         let v = arr.data[idx];
         let suffix = match arr.time_unit {
@@ -237,4 +246,60 @@ where
         };
         format!("{v}{suffix}")
     }
+}
+
+#[cfg(all(feature = "datetime", feature = "datetime_ops"))]
+fn format_with_timezone(utc_dt: time::OffsetDateTime, tz: &str) -> String {
+    // Try to parse as offset string first (e.g., "+05:00", "-08:00")
+    if let Some(offset) = parse_timezone_offset(tz) {
+        let local_dt = utc_dt.to_offset(offset);
+        format!("{} {}", local_dt, tz)
+    } else {
+        // For IANA timezones (e.g., "America/New_York"), we can't do full conversion
+        // without a timezone database. Just append the timezone name.
+        format!("{} {}", utc_dt, tz)
+    }
+}
+
+#[cfg(all(feature = "datetime", feature = "datetime_ops"))]
+fn parse_timezone_offset(tz: &str) -> Option<time::UtcOffset> {
+    use time::UtcOffset;
+    use crate::structs::variants::datetime::tz::lookup_timezone;
+
+    // First try timezone database lookup (handles IANA IDs, abbreviations, and direct offsets)
+    let tz_offset = lookup_timezone(tz)?;
+
+    // Now parse the resolved offset string
+    let tz = tz_offset.trim();
+
+    // Handle UTC specially
+    if tz.eq_ignore_ascii_case("UTC") || tz.eq_ignore_ascii_case("Z") {
+        return Some(UtcOffset::UTC);
+    }
+
+    // Parse offset strings like "+05:00", "-08:00", "+0530"
+    if !tz.starts_with('+') && !tz.starts_with('-') {
+        return None;
+    }
+
+    let (sign, rest) = tz.split_at(1);
+    let sign = if sign == "+" { 1 } else { -1 };
+
+    // Try parsing HH:MM format
+    if let Some((hours_str, mins_str)) = rest.split_once(':') {
+        let hours: i8 = hours_str.parse().ok()?;
+        let mins: i8 = mins_str.parse().ok()?;
+        let seconds = sign * (hours as i32 * 3600 + mins as i32 * 60);
+        return UtcOffset::from_whole_seconds(seconds).ok();
+    }
+
+    // Try parsing HHMM format
+    if rest.len() == 4 {
+        let hours: i8 = rest[0..2].parse().ok()?;
+        let mins: i8 = rest[2..4].parse().ok()?;
+        let seconds = sign * (hours as i32 * 3600 + mins as i32 * 60);
+        return UtcOffset::from_whole_seconds(seconds).ok();
+    }
+
+    None
 }

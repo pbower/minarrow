@@ -1,5 +1,5 @@
 //! ---------------------------------------------------------
-//! Minarrow ↔️ Polars (via polars_arrow/arrow2) FFI roundtrip
+//! Minarrow <->️ Polars (via polars_arrow/arrow2) FFI roundtrip
 //!
 //! Run with:
 //!    cargo run --example polars_ffi --features cast_polars

@@ -1,16 +1,16 @@
-# Minarrow - *Apache Arrow tuned for HPC, Native Streaming, and Embedded*
+# Minarrow - *Apache Arrow tuned for HPC, Live, and Embedded*
 
 ## Intro
 
 Minarrow is a from-scratch columnar library built for real-time and systems workloads in Rust.
-It keeps the surface small, makes types explicit, compiles fast, and aligns data for predictable SIMD performance.
-It speaks Arrow when you need to talk interchange — but the core stays lean.
+It keeps the surface small, gives you IDE types, compiles fast, and aligns data for fast SIMD performance.
+It speaks Arrow when you need to talk interchange — but the core stays lean and mean.
 
-Minarrow is the base layer of several related projects that expand on it to deliver a full set of SIMD-accelerated Kernels, Tokio streamable buffers, and a full-scale engine.
+Minarrow is the base layer of several epic projects that expand on it to deliver a full set of SIMD-accelerated Kernels, Tokio streamable buffers, and a full-scale engine.
 
 ## Design Focus
 
-- **Typed, direct access** – No downcasting chains
+- **Typed, direct access** – No downcasting horror.
 - **High performance** – 64-byte SIMD-compatible alignment by default
 - **Fast iteration** – Minimal dependencies, sub-1.5 s clean builds, <0.15 s rebuilds
 - **Interoperability on demand** – Convert to and from Arrow at the boundary
@@ -19,7 +19,7 @@ Minarrow is the base layer of several related projects that expand on it to deli
 
 - The **Arrow** format is a powerful standard for columnar data. ***Apache Arrow*** has driven an entire ecosystem forward, with zero-copy interchange, multi-language support, and extensive integration.
 - ***Minarrow*** complements that ecosystem by focusing on Rust-first ergonomics, predictable SIMD behaviour, and extremely low build-time friction.
-- It's **easy, fast, and simple** — built to deliver extreme performance without sacrificing ergonomics.
+- **Easy, fast, and simple** — delivers extreme performance without sacrificing ergonomics.
 
 ## Key Features
 
@@ -29,7 +29,9 @@ Minarrow compiles in under 1.5 seconds with default features, minimising develop
 
 ### Data access
 
-Minarrow provides direct, always-typed access to array values. Unlike other Rust implementations that unify all array types as untyped byte buffers *(requiring downcasting and dynamic checks)*, Minarrow retains concrete types throughout the API. This enables developers to inspect and manipulate data without downcasting or additional indirection, ensuring safe and ergonomic access at all times.
+Minarrow provides direct, typed access to array values. Unlike other Rust implementations that unify all array types as untyped byte buffers *(requiring downcasting and dynamic checks)*, Minarrow retains concrete types throughout the API. This enables developers to inspect and manipulate data without downcasting or additional indirection, retaining safe and ergonomic access at all times.
+
+**Outcome**: *You get a data library feel in Rust. These data building blocks are capable of powering some of the most demanding and high-performance apps.*
 
 ## Type System
 
@@ -77,8 +79,8 @@ let array = Array::NumericArray(wrapped);
 ```rust
 use minarrow::{FieldArray, Print, Table, arr_i32, arr_str32, vec64};
 
-let col1 = FieldArray::from_inner("numbers", arr_i32![1, 2, 3]);
-let col2 = FieldArray::from_inner("letters", arr_str32!["x", "y", "z"]);
+let col1 = FieldArray::from_arr("numbers", arr_i32![1, 2, 3]);
+let col2 = FieldArray::from_arr("letters", arr_str32!["x", "y", "z"]);
 
 let mut tbl = Table::new("Demo".into(), vec![col1, col2].into());
 tbl.print();
@@ -88,6 +90,10 @@ See _examples/_ for more.
 
 When working with arrays, remember to import the `MaskedArray` trait,
 which ensures all required methods are available.
+
+## Broadcasting
+Broadcasting is built-in via the `broadcasting` feature. You can add, subtract, divide or multiply all `Value` types,
+including tuples.
 
 ## SIMD by Default
 
@@ -116,15 +122,19 @@ The structure is layered:
 This design supports flexible function signatures like `impl Into<NumericArray>` while preserving static typing.
 Because dispatch is static, the compiler retains full knowledge of types across calls, enabling inlining and eliminating virtual call overhead.
 
-### Flexible Integration
+### Flexible
 - **Apache Arrow** compatibility via `.to_apache_arrow()`.
 - **Polars** compatibility via `.to_polars()`.
+- **Datetime support** – Minarrow supports optionally beefing up Datetimes via the *time* crate, for compatible dt-aware time and ops support.
 - **Async support** through the companion Lightstream crate
 - **Zero-copy** views for windowed operations *(see Views and Windowing below)*
 - **Memory-mapped** file support with maintained SIMD alignment
 - **FFI Support** for cross-language compatibility.
 
-Lightstream *(planned Aug ’25)* enables IPC streaming in Tokio async contexts with composable encoder/decoder traits, both sync and async, without losing SIMD alignment.
+## Partner Crates:
+- `lightstream` enables IPC streaming in Tokio async contexts with composable encoder/decoder traits, both sync and async, without losing SIMD alignment.
+- `simd-kernels` a very large set of simd-kernels **including 60+ distributions (poisson etc.)** ***reconciled to Scipy***. 
+- `vec64` Vec wrapper with a custom 64-byte allocator that enforces optimal SIMD pointer-alignment. 
 
 ## Views and Windowing
 
@@ -207,10 +217,11 @@ _The construction delta is not included in the benchmark timings above._
 
 ## Design Philosophy
 
-- **Direct data access** over abstraction layers
-- **Developer velocity** through simple, predictable APIs
-- **Performance** with SIMD as a first-class citizen
-- **Interoperability** while maintaining its own identity
+- **Composable** opt-up to your required abstraction-level. 
+- **Ergonomic** never lose access to easily seeing your data.
+- **Dev Speed** simple intuitive APIs
+- **Performant** SIMD as a first-class citizen
+- **Interoperable** whilst maintaining identity
 
 This approach trades some features (like deeply nested types) for a more streamlined experience in common data processing scenarios.
 
@@ -223,10 +234,7 @@ We welcome contributions! Areas of focus include:
 3. **Bug Fixes** - Bug fixes and improvements
 4. **PyO3 Integration** - Python bindings and interoperability
 5. **List and Struct Types** - Support for nested types (PRs welcome)
-6. **Datetime** - Improving datetime ergonomics.
 
-Additionally, if you are interested in working on a SIMD kernels crate that's in development,
-and have relevant experience, please feel free to reach out.
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md) for contributing guidelines.
 

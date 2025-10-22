@@ -3,31 +3,40 @@
 //! Arrow-compatible datetime/timestamp array implementation with optional null-mask,
 //! 64-byte alignment, and efficient memory layout for analytical workloads.
 //!
+//! **Notice**: When using the `datetime_ops` feature, all dates are stored in UTC time, 
+//! even when a timezone is stored in `Field` metadata. Encoding timezone in `Field` 
+//! ensures that the tz-aware time is displayed when printing. **Warning**: *All timezones 
+//! are static values in ./tz.rs and are subject to change over time. When performing 
+//! international time calculations with any specific accuracy requirements, please verify 
+//! your timezone(s) and raise a PR or Issue if and need to be updated. 
+//! For e.g., for regions who have moved on/off Daylight savings time, etc.*
+//! 
 //! ## Overview
 //! - Logical type: temporal values with a defined [`TimeUnit`] (seconds, milliseconds,
 //!   microseconds, nanoseconds, days).
-//! - Physical storage: numeric buffer (`Buffer<T>`) representing raw time offsets from
+//! - Physical storage: i64 integers representing raw time offsets from
 //!   the UNIX epoch or a base date, plus an optional bit-packed validity mask.
 //! - Single generic type supports all Arrow datetime/timestamp variants via `Field`
 //!   metadata, avoiding multiple specialised array structs.
 //! - Integrates with Arrow FFI for zero-copy interop.
+//! - ***Timezone information does not alter the underlying UTC storage***, only what value
+//! is displayed when printed. Therefore, when working with integer values whose times are physically
+//! those timezones - be sure to convert them to UTC first before storing them in Minarrow, otherwise
+//! it would 'offset the already offsetted' values. 
 //!
 //! ## Features
 //! - **Construction** from slices, `Vec64` or plain `Vec` buffers, with optional null mask.
 //! - **Mutation**: push, set, and bulk null insertion.
-//! - **Iteration**: sequential and parallel (with `parallel_proc` feature).
 //! - **Null handling**: optional validity mask with length validation.
-//! - **Conversion**: when `chrono` feature is enabled, convert to native date/time
-//!   values or `(year, month, day, hour, minute, second, millisecond, nanosecond)` tuples.
+//! - **Conversion**: when `datetime_ops` feature is enabled, convert to native date/time
+//!   values via the `time` crate, plus component extraction and datetime operations.
+//! - **Datetime operations**: full suite of standard datetime operations under ./datetime_ops
+//! - **Tz-aware**: see `examples/datetime_ops` for timezone usage. 
 //!
 //! ## Use Cases
 //! - High-performance temporal analytics.
 //! - FFI-based interchange with Apache Arrow or other columnar systems.
 //! - Streaming or batch ingestion with incremental append.
-//!
-//! ## Performance Notes
-//! - Prefer bulk pushes and slice construction over repeated single inserts.
-//! - Parallel iteration is available with the `parallel_proc` feature.
 //!
 //! ## Related Types
 //! - [`TimeUnit`]: enumerates supported time granularities.
@@ -51,6 +60,20 @@ use crate::{
 use vec64::Vec64;
 use vec64::alloc64::Alloc64;
 
+pub mod datetime_ops;
+pub mod tz;
+
+/// Julian Day Number corresponding to the Unix epoch (1970-01-01 00:00:00 UTC).
+///
+/// Used when converting between “days since Unix epoch” and absolute Julian day counts.
+/// The `time` crate’s [`Date::from_julian_day`] and [`Date::to_julian_day`] use Julian
+/// day numbering, so this constant provides the offset required to translate
+/// Arrow-style day counts (relative to 1970-01-01) into absolute Julian days.
+///
+/// # Value
+/// `2_440_588` — the Julian day number for **1970-01-01 UTC**.
+pub const UNIX_EPOCH_JULIAN_DAY: i64 = 2_440_588;
+
 /// # DatetimeArray
 ///
 /// Arrow-compatible datetime/timestamp array with 64-byte alignment and optional null mask.
@@ -64,10 +87,10 @@ use vec64::alloc64::Alloc64;
 /// - Stores temporal values as numeric offsets (`T: Integer`) from the UNIX epoch or a base date,
 ///   with units defined by [`TimeUnit`].
 /// - A single struct supports all Arrow datetime/timestamp variants, with the exact logical
-///   type determined by an associated `Field`’s `ArrowType`.
+///   type determined by an associated `Field`'s `ArrowType`.
 /// - `null_mask` is an optional bit-packed validity bitmap (`1 = valid`, `0 = null`).
 /// - Implements [`MaskedArray`] for consistent nullable array behaviour.
-/// - When `chrono` is enabled, provides conversion to native date/time representations.
+/// - When `datetime_ops` is enabled, provides conversion to native date/time via the `time` crate.
 ///
 /// ### Fields
 /// - `data`: backing buffer storing raw temporal values.
@@ -212,37 +235,94 @@ impl<T: Integer> DatetimeArray<T> {
     }
 }
 
-// Chrono datetime conversion
-#[cfg(feature = "chrono")]
+// Time crate datetime conversion
+#[cfg(feature = "datetime_ops")]
 impl DatetimeArray<i64> {
-    /// Returns the value at index as chrono::NaiveDateTime
+    /// Returns the value at index as time::OffsetDateTime (UTC)
     ///
-    /// Is the milliseconds since epoch UTC.
+    /// Interprets the value based on the array's TimeUnit.
     #[inline]
-    pub fn as_datetime(&self, idx: usize) -> Option<chrono::NaiveDateTime> {
-        use chrono::{DateTime, TimeDelta, Utc};
-        self.value(idx).map(|ms| {
-            let epoch = DateTime::<Utc>::UNIX_EPOCH.naive_utc();
-            epoch + TimeDelta::milliseconds(ms)
+    pub fn as_datetime(&self, idx: usize) -> Option<time::OffsetDateTime> {
+        use time::OffsetDateTime;
+        self.value(idx).and_then(|val| {
+            match self.time_unit {
+                TimeUnit::Seconds => OffsetDateTime::from_unix_timestamp(val).ok(),
+                TimeUnit::Milliseconds => {
+                    OffsetDateTime::from_unix_timestamp_nanos((val as i128) * 1_000_000).ok()
+                }
+                TimeUnit::Microseconds => {
+                    OffsetDateTime::from_unix_timestamp_nanos((val as i128) * 1_000).ok()
+                }
+                TimeUnit::Nanoseconds => {
+                    OffsetDateTime::from_unix_timestamp_nanos(val as i128).ok()
+                }
+                TimeUnit::Days => {
+                    // Days since Unix epoch (1970-01-01)
+                    time::Date::from_julian_day((val + UNIX_EPOCH_JULIAN_DAY) as i32) // Convert Unix days to Julian day
+                        .ok()
+                        .and_then(|date| date.with_hms(0, 0, 0).ok())
+                        .map(|dt| dt.assume_utc())
+                }
+            }
         })
     }
 
-    /// Returns (year, month, day, hour, minute, second, millisecond) tuple.
+    /// Returns (year, month, day, hour, minute, second, millisecond, nanosecond) tuple.
     #[inline]
     pub fn tuple_dt(&self, idx: usize) -> Option<(i32, u32, u32, u32, u32, u32, u32, u32)> {
-        use chrono::{Datelike, Timelike};
         self.as_datetime(idx).map(|dt| {
             (
-                dt.date().year(),
-                dt.date().month(),
-                dt.date().day(),
-                dt.time().hour(),
-                dt.time().minute(),
-                dt.time().second(),
-                dt.time().nanosecond() / 1_000_000, // ms
-                dt.time().nanosecond(),
+                dt.year(),
+                dt.month() as u32,
+                dt.day() as u32,
+                dt.hour() as u32,
+                dt.minute() as u32,
+                dt.second() as u32,
+                dt.nanosecond() / 1_000_000, // ms
+                dt.nanosecond(),
             )
         })
+    }
+
+    /// Returns the value at index as time::Date
+    #[inline]
+    pub fn as_date(&self, idx: usize) -> Option<time::Date> {
+        self.as_datetime(idx).map(|dt| dt.date())
+    }
+
+    /// Returns the value at index as time::Time
+    #[inline]
+    pub fn as_time(&self, idx: usize) -> Option<time::Time> {
+        self.as_datetime(idx).map(|dt| dt.time())
+    }
+
+    /// Wraps this DatetimeArray in a FieldArray with timezone metadata.
+    ///
+    /// The underlying timestamp data (always UTC) remains unchanged. The timezone
+    /// is stored as metadata in the Field's ArrowType for interpretation/display.
+    ///
+    /// # Arguments
+    /// * `tz` - Timezone string in Arrow format (IANA like "America/New_York" or offset like "+05:00")
+    ///
+    /// # Returns
+    /// A FieldArray with Timestamp type and timezone metadata
+    #[cfg(feature = "datetime")]
+    pub fn tz(&self, tz: &str) -> crate::FieldArray
+    where
+        Self: Into<crate::Array>,
+    {
+        use crate::FieldArray;
+        use crate::ffi::arrow_dtype::ArrowType;
+
+        let array: crate::Array = self.clone().into();
+
+        FieldArray::from_parts(
+            "datetime",
+            ArrowType::Timestamp(self.time_unit, Some(tz.to_string())),
+            Some(self.is_nullable()),
+            None,
+            array,
+        )
     }
 }
 
@@ -260,8 +340,8 @@ impl_arc_masked_array!(
 );
 
 /// There are 2 options for displaying dates
-/// One - is to enable the `chrono` feature and then they will display as native datetimes.
-/// Second, is to not enable `chrono` and they will display as the value with a suffix e.g. " ms".
+/// One - is to enable the `datetime_ops` feature and then they will display as native datetimes.
+/// Second, is to not enable `datetime_ops` and they will display as the value with a suffix e.g. " ms".
 #[cfg(feature = "datetime")]
 impl<T> Display for DatetimeArray<T>
 where
@@ -280,9 +360,9 @@ where
 
         write!(f, "[")?;
 
-        #[cfg(feature = "chrono")]
+        #[cfg(feature = "datetime_ops")]
         {
-            use chrono::{DateTime, Duration, NaiveDate};
+            use time::OffsetDateTime;
             for i in 0..usize::min(len, MAX_PREVIEW) {
                 if i > 0 {
                     write!(f, ", ")?;
@@ -291,43 +371,39 @@ where
                     Some(val) => match self.time_unit {
                         TimeUnit::Seconds => {
                             let v = val.to_i64().unwrap();
-                            let dt = DateTime::from_timestamp(v, 0)
-                                .expect("Expected valid datetime value.");
-                            write!(f, "{dt}")
+                            match OffsetDateTime::from_unix_timestamp(v) {
+                                Ok(dt) => write!(f, "{}", dt),
+                                Err(_) => write!(f, "{}s", val),
+                            }
                         }
                         TimeUnit::Milliseconds => {
-                            use chrono::DateTime;
-
                             let v = val.to_i64().unwrap();
-                            let secs = v / 1_000;
-                            let nsecs = ((v % 1_000) * 1_000_000) as u32;
-                            let dt = DateTime::from_timestamp(secs, nsecs)
-                                .expect("Expected valid datetime value.");
-                            write!(f, "{dt}")
+                            match OffsetDateTime::from_unix_timestamp_nanos((v as i128) * 1_000_000)
+                            {
+                                Ok(dt) => write!(f, "{}", dt),
+                                Err(_) => write!(f, "{}ms", val),
+                            }
                         }
                         TimeUnit::Microseconds => {
                             let v = val.to_i64().unwrap();
-                            let secs = v / 1_000_000;
-                            let nsecs = ((v % 1_000_000) * 1_000) as u32;
-                            let dt = DateTime::from_timestamp(secs, nsecs)
-                                .expect("Expected valid datetime value.");
-                            write!(f, "{dt}")
+                            match OffsetDateTime::from_unix_timestamp_nanos((v as i128) * 1_000) {
+                                Ok(dt) => write!(f, "{}", dt),
+                                Err(_) => write!(f, "{}µs", val),
+                            }
                         }
                         TimeUnit::Nanoseconds => {
                             let v = val.to_i64().unwrap();
-                            let secs = v / 1_000_000_000;
-                            let nsecs = (v % 1_000_000_000) as u32;
-                            let dt = DateTime::from_timestamp(secs, nsecs)
-                                .expect("Expected valid datetime value.");
-                            write!(f, "{dt}")
+                            match OffsetDateTime::from_unix_timestamp_nanos(v as i128) {
+                                Ok(dt) => write!(f, "{}", dt),
+                                Err(_) => write!(f, "{}ns", val),
+                            }
                         }
                         TimeUnit::Days => {
                             let days = val.to_i64().unwrap();
-                            let base = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
-                            let date = base.checked_add_signed(Duration::days(days));
-                            match date {
-                                Some(d) => write!(f, "{d}"),
-                                None => write!(f, "{}d", val),
+                            match time::Date::from_julian_day((days + UNIX_EPOCH_JULIAN_DAY) as i32)
+                            {
+                                Ok(date) => write!(f, "{}", date),
+                                Err(_) => write!(f, "{}d", val),
                             }
                         }
                     },
@@ -336,7 +412,7 @@ where
             }
         }
 
-        #[cfg(not(feature = "chrono"))]
+        #[cfg(not(feature = "datetime_ops"))]
         {
             // Raw value plus suffix
             let suffix = match self.time_unit {
@@ -533,31 +609,50 @@ mod tests {
         assert_eq!(arr.value(2), None);
     }
 
-    #[cfg(feature = "chrono")]
+    #[cfg(feature = "datetime_ops")]
     #[test]
     fn test_as_datetime_and_tuple_dt() {
-        use chrono::{DateTime, Datelike, TimeDelta, Timelike, Utc};
-        let mut arr = DatetimeArray::<i64>::with_capacity(2, true, None);
+        use time::OffsetDateTime;
+        let mut arr = DatetimeArray::<i64>::with_capacity(2, true, Some(TimeUnit::Milliseconds));
         let ms = 1_700_000_000_000;
         arr.push(ms);
         arr.push_null();
 
         let dt = arr.as_datetime(0).unwrap();
-        let expected = DateTime::<Utc>::UNIX_EPOCH.naive_utc() + TimeDelta::milliseconds(ms);
+        let expected = OffsetDateTime::from_unix_timestamp_nanos((ms as i128) * 1_000_000).unwrap();
         assert_eq!(dt, expected);
 
         let tuple = arr.tuple_dt(0).unwrap();
         assert_eq!(tuple.0, dt.year());
-        assert_eq!(tuple.1, dt.month());
-        assert_eq!(tuple.2, dt.day());
-        assert_eq!(tuple.3, dt.hour());
-        assert_eq!(tuple.4, dt.minute());
-        assert_eq!(tuple.5, dt.second());
+        assert_eq!(tuple.1, dt.month() as u32);
+        assert_eq!(tuple.2, dt.day() as u32);
+        assert_eq!(tuple.3, dt.hour() as u32);
+        assert_eq!(tuple.4, dt.minute() as u32);
+        assert_eq!(tuple.5, dt.second() as u32);
         assert_eq!(tuple.6, dt.nanosecond() / 1_000_000);
         assert_eq!(tuple.7, dt.nanosecond());
 
         assert!(arr.as_datetime(1).is_none());
         assert!(arr.tuple_dt(1).is_none());
+    }
+
+    #[cfg(feature = "datetime_ops")]
+    #[test]
+    fn test_as_date_and_as_time() {
+        use time::Month;
+        let mut arr = DatetimeArray::<i64>::with_capacity(1, false, Some(TimeUnit::Seconds));
+        let timestamp = 1_700_000_000; // 2023-11-14 22:13:20 UTC
+        arr.push(timestamp);
+
+        let date = arr.as_date(0).unwrap();
+        assert_eq!(date.year(), 2023);
+        assert_eq!(date.month(), Month::November);
+        assert_eq!(date.day(), 14);
+
+        let time = arr.as_time(0).unwrap();
+        assert_eq!(time.hour(), 22);
+        assert_eq!(time.minute(), 13);
+        assert_eq!(time.second(), 20);
     }
 
     #[test]
@@ -742,6 +837,7 @@ mod tests {
         ));
     }
 }
+
 
 #[cfg(test)]
 #[cfg(feature = "parallel_proc")]

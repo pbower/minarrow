@@ -599,7 +599,6 @@ impl<T> AsMut<[T]> for Buffer<T> {
 
 #[cfg(feature = "parallel_proc")]
 impl<T: Send + Sync> Buffer<T> {
-    
     #[inline]
     pub fn par_iter(&self) -> rayon::slice::Iter<'_, T> {
         use rayon::iter::IntoParallelRefIterator;

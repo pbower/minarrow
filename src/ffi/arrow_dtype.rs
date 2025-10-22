@@ -94,7 +94,7 @@ pub enum ArrowType {
     #[cfg(feature = "datetime")]
     Duration64(TimeUnit),
     #[cfg(feature = "datetime")]
-    Timestamp(TimeUnit),
+    Timestamp(TimeUnit, Option<String>), // TimeUnit + optional timezone string (e.g., "UTC", "America/New_York")
     #[cfg(feature = "datetime")]
     Interval(IntervalUnit),
     String,
@@ -259,7 +259,13 @@ impl Display for ArrowType {
             #[cfg(feature = "datetime")]
             ArrowType::Duration64(unit) => write!(f, "Duration64({unit})"),
             #[cfg(feature = "datetime")]
-            ArrowType::Timestamp(unit) => write!(f, "Timestamp({unit})"),
+            ArrowType::Timestamp(unit, tz) => {
+                if let Some(tz_str) = tz {
+                    write!(f, "Timestamp({unit}, {})", tz_str)
+                } else {
+                    write!(f, "Timestamp({unit})")
+                }
+            }
             #[cfg(feature = "datetime")]
             ArrowType::Interval(interval) => write!(f, "Interval({interval})"),
 

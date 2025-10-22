@@ -69,8 +69,8 @@ static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 /// ```rust
 /// use minarrow::{FieldArray, Print, Table, arr_i32, arr_str32, vec64};
 ///
-/// let col1 = FieldArray::from_inner("numbers", arr_i32![1, 2, 3]);
-/// let col2 = FieldArray::from_inner("letters", arr_str32!["x", "y", "z"]);
+/// let col1 = FieldArray::from_arr("numbers", arr_i32![1, 2, 3]);
+/// let col2 = FieldArray::from_arr("letters", arr_str32!["x", "y", "z"]);
 ///
 /// let mut tbl = Table::new("Demo".into(), vec![col1, col2].into());
 /// tbl.print();

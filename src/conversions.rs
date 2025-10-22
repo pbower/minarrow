@@ -4,20 +4,20 @@
 //! unified [`Array`] enum, plus `View` impls where the `views` feature is enabled.
 //!
 //! ## What’s included
-//! - **Numeric ↔ Numeric**
+//! - **Numeric <-> Numeric**
 //!   - *Widening* `From<&IntegerArray<S>> for IntegerArray<D>` and `From<&IntegerArray<S>> for FloatArray<D>`.
 //!   - *Narrowing / signedness changes* via `TryFrom<&IntegerArray<S>> for IntegerArray<D>` with
 //!     [`MinarrowError::Overflow`] on out-of-range values.
-//! - **Float ↔ Integer**
+//! - **Float <-> Integer**
 //!   - `TryFrom<&FloatArray<F>> for IntegerArray<I>` with strict checks (finite + exact truncation);
 ////!     returns [`MinarrowError::LossyCast`] if fidelity is lost.
-//! - **Booleans ↔ Primitives**
+//! - **Booleans <-> Primitives**
 //!   - `From<&BooleanArray<u8>>` to integer/float (true→1/1.0, false→0/0.0).
 //!   - `From<&IntegerArray<T>>` / `From<&FloatArray<T>>` to `BooleanArray<u8>` (non-zero → true).
 //! - **Numerics/Booleans → Strings**
 //!   - `From<&IntegerArray<T>>`, `From<&FloatArray<T>>`, and `From<&BooleanArray<u8>>` to
 //!     `StringArray<u32>` (UTF-8), preserving null masks.
-//! - **Strings ↔ Categoricals**
+//! - **Strings <-> Categoricals**
 //!   - `TryFrom<&StringArray<Off>> for CategoricalArray<Idx>` builds a dictionary with stable codes.
 //!   - `TryFrom<&CategoricalArray<Idx>> for StringArray<Off>` materialises codes back to UTF-8.
 //!   - Widening/narrowing categorical index conversions (`From`/`TryFrom`) with overflow checks.

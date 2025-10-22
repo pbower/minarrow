@@ -1222,11 +1222,11 @@ mod tests {
     #[test]
     fn test_value_table_addition() {
         // Create first table: columns [1, 2, 3] and [10, 20, 30]
-        let col1_a = FieldArray::from_inner(
+        let col1_a = FieldArray::from_arr(
             "col1",
             Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3])),
         );
-        let col2_a = FieldArray::from_inner(
+        let col2_a = FieldArray::from_arr(
             "col2",
             Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30])),
         );
@@ -1236,11 +1236,11 @@ mod tests {
         )));
 
         // Create second table: columns [4, 5, 6] and [40, 50, 60]
-        let col1_b = FieldArray::from_inner(
+        let col1_b = FieldArray::from_arr(
             "col1",
             Array::from_int32(IntegerArray::from_slice(&vec64![4, 5, 6])),
         );
-        let col2_b = FieldArray::from_inner(
+        let col2_b = FieldArray::from_arr(
             "col2",
             Array::from_int32(IntegerArray::from_slice(&vec64![40, 50, 60])),
         );
@@ -1290,11 +1290,11 @@ mod tests {
         use crate::TableV;
 
         // Create first table: columns [1, 2, 3] and [10, 20, 30]
-        let col1_a = FieldArray::from_inner(
+        let col1_a = FieldArray::from_arr(
             "col1",
             Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3])),
         );
-        let col2_a = FieldArray::from_inner(
+        let col2_a = FieldArray::from_arr(
             "col2",
             Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30])),
         );
@@ -1302,11 +1302,11 @@ mod tests {
         let table_view_a = Value::TableView(Arc::new(TableV::from(table_a)));
 
         // Create second table: columns [4, 5, 6] and [40, 50, 60]
-        let col1_b = FieldArray::from_inner(
+        let col1_b = FieldArray::from_arr(
             "col1",
             Array::from_int32(IntegerArray::from_slice(&vec64![4, 5, 6])),
         );
-        let col2_b = FieldArray::from_inner(
+        let col2_b = FieldArray::from_arr(
             "col2",
             Array::from_int32(IntegerArray::from_slice(&vec64![40, 50, 60])),
         );

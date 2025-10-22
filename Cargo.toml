@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
@@ -41,7 +41,8 @@ polars = { version = "0.50.0", features = [
     "fmt",
 ], optional = true }
 polars-arrow = { version = "0.50.0", optional = true }
-chrono = { version = "0.4.41", optional = true }
+time = { version = "0.3", optional = true, features = ["parsing", "formatting", "macros", "local-offset"] }
+phf = { version = "0.11", features = ["macros"], optional = true }
 num-traits = "0.2.19"
 rayon = { version = "1.10.0", optional = true }
 snappy = { version = "0.4.0", optional = true }
@@ -146,13 +147,18 @@ datetime = []
 # A much more extensive set of kernels is available under the downstream simd-kernels crate.
 simd = []
 
-# Adds `as_datetime` outputs for easy conversion.
-# Also, formats datetime values as dates since unix epoch 1970-01-01 .
-# Without this, they are raw values that can either represent
-# since epoch, or just be a standalone length, depending on your
-# requirements, and the `ArrowType` you can store in `Field` and/or `FieldArray`
-# tags this accurately for each use case, along with any optional metadata.
-chrono = ["dep:chrono", "datetime"]
+# Adds full datetime functionality with the `time` crate including:
+# - Human-readable datetime conversions
+# - Timezone-aware operations
+# - Date/time arithmetic (add/subtract durations, dates)
+# - Comparison operations
+# - Component extraction (year, month, day, hour, etc.)
+# At, the expense of an external dependency.
+#
+# Without this feature, datetime values are raw integer offsets.
+# The `ArrowType` stored in `Field` and/or `FieldArray` specifies the
+# logical type (Date32, Date64, Timestamp, etc.) for Arrow FFI compatibility.
+datetime_ops = ["dep:time", "dep:phf", "datetime"]
 
 # Adds string arithmetic kernels
 # Includes (small) external dependencies, and supports

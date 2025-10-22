@@ -25,7 +25,7 @@
 //! ## Notes
 //! - Dictionary-encoded (categorical) arrays are supported, including index type mapping.
 //! - UTF-8 and large UTF-8 string arrays preserve offset and value buffer ordering.
-//! - Temporal arrays validate logical type ↔ physical storage alignment prior to export.
+//! - Temporal arrays validate logical type <-> physical storage alignment prior to export.
 //!- `pyo3` normally abstracts pointer handling and lifetime management when integrating
 //!   with Python; we do not yet use it, but once integrated, instead of manual `Arc` reference
 //!  count handling and explicit clean-up, one will be able to instead leverage automatic,
@@ -131,6 +131,20 @@ unsafe extern "C" fn release_arrow_schema(s: *mut ArrowSchema) {
 
 /// Constructs the Arrow C FFI format string for the given ArrowType.
 pub fn fmt_c(dtype: ArrowType) -> CString {
+    #[cfg(feature = "datetime")]
+    if let ArrowType::Timestamp(u, tz) = &dtype {
+        let unit_str = match u {
+            TimeUnit::Seconds => "tss:",
+            TimeUnit::Milliseconds => "tsm:",
+            TimeUnit::Microseconds => "tsu:",
+            TimeUnit::Nanoseconds => "tsn:",
+            TimeUnit::Days => panic!("Timestamp(Days) is invalid in Arrow C format"),
+        };
+        let tz_str = tz.as_deref().unwrap_or("");
+        let format_str = format!("{}{}", unit_str, tz_str);
+        return CString::new(format_str).expect("CString formatting failed: invalid bytes");
+    }
+
     let bytes: &'static [u8] = match dtype {
         ArrowType::Null => b"n",
         ArrowType::Boolean => b"b",
@@ -188,13 +202,9 @@ pub fn fmt_c(dtype: ArrowType) -> CString {
         },
 
         #[cfg(feature = "datetime")]
-        ArrowType::Timestamp(u) => match u {
-            TimeUnit::Seconds => b"tss:",
-            TimeUnit::Milliseconds => b"tsm:",
-            TimeUnit::Microseconds => b"tsu:",
-            TimeUnit::Nanoseconds => b"tsn:",
-            TimeUnit::Days => panic!("Timestamp(Days) is invalid in Arrow C format"),
-        },
+        ArrowType::Timestamp(_, _) => {
+            unreachable!("Timestamp case handled above")
+        }
 
         #[cfg(feature = "datetime")]
         ArrowType::Interval(u) => match u {
@@ -256,7 +266,7 @@ fn validate_temporal_field(array: &Array, dtype: &ArrowType) {
             );
         }
         // Timestamp requires i64 with the exact unit
-        (Array::TemporalArray(TemporalArray::Datetime64(arr)), ArrowType::Timestamp(u)) => {
+        (Array::TemporalArray(TemporalArray::Datetime64(arr)), ArrowType::Timestamp(u, _tz)) => {
             assert!(
                 arr.time_unit == *u,
                 "FFI export: Field=Timestamp({u:?}) requires Datetime64({u:?}); got {:?}",
@@ -547,13 +557,31 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
         #[cfg(feature = "datetime")]
         b"tin" => ArrowType::Interval(IntervalUnit::MonthDaysNs),
         #[cfg(feature = "datetime")]
-        _ if fmt.starts_with(b"tss") => ArrowType::Timestamp(crate::TimeUnit::Seconds),
-        #[cfg(feature = "datetime")]
-        _ if fmt.starts_with(b"tsm") => ArrowType::Timestamp(crate::TimeUnit::Milliseconds),
-        #[cfg(feature = "datetime")]
-        _ if fmt.starts_with(b"tsu") => ArrowType::Timestamp(crate::TimeUnit::Microseconds),
-        #[cfg(feature = "datetime")]
-        _ if fmt.starts_with(b"tsn") => ArrowType::Timestamp(crate::TimeUnit::Nanoseconds),
+        _ if fmt.starts_with(b"tss")
+            || fmt.starts_with(b"tsm")
+            || fmt.starts_with(b"tsu")
+            || fmt.starts_with(b"tsn") =>
+        {
+            let unit = match &fmt[..3] {
+                b"tss" => crate::TimeUnit::Seconds,
+                b"tsm" => crate::TimeUnit::Milliseconds,
+                b"tsu" => crate::TimeUnit::Microseconds,
+                b"tsn" => crate::TimeUnit::Nanoseconds,
+                _ => unreachable!(),
+            };
+            let tz = if fmt.len() > 4 {
+                let tz_bytes = &fmt[4..];
+                let tz_str = String::from_utf8_lossy(tz_bytes).into_owned();
+                if tz_str.is_empty() {
+                    None
+                } else {
+                    Some(tz_str)
+                }
+            } else {
+                None
+            };
+            ArrowType::Timestamp(unit, tz)
+        }
         o => panic!("unsupported format {:?}", o),
     };
 
@@ -626,7 +654,7 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
             #[cfg(feature = "datetime")]
             ArrowType::Time64(u) => unsafe { import_datetime::<i64>(arr, u) },
             #[cfg(feature = "datetime")]
-            ArrowType::Timestamp(u) => unsafe { import_datetime::<i64>(arr, u) },
+            ArrowType::Timestamp(u, _tz) => unsafe { import_datetime::<i64>(arr, u) },
             #[cfg(feature = "datetime")]
             ArrowType::Duration32(u) => unsafe { import_datetime::<i32>(arr, u) },
             #[cfg(feature = "datetime")]
@@ -964,7 +992,7 @@ mod tests {
 
     #[cfg(feature = "datetime")]
     use crate::DatetimeArray;
-    use crate::ffi::arrow_c_ffi::export_to_c;
+    use crate::ffi::arrow_c_ffi::{export_to_c, import_from_c};
     use crate::ffi::arrow_dtype::ArrowType;
     use crate::ffi::schema::Schema;
     use crate::{Array, BooleanArray, Field, FloatArray, IntegerArray, MaskedArray, StringArray};
@@ -1201,6 +1229,152 @@ mod tests {
             assert_eq!((*arr_ptr).length, 2);
             let bufs = std::slice::from_raw_parts((*arr_ptr).buffers, 2);
             assert!(!bufs[1].is_null());
+            ((*arr_ptr).release.unwrap())(arr_ptr);
+            ((*sch_ptr).release.unwrap())(sch_ptr);
+        }
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_arrow_c_timezone_roundtrip_utc() {
+        use crate::TimeUnit;
+        let mut dt = DatetimeArray::<i64>::default();
+        dt.push(1609459200);
+        dt.push(1640995200);
+        dt.time_unit = TimeUnit::Seconds;
+
+        let array = Arc::new(Array::from_datetime_i64(dt));
+        let schema = schema_for(
+            "ts",
+            ArrowType::Timestamp(TimeUnit::Seconds, Some("UTC".to_string())),
+            false,
+        );
+
+        let (arr_ptr, sch_ptr) = export_to_c(array.clone(), schema);
+
+        unsafe {
+            let fmt = std::ffi::CStr::from_ptr((*sch_ptr).format).to_bytes();
+            assert_eq!(fmt, b"tss:UTC", "Format string should include timezone");
+
+            let imported = import_from_c(arr_ptr as *const _, sch_ptr as *const _);
+
+            if let Array::TemporalArray(crate::TemporalArray::Datetime64(imported_dt)) =
+                imported.as_ref()
+            {
+                assert_eq!(imported_dt.len(), 2);
+                assert_eq!(imported_dt.time_unit, TimeUnit::Seconds);
+            } else {
+                panic!("Expected Datetime64 array");
+            }
+
+            ((*arr_ptr).release.unwrap())(arr_ptr);
+            ((*sch_ptr).release.unwrap())(sch_ptr);
+        }
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_arrow_c_timezone_roundtrip_iana() {
+        use crate::TimeUnit;
+        let mut dt = DatetimeArray::<i64>::default();
+        dt.push(1609459200000);
+        dt.push(1640995200000);
+        dt.time_unit = TimeUnit::Milliseconds;
+
+        let array = Arc::new(Array::from_datetime_i64(dt));
+        let tz = "America/New_York".to_string();
+        let schema = schema_for(
+            "ts",
+            ArrowType::Timestamp(TimeUnit::Milliseconds, Some(tz.clone())),
+            false,
+        );
+
+        let (arr_ptr, sch_ptr) = export_to_c(array.clone(), schema);
+
+        unsafe {
+            let fmt = std::ffi::CStr::from_ptr((*sch_ptr).format).to_bytes();
+            assert_eq!(
+                fmt, b"tsm:America/New_York",
+                "Format string should include IANA timezone"
+            );
+
+            let imported = import_from_c(arr_ptr as *const _, sch_ptr as *const _);
+
+            if let Array::TemporalArray(crate::TemporalArray::Datetime64(imported_dt)) =
+                imported.as_ref()
+            {
+                assert_eq!(imported_dt.len(), 2);
+                assert_eq!(imported_dt.time_unit, TimeUnit::Milliseconds);
+            } else {
+                panic!("Expected Datetime64 array");
+            }
+
+            ((*arr_ptr).release.unwrap())(arr_ptr);
+            ((*sch_ptr).release.unwrap())(sch_ptr);
+        }
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_arrow_c_timezone_roundtrip_offset() {
+        use crate::TimeUnit;
+        let mut dt = DatetimeArray::<i64>::default();
+        dt.push(1609459200000000);
+        dt.time_unit = TimeUnit::Microseconds;
+
+        let array = Arc::new(Array::from_datetime_i64(dt));
+        let tz = "+05:30".to_string();
+        let schema = schema_for(
+            "ts",
+            ArrowType::Timestamp(TimeUnit::Microseconds, Some(tz.clone())),
+            false,
+        );
+
+        let (arr_ptr, sch_ptr) = export_to_c(array.clone(), schema);
+
+        unsafe {
+            let fmt = std::ffi::CStr::from_ptr((*sch_ptr).format).to_bytes();
+            assert_eq!(
+                fmt, b"tsu:+05:30",
+                "Format string should include offset timezone"
+            );
+
+            let imported = import_from_c(arr_ptr as *const _, sch_ptr as *const _);
+
+            if let Array::TemporalArray(crate::TemporalArray::Datetime64(imported_dt)) =
+                imported.as_ref()
+            {
+                assert_eq!(imported_dt.len(), 1);
+                assert_eq!(imported_dt.time_unit, TimeUnit::Microseconds);
+            } else {
+                panic!("Expected Datetime64 array");
+            }
+
+            ((*arr_ptr).release.unwrap())(arr_ptr);
+            ((*sch_ptr).release.unwrap())(sch_ptr);
+        }
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_arrow_c_timezone_none() {
+        use crate::TimeUnit;
+        let mut dt = DatetimeArray::<i64>::default();
+        dt.push(1609459200);
+        dt.time_unit = TimeUnit::Seconds;
+
+        let array = Arc::new(Array::from_datetime_i64(dt));
+        let schema = schema_for("ts", ArrowType::Timestamp(TimeUnit::Seconds, None), false);
+
+        let (arr_ptr, sch_ptr) = export_to_c(array.clone(), schema);
+
+        unsafe {
+            let fmt = std::ffi::CStr::from_ptr((*sch_ptr).format).to_bytes();
+            assert_eq!(
+                fmt, b"tss:",
+                "Format string should have colon but no timezone"
+            );
+
             ((*arr_ptr).release.unwrap())(arr_ptr);
             ((*sch_ptr).release.unwrap())(sch_ptr);
         }

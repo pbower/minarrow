@@ -21,9 +21,7 @@ use crate::ffi::arrow_c_ffi::export_to_c;
 #[cfg(feature = "cast_arrow")]
 use crate::ffi::schema::Schema;
 #[cfg(feature = "cast_arrow")]
-use arrow::array::{ArrayRef, make_array};
-#[cfg(feature = "cast_arrow")]
-use arrow::ffi::{FFI_ArrowArray, FFI_ArrowSchema};
+use arrow::array::ArrayRef;
 
 #[cfg(feature = "views")]
 use crate::ArrayV;
@@ -633,8 +631,8 @@ impl Array {
     ///
     /// ### Datetime conversions
     /// - **String** parses a timestamp in milliseconds since the Unix epoch.
-    /// If the `chrono` feature is on, it also attempts common ISO8601/RFC3339 and `%Y-%m-%d` formats.
-    /// Keep this in mind, because your API will break if you toggle the `chrono` feature on/off but
+    /// If the `datetime_ops` feature is on, it also attempts common ISO8601/RFC3339 and `%Y-%m-%d` formats.
+    /// Keep this in mind, because your API will break if you toggle the `datetime_ops` feature on/off but
     /// keep the previous code.
     /// - **Integer** becomes *milliseconds since epoch*.
     /// - **Floats** round as integers to *milliseconds since epoch*.
@@ -758,7 +756,7 @@ impl Array {
     ///
     /// Panics if out of bounds.
     #[cfg(feature = "views")]
-    pub fn view_tuple(&self, offset: usize, len: usize) -> ArrayVT {
+    pub fn view_tuple(&self, offset: usize, len: usize) -> ArrayVT<'_> {
         assert!(offset <= self.len(), "offset out of bounds");
         assert!(offset + len <= self.len(), "slice window out of bounds");
         (self, offset, len)
@@ -1785,9 +1783,9 @@ impl Array {
             Array::TemporalArray(TemporalArray::Datetime64(a)) => {
                 let ty = match a.time_unit {
                     TimeUnit::Milliseconds => ArrowType::Date64,
-                    TimeUnit::Seconds => ArrowType::Timestamp(TimeUnit::Seconds),
-                    TimeUnit::Microseconds => ArrowType::Timestamp(TimeUnit::Microseconds),
-                    TimeUnit::Nanoseconds => ArrowType::Timestamp(TimeUnit::Nanoseconds),
+                    TimeUnit::Seconds => ArrowType::Timestamp(TimeUnit::Seconds, None),
+                    TimeUnit::Microseconds => ArrowType::Timestamp(TimeUnit::Microseconds, None),
+                    TimeUnit::Nanoseconds => ArrowType::Timestamp(TimeUnit::Nanoseconds, None),
                     // We default to Date64 here for compatibility rather than Date32
                     TimeUnit::Days => ArrowType::Date64,
                 };
@@ -1917,7 +1915,7 @@ impl Array {
             }
 
             #[cfg(feature = "datetime")]
-            crate::ffi::arrow_dtype::ArrowType::Timestamp(u) => {
+            crate::ffi::arrow_dtype::ArrowType::Timestamp(u, tz) => {
                 polars_arrow::datatypes::ArrowDataType::Timestamp(
                     match u {
                         crate::TimeUnit::Seconds => polars_arrow::datatypes::TimeUnit::Second,
@@ -1932,7 +1930,7 @@ impl Array {
                         }
                         crate::TimeUnit::Days => panic!("Timestamp(Days) is invalid"),
                     },
-                    None,
+                    tz.as_ref().map(|s| s.as_str().into()),
                 )
             }
 
@@ -3161,7 +3159,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "chrono")]
+    #[cfg(feature = "datetime_ops")]
     #[test]
     fn test_dt_from_text_array_parsing() {
         let arr = StringArray::<u32>::from_slice(&[

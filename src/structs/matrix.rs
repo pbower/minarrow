@@ -6,7 +6,6 @@
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::Table;
 use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
 use crate::traits::{concatenate::Concatenate, shape::Shape};

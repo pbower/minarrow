@@ -373,16 +373,10 @@ impl Display for ArrayV {
             self.len, self.offset, nulls
         )?;
 
-        // Take a view into the head_len elements
-        let display_view = Self {
-            array: self.array.clone(), // arc clone
-            offset: self.offset,
-            len: head_len,
-            null_count: OnceLock::new(), // Create new lock for this view
-        };
+        // Delegate to the inner array's Display by formatting a slice of it
+        let sliced_array = self.array.slice_clone(self.offset, head_len);
 
-        // Delegate to the inner array's Display
-        for line in format!("{display_view}").lines() {
+        for line in format!("{}", sliced_array).lines() {
             writeln!(f, "  {line}")?;
         }
 

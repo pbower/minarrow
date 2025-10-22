@@ -147,7 +147,7 @@ impl SuperArrayV {
     ///
     /// Allows walking across potentially chunked memory logically row-by-row.
     #[inline]
-    pub fn iter_rows(&self) -> impl Iterator<Item = ArrayVT> + '_ {
+    pub fn iter_rows(&self) -> impl Iterator<Item = ArrayVT<'_>> + '_ {
         self.slices
             .iter()
             .flat_map(|slice| {
