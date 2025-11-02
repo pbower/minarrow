@@ -29,6 +29,10 @@ use crate::traits::shape::Shape;
 use crate::{Array, Field, NumericArray, TextArray};
 #[cfg(feature = "datetime")]
 use crate::{TemporalArray, TimeUnit};
+#[cfg(all(feature = "select", feature = "views"))]
+use crate::traits::selection::{DataSelector, DataSelection};
+#[cfg(all(feature = "select", feature = "views"))]
+use crate::ArrayV;
 
 /// # FieldArray
 ///
@@ -503,6 +507,25 @@ impl Concatenate for FieldArray {
             array: concatenated_array,
             null_count,
         })
+    }
+}
+
+// ===== Selection Trait Implementation =====
+
+#[cfg(all(feature = "select", feature = "views"))]
+impl DataSelection for FieldArray {
+    type View = ArrayV;
+
+    fn d<S: DataSelector>(&self, selection: S) -> ArrayV {
+        // Select rows from the array
+        let row_indices = selection.resolve_indices(self.array.len());
+        let mut view = ArrayV::from(self.array.clone());
+        view.active_data_selection = Some(row_indices);
+        view
+    }
+
+    fn get_data_count(&self) -> usize {
+        self.array.len()
     }
 }
 

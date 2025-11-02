@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
@@ -179,6 +179,9 @@ broadcast = []
 # Adds byte size trait for best-effort size calculation
 size = []
 
+# Adds pandas-style selection for Table and TableV with .c() and .r() methods
+select = []
+
 default = [
     "views",
     "chunked",
@@ -270,3 +273,15 @@ path = "examples/print/print_arrays.rs"
 [[example]]
 name = "print_table"
 path = "examples/print/print_table.rs"
+
+# Selection example
+[[example]]
+name = "selection"
+path = "examples/selection.rs"
+required-features = ["select", "views"]
+
+# Selection test
+[[test]]
+name = "test_selection"
+path = "tests/test_selection.rs"
+required-features = ["select", "views"]
