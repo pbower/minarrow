@@ -158,6 +158,7 @@ pub mod structs {
     }
     pub mod bitmask;
     pub mod buffer;
+    pub mod column;
     #[cfg(feature = "cube")]
     pub mod cube;
     pub mod field;
@@ -183,6 +184,8 @@ pub mod traits {
     pub mod custom_value;
     pub mod masked_array;
     pub mod print;
+    #[cfg(feature = "select")]
+    pub mod selection;
     pub mod shape;
     pub mod type_unions;
     #[cfg(feature = "views")]
@@ -232,6 +235,7 @@ pub use structs::views::collections::temporal_array_view::TemporalArrayV;
 pub use structs::views::collections::text_array_view::TextArrayV;
 
 pub use ffi::arrow_dtype::ArrowType;
+pub use structs::column::{column, Column};
 #[cfg(feature = "cube")]
 pub use structs::cube::Cube;
 pub use structs::field::Field;

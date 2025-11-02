@@ -91,6 +91,65 @@ See _examples/_ for more.
 When working with arrays, remember to import the `MaskedArray` trait,
 which ensures all required methods are available.
 
+## Pandas-Style Selection
+
+Minarrow supports intuitive pandas-style selection for `Table` and `TableV` via simple and compact API's familiar to SQL and pandas users:
+
+```rust
+use minarrow::*;
+
+let table = create_table();
+
+// Column selection
+let view = table.c(&["name", "value"]);
+
+// Row selection
+let view = table.r(10..20);
+
+// Chained selection
+let view = table.c(&["A", "B", "C"]).r(0..100);
+```
+
+### Pandas-Like API (`.c()`, `.r()`, etc.)
+
+Unified across dimensions - works for Array, Table (*in future additional dimensions*):
+
+```rust
+use minarrow::*;
+use minarrow::traits::selection::Selection;  // Brings methods into scope
+
+let table = create_table();
+
+// Field (column) selection
+let view = table.c(&["name", "value"]);      // or .col()
+let view = table.y(&["A", "B"]);              // .y() for spatial thinking
+
+// Data (row) selection
+let view = table.r(10..20);                   // or .data()
+let view = table.x(&[1, 5, 10]);              // .x() for spatial thinking
+
+// Chained selection
+let view = table.f(&["A", "B"]).d(0..100);   // more short-hand .field() .data() prefs
+```
+
+### Supported Selection Types
+
+All selection methods support:
+- **Names**: `&str`, `&[&str]`, `&[&str; N]`, `Vec<&str>`
+- **Indices**: `usize`, `&[usize]`, `&[usize; N]`, `Vec<usize>`
+- **Ranges**: `0..10`, `0..=10`, `5..`, `..10`, `..`
+
+### Zero-Copy Views
+
+Selections create lightweight views without copying data:
+
+```rust
+let view = table.c(&["A", "B", "C"]).r(0..100);
+
+// Materialise owned copies when needed
+let materialised = view.to_table();
+```
+
 ## Broadcasting
 Broadcasting is built-in via the `broadcasting` feature. You can add, subtract, divide or multiply all `Value` types,
 including tuples.

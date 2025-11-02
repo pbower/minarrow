@@ -27,6 +27,8 @@ use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use super::field_array::FieldArray;
 use crate::Field;
+#[cfg(all(feature = "views", feature = "select"))]
+use crate::traits::selection::{FieldSelector, DataSelector, FieldSelection, DataSelection};
 #[cfg(feature = "views")]
 use crate::TableV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
@@ -263,6 +265,55 @@ impl Table {
         assert!(offset <= self.n_rows, "offset out of bounds");
         assert!(offset + len <= self.n_rows, "slice window out of bounds");
         TableV::from_table(self.clone(), offset, len)
+    }
+
+    /// Select columns by names, indices, or ranges (table-specific convenience method).
+    ///
+    /// This method delegates to `.f()` from the `Selection` trait.
+    /// For compatibility across dimensions, prefer using `.f()`, `.fields()`, or `.y()`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// use minarrow::Table;
+    ///
+    /// // Select columns by names
+    /// let view = table.c(&["A", "B", "C"]);
+    ///
+    /// // Select columns by indices
+    /// let view = table.c(&[0, 1, 2]);
+    ///
+    /// // Select columns by range
+    /// let view = table.c(0..3);
+    ///
+    /// // Single column
+    /// let view = table.c("A");
+    /// ```
+    #[cfg(all(feature = "views", feature = "select"))]
+    pub fn c<S: FieldSelector>(&self, selection: S) -> TableV {
+        self.f(selection)
+    }
+
+    /// Select rows by indices or ranges (table-specific convenience method).
+    ///
+    /// This method delegates to `.d()` from the `Selection` trait.
+    /// For compatibility across dimensions, prefer using `.d()`, `.data()`, or `.x()`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// use minarrow::Table;
+    ///
+    /// // Select rows by range
+    /// let view = table.r(10..20);
+    ///
+    /// // Select specific rows
+    /// let view = table.r(&[1, 5, 10, 15]);
+    ///
+    /// // Single row
+    /// let view = table.r(5);
+    /// ```
+    #[cfg(all(feature = "views", feature = "select"))]
+    pub fn r<S: DataSelector>(&self, selection: S) -> TableV {
+        self.d(selection)
     }
 
     /// Maps a function over a single column by name, returning the result.
@@ -596,6 +647,41 @@ impl Display for Table {
             }
         }
         print_rule(f, idx_width, &widths)
+    }
+}
+
+// ===== Selection Trait Implementations =====
+
+#[cfg(all(feature = "views", feature = "select"))]
+impl FieldSelection for Table {
+    type View = TableV;
+
+    fn f<S: FieldSelector>(&self, selection: S) -> TableV {
+        let fields = self.cols.iter().map(|fa| fa.field.clone()).collect::<Vec<_>>();
+        let col_indices = selection.resolve_fields(&fields);
+        let mut table_v = TableV::from(self.clone());
+        table_v.active_col_selection = Some(col_indices);
+        table_v
+    }
+
+    fn get_fields(&self) -> Vec<Arc<Field>> {
+        self.cols.iter().map(|fa| fa.field.clone()).collect()
+    }
+}
+
+#[cfg(all(feature = "views", feature = "select"))]
+impl DataSelection for Table {
+    type View = TableV;
+
+    fn d<S: DataSelector>(&self, selection: S) -> TableV {
+        let row_indices = selection.resolve_indices(self.n_rows);
+        let mut table_v = TableV::from(self.clone());
+        table_v.active_row_selection = Some(row_indices);
+        table_v
+    }
+
+    fn get_data_count(&self) -> usize {
+        self.n_rows
     }
 }
 

@@ -36,6 +36,8 @@ use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
 use crate::{Array, BitmaskV, FieldArray, MaskedArray, TextArray};
+#[cfg(feature = "select")]
+use crate::traits::selection::{DataSelector, DataSelection};
 
 /// # ArrayView
 ///
@@ -62,6 +64,9 @@ pub struct ArrayV {
     pub offset: usize,
     len: usize,
     null_count: OnceLock<usize>,
+
+    #[cfg(feature = "select")]
+    pub active_data_selection: Option<Vec<usize>>,
 }
 
 impl ArrayV {
@@ -79,6 +84,8 @@ impl ArrayV {
             offset,
             len,
             null_count: OnceLock::new(),
+            #[cfg(feature = "select")]
+            active_data_selection: None,
         }
     }
 
@@ -98,12 +105,18 @@ impl ArrayV {
             offset,
             len,
             null_count: lock,
+            #[cfg(feature = "select")]
+            active_data_selection: None,
         }
     }
 
     /// Return the logical length of the view.
     #[inline]
     pub fn len(&self) -> usize {
+        #[cfg(feature = "select")]
+        if let Some(indices) = &self.active_data_selection {
+            return indices.len();
+        }
         self.len
     }
 
@@ -116,6 +129,15 @@ impl ArrayV {
     /// Returns the value at logical index `i` within the window, or `None` if out of bounds or null.
     #[inline]
     pub fn get<T: MaskedArray + 'static>(&self, i: usize) -> Option<T::CopyType> {
+        #[cfg(feature = "select")]
+        if let Some(ref sel) = self.active_data_selection {
+            if i >= sel.len() {
+                return None;
+            }
+            let physical_idx = sel[i];
+            return self.array.inner::<T>().get(self.offset + physical_idx);
+        }
+
         if i >= self.len {
             return None;
         }
@@ -131,20 +153,38 @@ impl ArrayV {
     /// Returns the string value at logical index `i` within the window, or `None` if out of bounds or null.
     #[inline]
     pub fn get_str(&self, i: usize) -> Option<&str> {
-        if i >= self.len {
-            return None;
-        }
+        #[cfg(feature = "select")]
+        let physical_idx = if let Some(ref sel) = self.active_data_selection {
+            if i >= sel.len() {
+                return None;
+            }
+            sel[i]
+        } else {
+            if i >= self.len {
+                return None;
+            }
+            i
+        };
+
+        #[cfg(not(feature = "select"))]
+        let physical_idx = {
+            if i >= self.len {
+                return None;
+            }
+            i
+        };
+
         match &self.array {
-            Array::TextArray(TextArray::String32(arr)) => arr.get_str(self.offset + i),
+            Array::TextArray(TextArray::String32(arr)) => arr.get_str(self.offset + physical_idx),
             #[cfg(feature = "large_string")]
-            Array::TextArray(TextArray::String64(arr)) => arr.get_str(self.offset + i),
+            Array::TextArray(TextArray::String64(arr)) => arr.get_str(self.offset + physical_idx),
             #[cfg(feature = "extended_categorical")]
-            Array::TextArray(TextArray::Categorical8(arr)) => arr.get_str(self.offset + i),
+            Array::TextArray(TextArray::Categorical8(arr)) => arr.get_str(self.offset + physical_idx),
             #[cfg(feature = "extended_categorical")]
-            Array::TextArray(TextArray::Categorical16(arr)) => arr.get_str(self.offset + i),
-            Array::TextArray(TextArray::Categorical32(arr)) => arr.get_str(self.offset + i),
+            Array::TextArray(TextArray::Categorical16(arr)) => arr.get_str(self.offset + physical_idx),
+            Array::TextArray(TextArray::Categorical32(arr)) => arr.get_str(self.offset + physical_idx),
             #[cfg(feature = "extended_categorical")]
-            Array::TextArray(TextArray::Categorical64(arr)) => arr.get_str(self.offset + i),
+            Array::TextArray(TextArray::Categorical64(arr)) => arr.get_str(self.offset + physical_idx),
             _ => None,
         }
     }
@@ -215,6 +255,8 @@ impl ArrayV {
             offset: self.offset + offset,
             len,
             null_count: OnceLock::new(),
+            #[cfg(feature = "select")]
+            active_data_selection: None,
         }
     }
 
@@ -299,6 +341,8 @@ impl From<Array> for ArrayV {
             offset: 0,
             len,
             null_count: OnceLock::new(),
+            #[cfg(feature = "select")]
+            active_data_selection: None,
         }
     }
 }
@@ -314,6 +358,8 @@ impl From<FieldArray> for ArrayV {
             offset: 0,
             len,
             null_count: OnceLock::new(),
+            #[cfg(feature = "select")]
+            active_data_selection: None,
         }
     }
 }
@@ -411,6 +457,28 @@ impl Concatenate for ArrayV {
 
         // Wrap the result in a new view
         Ok(ArrayV::from(concatenated))
+    }
+}
+
+// ===== Selection Trait Implementation =====
+
+#[cfg(feature = "select")]
+impl DataSelection for ArrayV {
+    type View = ArrayV;
+
+    fn d<S: DataSelector>(&self, selection: S) -> ArrayV {
+        let row_indices = selection.resolve_indices(self.len());
+        let mut result = self.clone();
+        result.active_data_selection = Some(row_indices);
+        result
+    }
+
+    fn get_data_count(&self) -> usize {
+        #[cfg(feature = "select")]
+        if let Some(ref sel) = self.active_data_selection {
+            return sel.len();
+        }
+        self.len
     }
 }
 
