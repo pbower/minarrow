@@ -182,8 +182,6 @@ impl TableV {
         }
     }
 
-    // ===== Internal Helper Methods for Active Selections =====
-
     /// Returns the effective column indices based on active_col_selection.
     /// If None, returns all column indices (0..n_cols).
     #[inline]
@@ -205,8 +203,6 @@ impl TableV {
             None => if idx < self.cols.len() { Some(idx) } else { None },
         }
     }
-
-    // ===== Public API Methods =====
 
     /// Returns true if the window contains no rows.
     #[inline]
@@ -240,6 +236,13 @@ impl TableV {
             return indices.len();
         }
         self.len
+    }
+
+    /// Returns the number of rows in the window.
+    /// Respects active_row_selection if present.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.n_rows()
     }
 
     /// Returns the name of the table.
@@ -478,6 +481,8 @@ impl TableV {
             name: self.name.clone(),
         }
     }
+
+    // TODO: Replace this - horribly inefficient
 
     /// Helper method to gather specific rows from an ArrayV window
     #[cfg(feature = "select")]

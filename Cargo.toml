@@ -162,7 +162,7 @@ datetime_ops = ["dep:time", "dep:phf", "datetime"]
 
 # Adds string arithmetic kernels
 # Includes (small) external dependencies, and supports
-# str concatenation with floats for the arithmetic kernels 
+# str concatenation with floats for the arithmetic kernels
 # e.g., "Hello" + 1.0 = "Hello1", etc.
 # Also overloads std::ops::Add, Mul, Sub, Div, Pow
 # with best-case String equivalents (e.g., '+' concatenates),
@@ -186,9 +186,17 @@ default = [
     "views",
     "chunked",
     "large_string",
-    "scalar_type",
-    "datetime",
     "simd",
+    "select",
+    "datetime",
+    "datetime_ops",
+    "matrix",
+    "cube",
+    "value_type",
+    "scalar_type",
+    "broadcast",
+    "extended_numeric_types",
+    "extended_categorical"
 ]
 
 [package.metadata.cargo-all-features]

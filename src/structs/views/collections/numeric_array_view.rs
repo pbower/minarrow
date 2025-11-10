@@ -102,7 +102,7 @@ impl NumericArrayV {
             array.len()
         );
         let lock = OnceLock::new();
-        let _ = lock.set(null_count); // Pre-initialize with the provided count
+        let _ = lock.set(null_count); // Pre-initialise with the provided count
         Self {
             array,
             offset,
@@ -242,7 +242,7 @@ impl NumericArrayV {
 
     /// Sets the cached null count for the view.
     ///
-    /// Returns Ok(()) if the value was set, or Err(count) if it was already initialized.
+    /// Returns Ok(()) if the value was set, or Err(count) if it was already initialised.
     /// This is thread-safe and can only succeed once per NumericArrayV instance.
     #[inline]
     pub fn set_null_count(&self, count: usize) -> Result<(), usize> {
@@ -463,7 +463,7 @@ mod tests {
         let view = NumericArrayV::with_null_count(numeric.clone(), 0, 2, 99);
         // Should always report the supplied cached value
         assert_eq!(view.null_count(), 99);
-        // Trying to set again should fail since it's already initialized
+        // Trying to set again should fail since it's already initialised
         assert!(view.set_null_count(101).is_err());
         // Still returns original value
         assert_eq!(view.null_count(), 99);

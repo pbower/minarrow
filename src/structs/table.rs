@@ -239,6 +239,11 @@ impl Table {
         self.name = name.into();
     }
 
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.n_rows()
+    }
+
     /// Returns a new owned `Table` containing rows `[offset, offset+len)`.
     ///
     /// All columns are deeply copied, but only for the affected row(s).

@@ -161,89 +161,6 @@ pub fn broadcast_value(
         (Value::ArrayView(l), Value::ArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
             .map(|arr| Value::Array(Arc::new(arr))),
 
-        #[cfg(feature = "views")]
-        (Value::NumericArrayView(l), Value::NumericArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "views")]
-        (Value::TextArrayView(l), Value::TextArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::TemporalArrayView(r)) => {
-            resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-                .map(|arr| Value::Array(Arc::new(arr)))
-
-        }
-
-        // Mixed combinations between different ArrayView types
-        #[cfg(feature = "views")]
-        (Value::ArrayView(l), Value::NumericArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "views")]
-        (Value::NumericArrayView(l), Value::ArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "views")]
-        (Value::ArrayView(l), Value::TextArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "views")]
-        (Value::TextArrayView(l), Value::ArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "views")]
-        (Value::NumericArrayView(l), Value::TextArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "views")]
-        (Value::TextArrayView(l), Value::NumericArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        // TemporalArrayView mixed combinations
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::ArrayView(l), Value::TemporalArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::ArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::NumericArrayView(l), Value::TemporalArrayView(r)) => {
-            resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-                .map(|arr| Value::Array(Arc::new(arr)))
-
-        }
-
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::NumericArrayView(r)) => {
-            resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-                .map(|arr| Value::Array(Arc::new(arr)))
-
-        }
-
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TextArrayView(l), Value::TemporalArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::TextArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
         // Standard field array
         (Value::FieldArray(l), Value::FieldArray(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
             .map(|arr| Value::Array(Arc::new(arr)))
@@ -291,27 +208,6 @@ pub fn broadcast_value(
             array::broadcast_array_to_scalar(op, &l, &r).map(|arr| Value::Array(Arc::new(arr)))
         }
 
-        // Scalar broadcasting with more array types
-        #[cfg(all(feature = "scalar_type", feature = "views"))]
-        (Value::Scalar(l), Value::NumericArrayView(r)) => {
-            scalar::broadcast_scalar_to_numeric_arrayview(op, &l, &r).map(|arr| Value::Array(Arc::new(arr)))
-        }
-
-        #[cfg(all(feature = "scalar_type", feature = "views"))]
-        (Value::NumericArrayView(l), Value::Scalar(r)) => {
-            scalar::broadcast_numeric_arrayview_to_scalar(op, &l, &r).map(|arr| Value::Array(Arc::new(arr)))
-        }
-
-        #[cfg(all(feature = "scalar_type", feature = "views"))]
-        (Value::Scalar(l), Value::TextArrayView(r)) => {
-            scalar::broadcast_scalar_to_text_arrayview(op, &l, &r).map(|arr| Value::Array(Arc::new(arr)))
-        }
-
-        #[cfg(all(feature = "scalar_type", feature = "views"))]
-        (Value::TextArrayView(l), Value::Scalar(r)) => {
-            scalar::broadcast_text_arrayview_to_scalar(op, &l, &r).map(|arr| Value::Array(Arc::new(arr)))
-        }
-
         #[cfg(all(feature = "scalar_type"))]
         (Value::Scalar(l), Value::FieldArray(r)) => {
             scalar::broadcast_scalar_to_fieldarray(op, &l, &r).map(|arr| Value::Array(Arc::new(arr)))
@@ -320,17 +216,6 @@ pub fn broadcast_value(
         #[cfg(all(feature = "scalar_type"))]
         (Value::FieldArray(l), Value::Scalar(r)) => {
             scalar::broadcast_fieldarray_to_scalar(op, &l, &r).map(|arr| Value::Array(Arc::new(arr)))
-        }
-
-        // Scalar with ALL other array-like types
-        #[cfg(all(feature = "scalar_type", feature = "datetime"))]
-        (Value::Scalar(l), Value::TemporalArrayView(r)) => {
-            scalar::broadcast_scalar_to_temporal_arrayview(op, &l, &r).map(|arr| Value::Array(Arc::new(arr)))
-        }
-
-        #[cfg(all(feature = "scalar_type", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::Scalar(r)) => {
-            scalar::broadcast_temporal_arrayview_to_scalar(op, &l, &r).map(|arr| Value::Array(Arc::new(arr)))
         }
 
         // Scalar with SuperArray types - convert scalar to array then broadcast
@@ -353,37 +238,6 @@ pub fn broadcast_value(
         (Value::SuperArrayView(l), Value::Scalar(r)) => {
             super_array::broadcast_superarrayview_to_scalar(op, &*l, &r).map(|sa| Value::SuperArray(Arc::new(sa)))
         }
-
-        // Mixed combinations between ArrayViews and FieldArray
-        #[cfg(feature = "views")]
-        (Value::NumericArrayView(l), Value::FieldArray(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "views")]
-        (Value::FieldArray(l), Value::NumericArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "views")]
-        (Value::TextArrayView(l), Value::FieldArray(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "views")]
-        (Value::FieldArray(l), Value::TextArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::FieldArray(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::FieldArray(l), Value::TemporalArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
 
         // SuperArray types - use broadcast_super_array_add
         #[cfg(feature = "chunked")]
@@ -618,17 +472,7 @@ pub fn broadcast_value(
             broadcast_super_table_with_operator(op, l_unwrapped, r_view)
                 .map(|st| Value::SuperTable(Arc::new(st)))
         }
-        // Matrix combinations
-        #[cfg(feature = "matrix")]
-        (Value::Matrix(_), Value::Matrix(_)) => Err(MinarrowError::NotImplemented {
-            feature: "Matrix broadcasting operations".to_string(),
-        }),
-        #[cfg(feature = "matrix")]
-        (Value::Matrix(_), _) | (_, Value::Matrix(_)) => Err(MinarrowError::TypeError {
-            from: "Matrix and other types",
-            to: "compatible broadcasting types",
-            message: Some("Matrix operations not yet implemented".to_string()),
-        }),
+
         // Scalar with higher-order structures
 
         // Scalar-Table broadcasting - column-wise application
@@ -682,55 +526,10 @@ pub fn broadcast_value(
             cube::broadcast_cube_to_scalar(op, &cube, &scalar).map(|cube| Value::Cube(Arc::new(cube)))
         }
 
-        #[cfg(all(feature = "scalar_type", feature = "matrix"))]
-        (Value::Scalar(_), Value::Matrix(_)) | (Value::Matrix(_), Value::Scalar(_)) => {
-            Err(MinarrowError::NotImplemented {
-                feature: "Scalar-Matrix broadcasting".to_string(),
-            })
-        }
-
-        // Field doesn't support arithmetic
-        (Value::Field(_), _) | (_, Value::Field(_)) => {
-            panic!("Field does not support broadcasting operations")
-        }
-
-        // Bitmask combinations - we choose not to support this
-        (Value::Bitmask(_), _) | (_, Value::Bitmask(_)) => {
-            panic!("Bitmask does not support broadcasting operations")
-        }
-
         // Custom value combinations - not supported
         (Value::Custom(_), _) | (_, Value::Custom(_)) => {
             panic!("Custom types do not support broadcasting operations./<<")
         }
-
-        // Additional cross-type array combinations that might work via broadcast_array_add
-        // Array with all ArrayView types
-        (Value::Array(l), Value::NumericArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        (Value::NumericArrayView(l), Value::Array(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        (Value::Array(l), Value::TextArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        (Value::TextArrayView(l), Value::Array(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "datetime")]
-        (Value::Array(l), Value::TemporalArrayView(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
-
-        #[cfg(feature = "datetime")]
-        (Value::TemporalArrayView(l), Value::Array(r)) => resolve_binary_arithmetic(op, (*l).clone(), (*r).clone(), None)
-            .map(|arr| Value::Array(Arc::new(arr)))
-            ,
 
         // Cross-hierarchy combinations that aren't directly supported
         // These would require explicit conversion or promotion
@@ -787,72 +586,6 @@ pub fn broadcast_value(
             super_table::broadcast_supertable_to_arrayview(op, &super_table, &array_view).map(|st| Value::SuperTable(Arc::new(st)))
         },
 
-        // NumericArrayView-Table broadcasting - convert views to arrays and broadcast
-        #[cfg(feature = "views")]
-        (Value::NumericArrayView(numeric_view), Value::Table(table)) => {
-            let array = Array::NumericArray(numeric_view.array.clone());
-            broadcast_array_to_table(op, &array, &table).map(|tbl| Value::Table(Arc::new(tbl)))
-        },
-        #[cfg(feature = "views")]
-        (Value::Table(table), Value::NumericArrayView(numeric_view)) => {
-            let array = Array::NumericArray(numeric_view.array.clone());
-            broadcast_table_to_array(op, &table, &array).map(|tbl| Value::Table(Arc::new(tbl)))
-        },
-
-        // TextArrayView-Table broadcasting - convert views to arrays and broadcast
-        #[cfg(feature = "views")]
-        (Value::TextArrayView(text_view), Value::Table(table)) => {
-            let array = Array::TextArray(text_view.array.clone());
-            broadcast_array_to_table(op, &array, &table).map(|tbl| Value::Table(Arc::new(tbl)))
-        },
-        #[cfg(feature = "views")]
-        (Value::Table(table), Value::TextArrayView(text_view)) => {
-            let array = Array::TextArray(text_view.array.clone());
-            broadcast_table_to_array(op, &table, &array).map(|tbl| Value::Table(Arc::new(tbl)))
-        },
-
-        // NumericArrayView-SuperTable broadcasting
-        #[cfg(feature = "views")]
-        (Value::NumericArrayView(numeric_view), Value::SuperTable(super_table)) => {
-            super_table::broadcast_numericarrayview_to_supertable(op, &numeric_view, &super_table).map(|st| Value::SuperTable(Arc::new(st)))
-        },
-        #[cfg(feature = "views")]
-        (Value::SuperTable(super_table), Value::NumericArrayView(numeric_view)) => {
-            super_table::broadcast_supertable_to_numeric_arrayview(op, &super_table, &numeric_view).map(|st| Value::SuperTable(Arc::new(st)))
-        },
-
-        // TextArrayView-SuperTable broadcasting
-        #[cfg(feature = "views")]
-        (Value::TextArrayView(text_view), Value::SuperTable(super_table)) => {
-            super_table::broadcast_textarrayview_to_supertable(op, &text_view, &super_table).map(|st| Value::SuperTable(Arc::new(st)))
-        },
-        #[cfg(feature = "views")]
-        (Value::SuperTable(super_table), Value::TextArrayView(text_view)) => {
-            super_table::broadcast_supertable_to_text_arrayview(op, &super_table, &text_view).map(|st| Value::SuperTable(Arc::new(st)))
-        },
-
-        // TemporalArrayView-Table broadcasting - convert views to arrays and broadcast
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(temporal_view), Value::Table(table)) => {
-            let array = Array::TemporalArray(temporal_view.array.clone());
-            broadcast_array_to_table(op, &array, &table).map(|tbl| Value::Table(Arc::new(tbl)))
-        },
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::Table(table), Value::TemporalArrayView(temporal_view)) => {
-            let array = Array::TemporalArray(temporal_view.array.clone());
-            broadcast_table_to_array(op, &table, &array).map(|tbl| Value::Table(Arc::new(tbl)))
-        },
-
-        // TemporalArrayView-SuperTable broadcasting
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(temporal_view), Value::SuperTable(super_table)) => {
-            super_table::broadcast_temporalarrayview_to_supertable(op, &temporal_view, &super_table).map(|st| Value::SuperTable(Arc::new(st)))
-        },
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::SuperTable(super_table), Value::TemporalArrayView(temporal_view)) => {
-            super_table::broadcast_supertable_to_temporal_arrayview(op, &super_table, &temporal_view).map(|st| Value::SuperTable(Arc::new(st)))
-        },
-
         // ArrayView-TableView broadcasting - work directly with views for zero-copy
         #[cfg(feature = "views")]
         (Value::ArrayView(array_view), Value::TableView(table_view)) => {
@@ -871,30 +604,6 @@ pub fn broadcast_value(
         #[cfg(feature = "views")]
         (Value::SuperTableView(super_table_view), Value::ArrayView(array_view)) => {
             broadcast_supertableview_to_arrayview(op, &super_table_view, &array_view).map(|stv| Value::SuperTableView(Arc::new(stv)))
-        },
-
-        // NumericArrayView-TableView broadcasting - create ArrayView wrapper and broadcast
-        #[cfg(feature = "views")]
-        (Value::NumericArrayView(numeric_view), Value::TableView(table_view)) => {
-            let array_view = ArrayV::new(Array::NumericArray(numeric_view.array.clone()), numeric_view.offset, numeric_view.len());
-            broadcast_arrayview_to_tableview(op, &array_view, &table_view).map(|tbl| Value::Table(Arc::new(tbl)))
-        },
-        #[cfg(feature = "views")]
-        (Value::TableView(table_view), Value::NumericArrayView(numeric_view)) => {
-            let array_view = ArrayV::new(Array::NumericArray(numeric_view.array.clone()), numeric_view.offset, numeric_view.len());
-            broadcast_arrayview_to_tableview(op, &array_view, &table_view).map(|tbl| Value::Table(Arc::new(tbl)))
-        },
-
-        // TextArrayView-TableView broadcasting - create ArrayView wrapper and broadcast
-        #[cfg(feature = "views")]
-        (Value::TextArrayView(text_view), Value::TableView(table_view)) => {
-            let array_view = ArrayV::new(Array::TextArray(text_view.array.clone()), text_view.offset, text_view.len());
-            broadcast_arrayview_to_tableview(op, &array_view, &table_view).map(|tbl| Value::Table(Arc::new(tbl)))
-        },
-        #[cfg(feature = "views")]
-        (Value::TableView(table_view), Value::TextArrayView(text_view)) => {
-            let array_view = ArrayV::new(Array::TextArray(text_view.array.clone()), text_view.offset, text_view.len());
-            broadcast_arrayview_to_tableview(op, &array_view, &table_view).map(|tbl| Value::Table(Arc::new(tbl)))
         },
 
         // SuperArray-Table broadcasting - broadcast each chunk against table
@@ -939,7 +648,7 @@ pub fn broadcast_value(
             broadcast_tableview_to_superarrayview(op, &table_view, &super_array_view).map(|stv| Value::SuperTableView(Arc::new(stv)))
         },
 
-        // Array-Cube broadcasting: apply array to each table in the cube
+        // Array-Cube broadcasting - apply array to each table in the cube
         #[cfg(feature = "cube")]
         (Value::Array(array), Value::Cube(cube)) => {
             array::broadcast_array_to_cube(op, &array, &cube).map(|cube| Value::Cube(Arc::new(cube)))
@@ -951,8 +660,7 @@ pub fn broadcast_value(
             cube::broadcast_cube_to_array(op, &cube, &array).map(|cube| Value::Cube(Arc::new(cube)))
         }
 
-
-        // FieldArray-Cube broadcasting: apply field array to each table in the cube
+        // FieldArray-Cube broadcasting - apply field array to each table in the cube
         #[cfg(feature = "cube")]
         (Value::FieldArray(field), Value::Cube(cube)) => {
             cube::broadcast_fieldarray_to_cube(op, &field, &cube).map(|cube| Value::Cube(Arc::new(cube)))
@@ -963,8 +671,7 @@ pub fn broadcast_value(
             cube::broadcast_cube_to_fieldarray(op, &cube, &field).map(|cube| Value::Cube(Arc::new(cube)))
         }
 
-
-        // Table-Cube broadcasting: apply table to each table in the cube
+        // Table-Cube broadcasting - applies table to each table in the cube
         #[cfg(feature = "cube")]
         (Value::Table(table), Value::Cube(cube)) => {
             cube::broadcast_table_to_cube(op, &table, &cube).map(|cube| Value::Cube(Arc::new(cube)))
@@ -974,7 +681,6 @@ pub fn broadcast_value(
         (Value::Cube(cube), Value::Table(table)) => {
             cube::broadcast_cube_to_table(op, &cube, &table).map(|cube| Value::Cube(Arc::new(cube)))
         }
-
 
         #[cfg(all(feature = "cube", feature = "chunked"))]
         (Value::SuperArray(super_array), Value::Cube(cube)) => {
@@ -996,7 +702,6 @@ pub fn broadcast_value(
             cube::broadcast_cube_to_supertable(op, &cube, &super_table).map(|cube| Value::Cube(Arc::new(cube)))
         }
 
-
         #[cfg(all(feature = "cube", feature = "views"))]
         (Value::ArrayView(array_view), Value::Cube(cube)) => {
             cube::broadcast_arrayview_to_cube(op, &array_view, &cube).map(|cube| Value::Cube(Arc::new(cube)))
@@ -1005,26 +710,6 @@ pub fn broadcast_value(
         #[cfg(all(feature = "cube", feature = "views"))]
         (Value::Cube(cube), Value::ArrayView(array_view)) => {
             cube::broadcast_cube_to_arrayview(op, &cube, &array_view).map(|cube| Value::Cube(Arc::new(cube)))
-        }
-
-        #[cfg(all(feature = "cube", feature = "views"))]
-        (Value::NumericArrayView(numeric_view), Value::Cube(cube)) => {
-            cube::broadcast_numericarrayview_to_cube(op, &numeric_view, &cube).map(|cube| Value::Cube(Arc::new(cube)))
-        }
-
-        #[cfg(all(feature = "cube", feature = "views"))]
-        (Value::Cube(cube), Value::NumericArrayView(numeric_view)) => {
-            cube::broadcast_cube_to_numericarrayview(op, &cube, &numeric_view).map(|cube| Value::Cube(Arc::new(cube)))
-        }
-
-        #[cfg(all(feature = "cube", feature = "views"))]
-        (Value::TextArrayView(text_view), Value::Cube(cube)) => {
-            cube::broadcast_textarrayview_to_cube(op, &text_view, &cube).map(|cube| Value::Cube(Arc::new(cube)))
-        }
-
-        #[cfg(all(feature = "cube", feature = "views"))]
-        (Value::Cube(cube), Value::TextArrayView(text_view)) => {
-            cube::broadcast_cube_to_textarrayview(op, &cube, &text_view).map(|cube| Value::Cube(Arc::new(cube)))
         }
 
         #[cfg(all(feature = "cube", feature = "views"))]
@@ -1070,18 +755,6 @@ pub fn broadcast_value(
         (Value::Cube(cube), Value::SuperTableView(super_table_view)) => {
             cube::broadcast_cube_to_supertableview(op, &cube, &super_table_view).map(|cube| Value::Cube(Arc::new(cube)))
         }
-
-        #[cfg(all(feature = "cube", feature = "datetime", feature = "views"))]
-        (Value::TemporalArrayView(temporal_view), Value::Cube(cube)) => {
-            cube::broadcast_temporalarrayview_to_cube(op, &temporal_view, &cube).map(|cube| Value::Cube(Arc::new(cube)))
-        }
-
-        #[cfg(all(feature = "cube", feature = "datetime", feature = "views"))]
-        (Value::Cube(cube), Value::TemporalArrayView(temporal_view)) => {
-            cube::broadcast_cube_to_temporalarrayview(op, &cube, &temporal_view).map(|cube| Value::Cube(Arc::new(cube)))
-        }
-
-        // Extensive cross-combinations that should provide clear error messages
 
         // FieldArray-Tuple broadcasting - loop through tuple and do on per value basis
         (Value::FieldArray(fa), Value::Tuple2(r_arc)) => {
@@ -1810,112 +1483,6 @@ pub fn broadcast_value(
             super_table::broadcast_supertableview_to_tableview(op, &super_table_view, &table_view)
         },
 
-        // Missing specialized array view combinations
-
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::NumericArrayView(l), Value::SuperArray(r)) => {
-            // Promote NumericArrayView to ArrayView
-            broadcast_value(op, Value::ArrayView(Arc::new(Arc::unwrap_or_clone(l).into())), Value::SuperArray(r))
-        }
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::SuperArray(l), Value::NumericArrayView(r)) => {
-            // Promote NumericArrayView to ArrayView
-            broadcast_value(op, Value::SuperArray(l), Value::ArrayView(Arc::new(Arc::unwrap_or_clone(r).into())))
-        }
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::NumericArrayView(l), Value::SuperArrayView(r)) => {
-            // Promote NumericArrayView to ArrayView
-            broadcast_value(op, Value::ArrayView(Arc::new(Arc::unwrap_or_clone(l).into())), Value::SuperArrayView(r))
-        }
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::SuperArrayView(l), Value::NumericArrayView(r)) => {
-            // Promote NumericArrayView to ArrayView
-            broadcast_value(op, Value::SuperArrayView(l), Value::ArrayView(Arc::new(Arc::unwrap_or_clone(r).into())))
-        }
-
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::NumericArrayView(l), Value::SuperTableView(r)) => {
-            // Promote NumericArrayView to ArrayView
-            broadcast_value(op, Value::ArrayView(Arc::new(Arc::unwrap_or_clone(l).into())), Value::SuperTableView(r))
-        }
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::SuperTableView(l), Value::NumericArrayView(r)) => {
-            // Promote NumericArrayView to ArrayView
-            broadcast_value(op, Value::SuperTableView(l), Value::ArrayView(Arc::new(Arc::unwrap_or_clone(r).into())))
-        }
-
-
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::TextArrayView(l), Value::SuperArray(r)) => {
-            // Promote TextArrayView to ArrayView
-            broadcast_value(op, Value::ArrayView(Arc::new(Arc::unwrap_or_clone(l).into())), Value::SuperArray(r))
-        }
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::SuperArray(l), Value::TextArrayView(r)) => {
-            // Promote TextArrayView to ArrayView
-            broadcast_value(op, Value::SuperArray(l), Value::ArrayView(Arc::new(Arc::unwrap_or_clone(r).into())))
-        }
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::TextArrayView(l), Value::SuperArrayView(r)) => {
-            // Promote TextArrayView to ArrayView
-            broadcast_value(op, Value::ArrayView(Arc::new(Arc::unwrap_or_clone(l).into())), Value::SuperArrayView(r))
-        }
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::SuperArrayView(l), Value::TextArrayView(r)) => {
-            // Promote TextArrayView to ArrayView
-            broadcast_value(op, Value::SuperArrayView(l), Value::ArrayView(Arc::new(Arc::unwrap_or_clone(r).into())))
-        }
-
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::TextArrayView(l), Value::SuperTableView(r)) => {
-            // Promote TextArrayView to ArrayView
-            broadcast_value(op, Value::ArrayView(Arc::new(Arc::unwrap_or_clone(l).into())), Value::SuperTableView(r))
-        }
-        #[cfg(all(feature = "views", feature = "chunked"))]
-        (Value::SuperTableView(l), Value::TextArrayView(r)) => {
-            // Promote TextArrayView to ArrayView
-            broadcast_value(op, Value::SuperTableView(l), Value::ArrayView(Arc::new(Arc::unwrap_or_clone(r).into())))
-        }
-
-        #[cfg(all(feature = "views", feature = "datetime"))]
-
-        #[cfg(all(feature = "views", feature = "datetime", feature = "chunked"))]
-        (Value::TemporalArrayView(l), Value::SuperArray(r)) => {
-            // Promote TemporalArrayView to ArrayView
-            broadcast_value(op, Value::ArrayView(Arc::new(Arc::unwrap_or_clone(l).into())), Value::SuperArray(r))
-        }
-        #[cfg(all(feature = "views", feature = "datetime", feature = "chunked"))]
-        (Value::SuperArray(l), Value::TemporalArrayView(r)) => {
-            // Promote TemporalArrayView to ArrayView
-            broadcast_value(op, Value::SuperArray(l), Value::ArrayView(Arc::new(Arc::unwrap_or_clone(r).into())))
-        }
-        #[cfg(all(feature = "views", feature = "datetime", feature = "chunked"))]
-        (Value::TemporalArrayView(l), Value::SuperArrayView(r)) => {
-            // Promote TemporalArrayView to ArrayView
-            broadcast_value(op, Value::ArrayView(Arc::new(Arc::unwrap_or_clone(l).into())), Value::SuperArrayView(r))
-        }
-        #[cfg(all(feature = "views", feature = "datetime", feature = "chunked"))]
-        (Value::SuperArrayView(l), Value::TemporalArrayView(r)) => {
-            // Promote TemporalArrayView to ArrayView
-            broadcast_value(op, Value::SuperArrayView(l), Value::ArrayView(Arc::new(Arc::unwrap_or_clone(r).into())))
-        }
-        #[cfg(all(feature = "views", feature = "datetime", feature = "chunked"))]
-
-        #[cfg(all(feature = "views", feature = "datetime", feature = "chunked"))]
-        (Value::TemporalArrayView(l), Value::SuperTableView(r)) => {
-            // Promote TemporalArrayView to ArrayView
-            broadcast_value(op, Value::ArrayView(Arc::new(Arc::unwrap_or_clone(l).into())), Value::SuperTableView(r))
-        }
-        #[cfg(all(feature = "views", feature = "datetime", feature = "chunked"))]
-        (Value::SuperTableView(l), Value::TemporalArrayView(r)) => {
-            // Promote TemporalArrayView to ArrayView
-            broadcast_value(op, Value::SuperTableView(l), Value::ArrayView(Arc::new(Arc::unwrap_or_clone(r).into())))
-        }
-
-
-        // TODO: All of these VecValue collect ones
-
-        // Missing VecValue combinations with various types - can use VecValue element iteration
         (Value::VecValue(vec), Value::Table(table)) => {
             // Iterate through VecValue elements and broadcast with table
             let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
@@ -1959,62 +1526,6 @@ pub fn broadcast_value(
             // Iterate through VecValue elements and broadcast with TableView
             let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
                 .map(|elem| broadcast_value(op, Value::TableView(tv.clone()), elem))
-                .collect();
-            Ok(Value::VecValue(Arc::new(results?)))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::VecValue(vec), Value::NumericArrayView(nav)) => {
-            let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
-                .map(|elem| broadcast_value(op, elem, Value::NumericArrayView(nav.clone())))
-                .collect();
-            Ok(Value::VecValue(Arc::new(results?)))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::NumericArrayView(nav), Value::VecValue(vec)) => {
-            let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
-                .map(|elem| broadcast_value(op, Value::NumericArrayView(nav.clone()), elem))
-                .collect();
-            Ok(Value::VecValue(Arc::new(results?)))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::VecValue(vec), Value::TextArrayView(tav)) => {
-            let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
-                .map(|elem| broadcast_value(op, elem, Value::TextArrayView(tav.clone())))
-                .collect();
-            Ok(Value::VecValue(Arc::new(results?)))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::TextArrayView(tav), Value::VecValue(vec)) => {
-            let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
-                .map(|elem| broadcast_value(op, Value::TextArrayView(tav.clone()), elem))
-                .collect();
-            Ok(Value::VecValue(Arc::new(results?)))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::VecValue(vec), Value::TemporalArrayView(tempav)) => {
-            let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
-                .map(|elem| broadcast_value(op, elem, Value::TemporalArrayView(tempav.clone())))
-                .collect();
-            Ok(Value::VecValue(Arc::new(results?)))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(tempav), Value::VecValue(vec)) => {
-            let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
-                .map(|elem| broadcast_value(op, Value::TemporalArrayView(tempav.clone()), elem))
-                .collect();
-            Ok(Value::VecValue(Arc::new(results?)))
-        }
-        #[cfg(feature = "views")]
-        (Value::VecValue(vec), Value::BitmaskView(bv)) => {
-            let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
-                .map(|elem| broadcast_value(op, elem, Value::BitmaskView(bv.clone())))
-                .collect();
-            Ok(Value::VecValue(Arc::new(results?)))
-        }
-        #[cfg(feature = "views")]
-        (Value::BitmaskView(bv), Value::VecValue(vec)) => {
-            let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
-                .map(|elem| broadcast_value(op, Value::BitmaskView(bv.clone()), elem))
                 .collect();
             Ok(Value::VecValue(Arc::new(results?)))
         }
@@ -2074,10 +1585,6 @@ pub fn broadcast_value(
                 .collect();
             Ok(Value::VecValue(Arc::new(results?)))
         }
-        #[cfg(feature = "matrix")]
-        (Value::VecValue(_), Value::Matrix(_)) => todo!(),
-        #[cfg(feature = "matrix")]
-        (Value::Matrix(_), Value::VecValue(_)) => todo!(),
         #[cfg(feature = "cube")]
         (Value::VecValue(vec), Value::Cube(cube)) => {
             let results: Result<Vec<_>, _> = Arc::unwrap_or_clone(vec).into_iter()
@@ -2202,94 +1709,7 @@ pub fn broadcast_value(
             let res2 = broadcast_value(op, Value::TableView(l), r2)?;
             Ok(Value::Tuple2(Arc::new((res1, res2))))
         }
-        #[cfg(feature = "views")]
-        (Value::Tuple2(l_arc), Value::BitmaskView(r)) => {
-            let (l1, l2) = (l_arc.0.clone(), l_arc.1.clone());
-            // Recursive broadcasting with each tuple element
-            let res1 = broadcast_value(op, l1, Value::BitmaskView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::BitmaskView(r))?;
-            Ok(Value::Tuple2(Arc::new((res1, res2))))
-        }
-        #[cfg(feature = "views")]
-        (Value::BitmaskView(l), Value::Tuple2(r_arc)) => {
-            let (r1, r2) = (r_arc.0.clone(), r_arc.1.clone());
-            // Recursive broadcasting with each tuple element
-            let res1 = broadcast_value(op, Value::BitmaskView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::BitmaskView(l), r2)?;
-            Ok(Value::Tuple2(Arc::new((res1, res2))))
-        }
 
-        // Similar patterns for all other tuple sizes and types...
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple2(l_arc), Value::NumericArrayView(r)) => {
-            let (l1, l2) = (l_arc.0.clone(), l_arc.1.clone());
-            // Recursive broadcasting - inner call will handle promotion to ArrayView
-            let res1 = broadcast_value(op, l1, Value::NumericArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::NumericArrayView(r))?;
-            Ok(Value::Tuple2(Arc::new((res1, res2))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::NumericArrayView(l), Value::Tuple2(r_arc)) => {
-            let (r1, r2) = (r_arc.0.clone(), r_arc.1.clone());
-            // Recursive broadcasting - inner call will handle promotion to ArrayView
-            let res1 = broadcast_value(op, Value::NumericArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::NumericArrayView(l), r2)?;
-            Ok(Value::Tuple2(Arc::new((res1, res2))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple2(l_arc), Value::TextArrayView(r)) => {
-            let (l1, l2) = (l_arc.0.clone(), l_arc.1.clone());
-            // Recursive broadcasting - inner call will handle promotion to ArrayView
-            let res1 = broadcast_value(op, l1, Value::TextArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TextArrayView(r))?;
-            Ok(Value::Tuple2(Arc::new((res1, res2))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::TextArrayView(l), Value::Tuple2(r_arc)) => {
-            let (r1, r2) = (r_arc.0.clone(), r_arc.1.clone());
-            // Recursive broadcasting - inner call will handle promotion to ArrayView
-            let res1 = broadcast_value(op, Value::TextArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TextArrayView(l), r2)?;
-            Ok(Value::Tuple2(Arc::new((res1, res2))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::Tuple2(l_arc), Value::TemporalArrayView(r)) => {
-            let (l1, l2) = (l_arc.0.clone(), l_arc.1.clone());
-            // Recursive broadcasting - inner call will handle promotion to ArrayView
-            let res1 = broadcast_value(op, l1, Value::TemporalArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TemporalArrayView(r))?;
-            Ok(Value::Tuple2(Arc::new((res1, res2))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::Tuple2(r_arc)) => {
-            let (r1, r2) = (r_arc.0.clone(), r_arc.1.clone());
-            // Recursive broadcasting - inner call will handle promotion to ArrayView
-            let res1 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TemporalArrayView(l), r2)?;
-            Ok(Value::Tuple2(Arc::new((res1, res2))))
-        }
-
-        // Matrix and Cube with tuples - can use tuple element iteration pattern
-        #[cfg(feature = "matrix")]
-        (Value::Tuple2(_), Value::Matrix(_)) => todo!(),
-        #[cfg(feature = "matrix")]
-        (Value::Matrix(_), Value::Tuple2(_)) => todo!(),
-
-        // More Matrix combinations with different types
-        #[cfg(all(feature = "matrix", feature = "views"))]
-        (Value::Matrix(_), Value::ArrayView(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views"))]
-        (Value::ArrayView(_), Value::Matrix(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views"))]
-        (Value::Matrix(_), Value::TableView(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views"))]
-        (Value::TableView(_), Value::Matrix(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "chunked"))]
-        (Value::Matrix(_), Value::SuperArray(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "chunked"))]
-        (Value::SuperArray(_), Value::Matrix(_)) => todo!(),
-
-        // Missing Table + SuperTable combinations
         #[cfg(feature = "chunked")]
         (Value::Table(table), Value::SuperTable(super_table)) => {
             // Promote Table to SuperTable (single batch) and broadcast
@@ -2312,57 +1732,6 @@ pub fn broadcast_value(
         (Value::SuperTableView(super_table_view), Value::Table(table)) => {
             super_table_view::broadcast_supertableview_to_table(op, &super_table_view, &table).map(|stv| Value::SuperTableView(Arc::new(stv)))
         }
-
-        // Missing TableView + TemporalArrayView and other specialized view combinations
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TableView(table_view), Value::TemporalArrayView(temporal_view)) => {
-            // Promote TemporalArrayView to ArrayView for broadcasting
-            let array_view: ArrayV = Arc::unwrap_or_clone(temporal_view).into();
-            broadcast_tableview_to_arrayview(op, &table_view, &array_view)
-                .map(|tv| Value::Table(Arc::new(tv.to_table())))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(temporal_view), Value::TableView(table_view)) => {
-            // Promote TemporalArrayView to ArrayView for broadcasting
-            let array_view: ArrayV = Arc::unwrap_or_clone(temporal_view).into();
-            broadcast_arrayview_to_tableview(op, &array_view, &table_view).map(|tbl| Value::Table(Arc::new(tbl)))
-        }
-
-
-        // Missing Matrix + specialized view combinations
-        #[cfg(all(feature = "matrix", feature = "views", feature = "views"))]
-        (Value::Matrix(_), Value::NumericArrayView(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views", feature = "views"))]
-        (Value::NumericArrayView(_), Value::Matrix(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views", feature = "views"))]
-        (Value::Matrix(_), Value::TextArrayView(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views", feature = "views"))]
-        (Value::TextArrayView(_), Value::Matrix(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views", feature = "datetime"))]
-        (Value::Matrix(_), Value::TemporalArrayView(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(_), Value::Matrix(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views"))]
-        (Value::Matrix(_), Value::BitmaskView(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "views"))]
-        (Value::BitmaskView(_), Value::Matrix(_)) => todo!(),
-
-
-        // Missing Matrix + Cube combination
-        #[cfg(all(feature = "matrix", feature = "cube"))]
-        (Value::Matrix(_), Value::Cube(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "cube"))]
-        (Value::Cube(_), Value::Matrix(_)) => todo!(),
-
-        // Missing Matrix + chunked view combinations
-        #[cfg(all(feature = "matrix", feature = "chunked", feature = "views"))]
-        (Value::Matrix(_), Value::SuperArrayView(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "chunked", feature = "views"))]
-        (Value::SuperArrayView(_), Value::Matrix(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "chunked", feature = "views"))]
-        (Value::Matrix(_), Value::SuperTableView(_)) => todo!(),
-        #[cfg(all(feature = "matrix", feature = "chunked", feature = "views"))]
-        (Value::SuperTableView(_), Value::Matrix(_)) => todo!(),
 
         // Complete tuple combinations with remaining types (all remaining Tuple3-6 patterns)
         #[cfg(feature = "views")]
@@ -2442,259 +1811,6 @@ pub fn broadcast_value(
             Ok(Value::Tuple6(Arc::new((res1, res2, res3, res4, res5, res6))))
         }
 
-
-        // Complete tuple combinations with specialized array views
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple3(l_arc), Value::NumericArrayView(r)) => {
-            let (l1, l2, l3) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone());
-            let res1 = broadcast_value(op, l1, Value::NumericArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::NumericArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::NumericArrayView(r))?;
-            Ok(Value::Tuple3(Arc::new((res1, res2, res3))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::NumericArrayView(l), Value::Tuple3(r_arc)) => {
-            let (r1, r2, r3) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone());
-            let res1 = broadcast_value(op, Value::NumericArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::NumericArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::NumericArrayView(l), r3)?;
-            Ok(Value::Tuple3(Arc::new((res1, res2, res3))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple3(l_arc), Value::TextArrayView(r)) => {
-            let (l1, l2, l3) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone());
-            let res1 = broadcast_value(op, l1, Value::TextArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TextArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::TextArrayView(r))?;
-            Ok(Value::Tuple3(Arc::new((res1, res2, res3))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::TextArrayView(l), Value::Tuple3(r_arc)) => {
-            let (r1, r2, r3) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone());
-            let res1 = broadcast_value(op, Value::TextArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TextArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::TextArrayView(l), r3)?;
-            Ok(Value::Tuple3(Arc::new((res1, res2, res3))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::Tuple3(l_arc), Value::TemporalArrayView(r)) => {
-            let (l1, l2, l3) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone());
-            let res1 = broadcast_value(op, l1, Value::TemporalArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TemporalArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::TemporalArrayView(r))?;
-            Ok(Value::Tuple3(Arc::new((res1, res2, res3))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::Tuple3(r_arc)) => {
-            let (r1, r2, r3) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone());
-            let res1 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::TemporalArrayView(l), r3)?;
-            Ok(Value::Tuple3(Arc::new((res1, res2, res3))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple4(l_arc), Value::NumericArrayView(r)) => {
-            let (l1, l2, l3, l4) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone(), l_arc.3.clone());
-            let res1 = broadcast_value(op, l1, Value::NumericArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::NumericArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::NumericArrayView(r.clone()))?;
-            let res4 = broadcast_value(op, l4, Value::NumericArrayView(r))?;
-            Ok(Value::Tuple4(Arc::new((res1, res2, res3, res4))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::NumericArrayView(l), Value::Tuple4(r_arc)) => {
-            let (r1, r2, r3, r4) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone(), r_arc.3.clone());
-            let res1 = broadcast_value(op, Value::NumericArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::NumericArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::NumericArrayView(l.clone()), r3)?;
-            let res4 = broadcast_value(op, Value::NumericArrayView(l), r4)?;
-            Ok(Value::Tuple4(Arc::new((res1, res2, res3, res4))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple4(l_arc), Value::TextArrayView(r)) => {
-            let (l1, l2, l3, l4) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone(), l_arc.3.clone());
-            let res1 = broadcast_value(op, l1, Value::TextArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TextArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::TextArrayView(r.clone()))?;
-            let res4 = broadcast_value(op, l4, Value::TextArrayView(r))?;
-            Ok(Value::Tuple4(Arc::new((res1, res2, res3, res4))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::TextArrayView(l), Value::Tuple4(r_arc)) => {
-            let (r1, r2, r3, r4) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone(), r_arc.3.clone());
-            let res1 = broadcast_value(op, Value::TextArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TextArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::TextArrayView(l.clone()), r3)?;
-            let res4 = broadcast_value(op, Value::TextArrayView(l), r4)?;
-            Ok(Value::Tuple4(Arc::new((res1, res2, res3, res4))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::Tuple4(l_arc), Value::TemporalArrayView(r)) => {
-            let (l1, l2, l3, l4) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone(), l_arc.3.clone());
-            let res1 = broadcast_value(op, l1, Value::TemporalArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TemporalArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::TemporalArrayView(r.clone()))?;
-            let res4 = broadcast_value(op, l4, Value::TemporalArrayView(r))?;
-            Ok(Value::Tuple4(Arc::new((res1, res2, res3, res4))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::Tuple4(r_arc)) => {
-            let (r1, r2, r3, r4) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone(), r_arc.3.clone());
-            let res1 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r3)?;
-            let res4 = broadcast_value(op, Value::TemporalArrayView(l), r4)?;
-            Ok(Value::Tuple4(Arc::new((res1, res2, res3, res4))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple5(l_arc), Value::NumericArrayView(r)) => {
-            let (l1, l2, l3, l4, l5) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone(), l_arc.3.clone(), l_arc.4.clone());
-            let res1 = broadcast_value(op, l1, Value::NumericArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::NumericArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::NumericArrayView(r.clone()))?;
-            let res4 = broadcast_value(op, l4, Value::NumericArrayView(r.clone()))?;
-            let res5 = broadcast_value(op, l5, Value::NumericArrayView(r))?;
-            Ok(Value::Tuple5(Arc::new((res1, res2, res3, res4, res5))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::NumericArrayView(l), Value::Tuple5(r_arc)) => {
-            let (r1, r2, r3, r4, r5) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone(), r_arc.3.clone(), r_arc.4.clone());
-            let res1 = broadcast_value(op, Value::NumericArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::NumericArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::NumericArrayView(l.clone()), r3)?;
-            let res4 = broadcast_value(op, Value::NumericArrayView(l.clone()), r4)?;
-            let res5 = broadcast_value(op, Value::NumericArrayView(l), r5)?;
-            Ok(Value::Tuple5(Arc::new((res1, res2, res3, res4, res5))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple5(l_arc), Value::TextArrayView(r)) => {
-            let (l1, l2, l3, l4, l5) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone(), l_arc.3.clone(), l_arc.4.clone());
-            let res1 = broadcast_value(op, l1, Value::TextArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TextArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::TextArrayView(r.clone()))?;
-            let res4 = broadcast_value(op, l4, Value::TextArrayView(r.clone()))?;
-            let res5 = broadcast_value(op, l5, Value::TextArrayView(r))?;
-            Ok(Value::Tuple5(Arc::new((res1, res2, res3, res4, res5))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::TextArrayView(l), Value::Tuple5(r_arc)) => {
-            let (r1, r2, r3, r4, r5) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone(), r_arc.3.clone(), r_arc.4.clone());
-            let res1 = broadcast_value(op, Value::TextArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TextArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::TextArrayView(l.clone()), r3)?;
-            let res4 = broadcast_value(op, Value::TextArrayView(l.clone()), r4)?;
-            let res5 = broadcast_value(op, Value::TextArrayView(l), r5)?;
-            Ok(Value::Tuple5(Arc::new((res1, res2, res3, res4, res5))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::Tuple5(l_arc), Value::TemporalArrayView(r)) => {
-            let (l1, l2, l3, l4, l5) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone(), l_arc.3.clone(), l_arc.4.clone());
-            let res1 = broadcast_value(op, l1, Value::TemporalArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TemporalArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::TemporalArrayView(r.clone()))?;
-            let res4 = broadcast_value(op, l4, Value::TemporalArrayView(r.clone()))?;
-            let res5 = broadcast_value(op, l5, Value::TemporalArrayView(r))?;
-            Ok(Value::Tuple5(Arc::new((res1, res2, res3, res4, res5))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::Tuple5(r_arc)) => {
-            let (r1, r2, r3, r4, r5) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone(), r_arc.3.clone(), r_arc.4.clone());
-            let res1 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r3)?;
-            let res4 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r4)?;
-            let res5 = broadcast_value(op, Value::TemporalArrayView(l), r5)?;
-            Ok(Value::Tuple5(Arc::new((res1, res2, res3, res4, res5))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple6(l_arc), Value::NumericArrayView(r)) => {
-            let (l1, l2, l3, l4, l5, l6) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone(), l_arc.3.clone(), l_arc.4.clone(), l_arc.5.clone());
-            let res1 = broadcast_value(op, l1, Value::NumericArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::NumericArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::NumericArrayView(r.clone()))?;
-            let res4 = broadcast_value(op, l4, Value::NumericArrayView(r.clone()))?;
-            let res5 = broadcast_value(op, l5, Value::NumericArrayView(r.clone()))?;
-            let res6 = broadcast_value(op, l6, Value::NumericArrayView(r))?;
-            Ok(Value::Tuple6(Arc::new((res1, res2, res3, res4, res5, res6))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::NumericArrayView(l), Value::Tuple6(r_arc)) => {
-            let (r1, r2, r3, r4, r5, r6) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone(), r_arc.3.clone(), r_arc.4.clone(), r_arc.5.clone());
-            let res1 = broadcast_value(op, Value::NumericArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::NumericArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::NumericArrayView(l.clone()), r3)?;
-            let res4 = broadcast_value(op, Value::NumericArrayView(l.clone()), r4)?;
-            let res5 = broadcast_value(op, Value::NumericArrayView(l.clone()), r5)?;
-            let res6 = broadcast_value(op, Value::NumericArrayView(l), r6)?;
-            Ok(Value::Tuple6(Arc::new((res1, res2, res3, res4, res5, res6))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::Tuple6(l_arc), Value::TextArrayView(r)) => {
-            let (l1, l2, l3, l4, l5, l6) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone(), l_arc.3.clone(), l_arc.4.clone(), l_arc.5.clone());
-            let res1 = broadcast_value(op, l1, Value::TextArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TextArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::TextArrayView(r.clone()))?;
-            let res4 = broadcast_value(op, l4, Value::TextArrayView(r.clone()))?;
-            let res5 = broadcast_value(op, l5, Value::TextArrayView(r.clone()))?;
-            let res6 = broadcast_value(op, l6, Value::TextArrayView(r))?;
-            Ok(Value::Tuple6(Arc::new((res1, res2, res3, res4, res5, res6))))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::TextArrayView(l), Value::Tuple6(r_arc)) => {
-            let (r1, r2, r3, r4, r5, r6) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone(), r_arc.3.clone(), r_arc.4.clone(), r_arc.5.clone());
-            let res1 = broadcast_value(op, Value::TextArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TextArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::TextArrayView(l.clone()), r3)?;
-            let res4 = broadcast_value(op, Value::TextArrayView(l.clone()), r4)?;
-            let res5 = broadcast_value(op, Value::TextArrayView(l.clone()), r5)?;
-            let res6 = broadcast_value(op, Value::TextArrayView(l), r6)?;
-            Ok(Value::Tuple6(Arc::new((res1, res2, res3, res4, res5, res6))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::Tuple6(l_arc), Value::TemporalArrayView(r)) => {
-            let (l1, l2, l3, l4, l5, l6) = (l_arc.0.clone(), l_arc.1.clone(), l_arc.2.clone(), l_arc.3.clone(), l_arc.4.clone(), l_arc.5.clone());
-            let res1 = broadcast_value(op, l1, Value::TemporalArrayView(r.clone()))?;
-            let res2 = broadcast_value(op, l2, Value::TemporalArrayView(r.clone()))?;
-            let res3 = broadcast_value(op, l3, Value::TemporalArrayView(r.clone()))?;
-            let res4 = broadcast_value(op, l4, Value::TemporalArrayView(r.clone()))?;
-            let res5 = broadcast_value(op, l5, Value::TemporalArrayView(r.clone()))?;
-            let res6 = broadcast_value(op, l6, Value::TemporalArrayView(r))?;
-            Ok(Value::Tuple6(Arc::new((res1, res2, res3, res4, res5, res6))))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::Tuple6(r_arc)) => {
-            let (r1, r2, r3, r4, r5, r6) = (r_arc.0.clone(), r_arc.1.clone(), r_arc.2.clone(), r_arc.3.clone(), r_arc.4.clone(), r_arc.5.clone());
-            let res1 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r1)?;
-            let res2 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r2)?;
-            let res3 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r3)?;
-            let res4 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r4)?;
-            let res5 = broadcast_value(op, Value::TemporalArrayView(l.clone()), r5)?;
-            let res6 = broadcast_value(op, Value::TemporalArrayView(l), r6)?;
-            Ok(Value::Tuple6(Arc::new((res1, res2, res3, res4, res5, res6))))
-        }
-
-        // Note: Tuple3 + SuperArray/SuperTable combinations are handled by earlier catch-all patterns (lines 1332-1336, 1361-1365)
-        // Note: Tuple4 + SuperArray/SuperTable combinations are handled by earlier catch-all patterns (lines 1332-1336, 1361-1365)
-        // Note: Tuple5 + SuperArray/SuperTable combinations are handled by earlier catch-all patterns (lines 1332-1336, 1361-1365)
-        // Note: Tuple6 + SuperArray/SuperTable combinations are handled by earlier catch-all patterns (lines 1332-1336, 1361-1365)
-
-        // Complete tuple combinations with Matrix and Cube
-        #[cfg(feature = "matrix")]
-        (Value::Tuple3(_), Value::Matrix(_)) => unimplemented!("Matrix broadcasting is not yet implemented."),
-        #[cfg(feature = "matrix")]
-        (Value::Matrix(_), Value::Tuple3(_)) => unimplemented!("Matrix broadcasting is not yet implemented."),
-        #[cfg(feature = "matrix")]
-        (Value::Tuple4(_), Value::Matrix(_)) => unimplemented!("Matrix broadcasting is not yet implemented."),
-        #[cfg(feature = "matrix")]
-        (Value::Matrix(_), Value::Tuple4(_)) => unimplemented!("Matrix broadcasting is not yet implemented."),
-        #[cfg(feature = "matrix")]
-        (Value::Tuple5(_), Value::Matrix(_)) => unimplemented!("Matrix broadcasting is not yet implemented."),
-        #[cfg(feature = "matrix")]
-        (Value::Matrix(_), Value::Tuple5(_)) => unimplemented!("Matrix broadcasting is not yet implemented."),
-        #[cfg(feature = "matrix")]
-        (Value::Tuple6(_), Value::Matrix(_)) => unimplemented!("Matrix broadcasting is not yet implemented."),
-        #[cfg(feature = "matrix")]
-        (Value::Matrix(_), Value::Tuple6(_)) => unimplemented!("Matrix broadcasting is not yet implemented."),
         #[cfg(feature = "cube")]
         (Value::Tuple2(l_arc), Value::Cube(cube)) => {
             let (l1, l2) = (l_arc.0.clone(), l_arc.1.clone());
@@ -2786,48 +1902,6 @@ pub fn broadcast_value(
             Ok(Value::Tuple6(Arc::new((res1, res2, res3, res4, res5, res6))))
         }
 
-        // BoxValue and ArcValue with all other specialized views - can use recursive pattern
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::BoxValue(l), Value::NumericArrayView(r)) => {
-            // Dereference Box and recursively broadcast
-            broadcast_value(op, *l, Value::NumericArrayView(r))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::NumericArrayView(l), Value::BoxValue(r)) => {
-            // Dereference Box and recursively broadcast
-            broadcast_value(op, Value::NumericArrayView(l), *r)
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::BoxValue(l), Value::TextArrayView(r)) => {
-            // Dereference Box and recursively broadcast
-            broadcast_value(op, *l, Value::TextArrayView(r))
-        }
-        #[cfg(all(feature = "views", feature = "views"))]
-        (Value::TextArrayView(l), Value::BoxValue(r)) => {
-            // Dereference Box and recursively broadcast
-            broadcast_value(op, Value::TextArrayView(l), *r)
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::BoxValue(l), Value::TemporalArrayView(r)) => {
-            // Dereference Box and recursively broadcast
-            broadcast_value(op, *l, Value::TemporalArrayView(r))
-        }
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        (Value::TemporalArrayView(l), Value::BoxValue(r)) => {
-            // Dereference Box and recursively broadcast
-            broadcast_value(op, Value::TemporalArrayView(l), *r)
-        }
-        #[cfg(feature = "views")]
-        (Value::BoxValue(l), Value::BitmaskView(r)) => {
-            // Dereference Box and recursively broadcast
-            broadcast_value(op, *l, Value::BitmaskView(r))
-        }
-        #[cfg(feature = "views")]
-        (Value::BitmaskView(l), Value::BoxValue(r)) => {
-            // Dereference Box and recursively broadcast
-            broadcast_value(op, Value::BitmaskView(l), *r)
-        }
-
         #[cfg(feature = "chunked")]
         (Value::SuperArray(super_array), Value::SuperTable(super_table)) => {
             super_table::broadcast_superarray_to_supertable(op, &super_array, &super_table).map(|st| Value::SuperTable(Arc::new(st)))
@@ -2886,12 +1960,5 @@ pub fn broadcast_value(
                 "VecValue arithmetic not supported - use element-wise iteration instead".to_string(),
             ),
         }),
-
-        // Bitmask combinations - we choose not to support this
-        #[cfg(feature = "views")]
-        (Value::BitmaskView(_), _) | (_, Value::BitmaskView(_)) => {
-            panic!("BitmaskView does not support broadcasting operations")
-        }
-
     }
 }

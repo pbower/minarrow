@@ -85,6 +85,8 @@ impl SuperTableV {
         self.slices[0].fields.iter().map(|x| x.clone()).collect()
     }
 
+    // TODO: Must respect active selections
+
     /// Iterator over slice‐level `TableSlice`s.
     #[inline]
     pub fn chunks(&self) -> impl Iterator<Item = &TableV> {
