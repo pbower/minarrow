@@ -45,18 +45,20 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
+#[cfg(feature = "select")]
+use crate::Array;
 #[cfg(feature = "views")]
 use crate::ArrayV;
 use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
 use crate::traits::concatenate::Concatenate;
-use crate::traits::print::{MAX_PREVIEW, value_to_string, print_rule, print_header_row, print_ellipsis_row};
+use crate::traits::print::{
+    MAX_PREVIEW, print_ellipsis_row, print_header_row, print_rule, value_to_string,
+};
 #[cfg(feature = "select")]
-use crate::traits::selection::{FieldSelector, DataSelector, FieldSelection, DataSelection};
+use crate::traits::selection::{ColumnSelection, DataSelector, FieldSelector, RowSelection};
 use crate::traits::shape::Shape;
 use crate::{Field, FieldArray, Table};
-#[cfg(feature = "select")]
-use crate::Array;
 
 /// # TableView
 ///
@@ -89,12 +91,6 @@ pub struct TableV {
     pub offset: usize,
     /// Length of slice (in rows)
     pub len: usize,
-    /// Active column selection indices (None = all columns)
-    #[cfg(feature = "select")]
-    pub active_col_selection: Option<Vec<usize>>,
-    /// Active row selection indices (None = all rows in window)
-    #[cfg(feature = "select")]
-    pub active_row_selection: Option<Vec<usize>>,
 }
 
 impl TableV {
@@ -116,10 +112,6 @@ impl TableV {
             cols,
             offset,
             len,
-            #[cfg(feature = "select")]
-            active_col_selection: None,
-            #[cfg(feature = "select")]
-            active_row_selection: None,
         }
     }
 
@@ -141,10 +133,6 @@ impl TableV {
             cols,
             offset,
             len,
-            #[cfg(feature = "select")]
-            active_col_selection: None,
-            #[cfg(feature = "select")]
-            active_row_selection: None,
         }
     }
 
@@ -175,38 +163,8 @@ impl TableV {
             cols,
             offset: self.offset + offset,
             len,
-            #[cfg(feature = "select")]
-            active_col_selection: self.active_col_selection.clone(),
-            #[cfg(feature = "select")]
-            active_row_selection: self.active_row_selection.clone(),
         }
     }
-
-    // ===== Internal Helper Methods for Active Selections =====
-
-    /// Returns the effective column indices based on active_col_selection.
-    /// If None, returns all column indices (0..n_cols).
-    #[inline]
-    #[cfg(feature = "select")]
-    fn effective_col_indices(&self) -> Vec<usize> {
-        match &self.active_col_selection {
-            Some(indices) => indices.clone(),
-            None => (0..self.cols.len()).collect(),
-        }
-    }
-
-    /// Maps a logical column index (within selection) to physical column index.
-    /// Returns None if idx is out of bounds of the selection.
-    #[inline]
-    #[cfg(feature = "select")]
-    fn map_col_idx(&self, idx: usize) -> Option<usize> {
-        match &self.active_col_selection {
-            Some(indices) => indices.get(idx).copied(),
-            None => if idx < self.cols.len() { Some(idx) } else { None },
-        }
-    }
-
-    // ===== Public API Methods =====
 
     /// Returns true if the window contains no rows.
     #[inline]
@@ -221,24 +179,20 @@ impl TableV {
     }
 
     /// Returns the number of columns in the table window.
-    /// Respects active_col_selection if present.
     #[inline]
     pub fn n_cols(&self) -> usize {
-        #[cfg(feature = "select")]
-        if let Some(indices) = &self.active_col_selection {
-            return indices.len();
-        }
         self.cols.len()
     }
 
     /// Returns the number of rows in the window.
-    /// Respects active_row_selection if present.
     #[inline]
     pub fn n_rows(&self) -> usize {
-        #[cfg(feature = "select")]
-        if let Some(indices) = &self.active_row_selection {
-            return indices.len();
-        }
+        self.len
+    }
+
+    /// Returns the number of rows in the window.
+    #[inline]
+    pub fn len(&self) -> usize {
         self.len
     }
 
@@ -249,209 +203,60 @@ impl TableV {
     }
 
     /// Returns a reference to the column window at the given index.
-    /// The index is relative to the active column selection if present.
     #[inline]
     pub fn col(&self, idx: usize) -> Option<&ArrayV> {
-        #[cfg(feature = "select")]
-        {
-            self.map_col_idx(idx).and_then(|physical_idx| self.cols.get(physical_idx))
-        }
-        #[cfg(not(feature = "select"))]
-        {
-            self.cols.get(idx)
-        }
+        self.cols.get(idx)
     }
 
     /// Returns a slice of all column windows.
-    /// Respects active_col_selection if present.
     #[inline]
     pub fn cols(&self) -> Vec<&ArrayV> {
-        #[cfg(feature = "select")]
-        {
-            let indices = self.effective_col_indices();
-            indices.iter().filter_map(|&i| self.cols.get(i)).collect()
-        }
-        #[cfg(not(feature = "select"))]
-        {
-            self.cols.iter().collect()
-        }
+        self.cols.iter().collect()
     }
 
     /// Returns an iterator over all column names.
-    /// Respects active_col_selection if present.
     #[inline]
     pub fn col_names(&self) -> Vec<&str> {
-        #[cfg(feature = "select")]
-        {
-            let indices = self.effective_col_indices();
-            indices.iter().filter_map(|&i| self.fields.get(i).map(|f| f.name.as_str())).collect()
-        }
-        #[cfg(not(feature = "select"))]
-        {
-            self.fields.iter().map(|f| f.name.as_str()).collect()
-        }
+        self.fields.iter().map(|f| f.name.as_str()).collect()
     }
 
     /// Returns the index of a column by name.
-    /// Returns the logical index within the active selection if present.
     #[inline]
     pub fn col_index(&self, name: &str) -> Option<usize> {
-        // First find the physical index
-        let physical_idx = self.fields.iter().position(|f| f.name == name)?;
-
-        // Then map to logical index within selection
-        #[cfg(feature = "select")]
-        {
-            match &self.active_col_selection {
-                Some(indices) => indices.iter().position(|&i| i == physical_idx),
-                None => Some(physical_idx),
-            }
-        }
-        #[cfg(not(feature = "select"))]
-        {
-            Some(physical_idx)
-        }
+        self.fields.iter().position(|f| f.name == name)
     }
 
     /// Returns the window tuple of the column at the given index.
-    /// The index is relative to the active column selection if present.
     #[inline]
     pub fn col_window(&self, idx: usize) -> Option<ArrayV> {
-        #[cfg(feature = "select")]
-        {
-            self.map_col_idx(idx).and_then(|physical_idx| {
-                self.cols.get(physical_idx).map(|av| {
-                    let (array, offset, len) = &av.as_tuple();
-                    ArrayV::new(array.clone(), *offset, *len)
-                })
-            })
-        }
-        #[cfg(not(feature = "select"))]
-        {
-            self.cols.get(idx).map(|av| {
-                let (array, offset, len) = &av.as_tuple();
-                ArrayV::new(array.clone(), *offset, *len)
-            })
-        }
+        self.cols.get(idx).map(|av| {
+            let (array, offset, len) = &av.as_tuple();
+            ArrayV::new(array.clone(), *offset, *len)
+        })
     }
 
     /// Returns the name of the column at the given index.
-    /// The index is relative to the active column selection if present.
     #[inline]
     pub fn col_name(&self, idx: usize) -> Option<&str> {
-        #[cfg(feature = "select")]
-        {
-            self.map_col_idx(idx).and_then(|physical_idx| {
-                self.fields.get(physical_idx).map(|f| f.name.as_str())
-            })
-        }
-        #[cfg(not(feature = "select"))]
-        {
-            self.fields.get(idx).map(|f| f.name.as_str())
-        }
+        self.fields.get(idx).map(|f| f.name.as_str())
     }
 
     /// Returns a `Vec<bool>` indicating which columns are nullable.
-    /// Respects active_col_selection if present.
     #[inline]
     pub fn cols_nullable(&self) -> Vec<bool> {
-        #[cfg(feature = "select")]
-        {
-            let indices = self.effective_col_indices();
-            indices.iter().filter_map(|&i| self.fields.get(i).map(|f| f.nullable)).collect()
-        }
-        #[cfg(not(feature = "select"))]
-        {
-            self.fields.iter().map(|f| f.nullable).collect()
-        }
+        self.fields.iter().map(|f| f.nullable).collect()
     }
 
     /// Returns a reference to the column window by column name.
-    /// Returns None if the column is not in the active selection.
     #[inline]
     pub fn col_by_name(&self, name: &str) -> Option<&ArrayV> {
-        self.col_index(name).and_then(|logical_idx| self.col(logical_idx))
-    }
-
-    /// Refine column selection on this view (table-specific convenience method).
-    ///
-    /// This method delegates to `.f()` from the `Selection` trait.
-    /// For compatibility across dimensions, prefer using `.f()`, `.fields()`, or `.y()`.
-    ///
-    /// # Example
-    /// ```ignore
-    /// use minarrow::TableV;
-    ///
-    /// // Refine column selection
-    /// let view2 = view.c(&["A", "B"]);
-    /// ```
-    #[cfg(feature = "select")]
-    pub fn c<S: FieldSelector>(&self, selection: S) -> TableV {
-        self.f(selection)
-    }
-
-    /// Refine row selection on this view (table-specific convenience method).
-    ///
-    /// This method delegates to `.d()` from the `Selection` trait.
-    /// For compatibility across dimensions, prefer using `.d()`, `.data()`, or `.x()`.
-    ///
-    /// # Example
-    /// ```ignore
-    /// use minarrow::TableV;
-    ///
-    /// // Refine row selection
-    /// let view2 = view.r(5..10);
-    /// ```
-    #[cfg(feature = "select")]
-    pub fn r<S: DataSelector>(&self, selection: S) -> TableV {
-        self.d(selection)
+        self.col_index(name).and_then(|idx| self.col(idx))
     }
 
     /// Consumes the TableView, producing an owned Table with the sliced data.
     /// Copies the data.
-    /// Respects both active_col_selection and active_row_selection.
-    ///
-    /// Gathers specific rows if active_row_selection is set, supporting both
-    /// contiguous and non-contiguous row selections.
     pub fn to_table(&self) -> Table {
-        #[cfg(feature = "select")]
-        let col_indices = self.effective_col_indices();
-        #[cfg(not(feature = "select"))]
         let col_indices: Vec<usize> = (0..self.cols.len()).collect();
-
-        // Handle row selection by gathering specific rows
-        #[cfg(feature = "select")]
-        if let Some(row_sel) = &self.active_row_selection {
-            if row_sel.is_empty() {
-                return Table::new(self.name.clone(), Some(vec![]));
-            }
-
-            let cols: Vec<_> = col_indices
-                .iter()
-                .filter_map(|&col_idx| {
-                    let field = self.fields.get(col_idx)?;
-                    let window = self.cols.get(col_idx)?;
-
-                    // Gather rows from the window based on selected indices
-                    let gathered_array = self.gather_rows_from_window(window, row_sel)?;
-                    let null_count = gathered_array.null_count();
-
-                    Some(FieldArray {
-                        field: field.clone(),
-                        array: gathered_array,
-                        null_count,
-                    })
-                })
-                .collect();
-
-            return Table {
-                cols,
-                n_rows: row_sel.len(),
-                name: self.name.clone(),
-            };
-        }
-
-        // No row selection - standard slicing
         let cols: Vec<_> = col_indices
             .iter()
             .filter_map(|&col_idx| {
@@ -459,6 +264,7 @@ impl TableV {
                 let window = self.cols.get(col_idx)?;
                 let w = window.as_tuple();
 
+                // The ArrayV window already contains the correct offset/len
                 let sliced = w.0.slice_clone(w.1, w.2);
                 let null_count = sliced.null_count();
 
@@ -470,7 +276,7 @@ impl TableV {
             })
             .collect();
 
-        let n_rows = if cols.is_empty() { 0 } else { cols[0].len() };
+        let n_rows = self.len;
 
         Table {
             cols,
@@ -479,248 +285,300 @@ impl TableV {
         }
     }
 
-    /// Helper method to gather specific rows from an ArrayV window
+    /// Gather specific rows from an ArrayV window
     #[cfg(feature = "select")]
     fn gather_rows_from_window(&self, window: &ArrayV, row_indices: &[usize]) -> Option<Array> {
-        use crate::{Array, BooleanArray, CategoricalArray, FloatArray, IntegerArray, MaskedArray, NumericArray, StringArray, TextArray};
+        use crate::{
+            Array, BooleanArray, CategoricalArray, FloatArray, IntegerArray, MaskedArray,
+            NumericArray, StringArray, TextArray,
+        };
         #[cfg(feature = "datetime")]
         use crate::{DatetimeArray, TemporalArray};
 
         let result = match &window.array {
-            Array::Null => return None, // Cannot gather from null array
-            Array::NumericArray(num_arr) => {
-                match num_arr {
-                    NumericArray::Int32(_) => {
-                        let mut new_arr = IntegerArray::<i32>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<IntegerArray<i32>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
+            Array::Null => return None,
+            Array::NumericArray(num_arr) => match num_arr {
+                NumericArray::Int32(_) => {
+                    let mut new_arr = IntegerArray::<i32>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<IntegerArray<i32>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
                         }
-                        Array::from_int32(new_arr)
                     }
-                    NumericArray::Int64(_) => {
-                        let mut new_arr = IntegerArray::<i64>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<IntegerArray<i64>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_int64(new_arr)
-                    }
-                    NumericArray::UInt32(_) => {
-                        let mut new_arr = IntegerArray::<u32>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<IntegerArray<u32>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_uint32(new_arr)
-                    }
-                    NumericArray::UInt64(_) => {
-                        let mut new_arr = IntegerArray::<u64>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<IntegerArray<u64>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_uint64(new_arr)
-                    }
-                    NumericArray::Float32(_) => {
-                        let mut new_arr = FloatArray::<f32>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<FloatArray<f32>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_float32(new_arr)
-                    }
-                    NumericArray::Float64(_) => {
-                        let mut new_arr = FloatArray::<f64>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<FloatArray<f64>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_float64(new_arr)
-                    }
-                    #[cfg(feature = "extended_numeric_types")]
-                    NumericArray::Int8(_) => {
-                        let mut new_arr = IntegerArray::<i8>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<IntegerArray<i8>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_int8(new_arr)
-                    }
-                    #[cfg(feature = "extended_numeric_types")]
-                    NumericArray::Int16(_) => {
-                        let mut new_arr = IntegerArray::<i16>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<IntegerArray<i16>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_int16(new_arr)
-                    }
-                    #[cfg(feature = "extended_numeric_types")]
-                    NumericArray::UInt8(_) => {
-                        let mut new_arr = IntegerArray::<u8>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<IntegerArray<u8>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_uint8(new_arr)
-                    }
-                    #[cfg(feature = "extended_numeric_types")]
-                    NumericArray::UInt16(_) => {
-                        let mut new_arr = IntegerArray::<u16>::with_capacity(row_indices.len(), true);
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<IntegerArray<u16>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_uint16(new_arr)
-                    }
-                    NumericArray::Null => return None,
+                    Array::from_int32(new_arr)
                 }
-            }
-            Array::TextArray(text_arr) => {
-                match text_arr {
-                    TextArray::String32(_) => {
-                        // Collect strings first, then create array
-                        let mut values: Vec<&str> = Vec::with_capacity(row_indices.len());
-                        for &idx in row_indices {
-                            if let Some(val) = window.get_str(idx) {
-                                values.push(val);
-                            } else {
-                                values.push(""); // Placeholder for null
-                            }
+                NumericArray::Int64(_) => {
+                    let mut new_arr = IntegerArray::<i64>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<IntegerArray<i64>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
                         }
-                        let mut new_arr = StringArray::<u32>::from_vec(values, None);
-                        // Mark nulls appropriately
-                        for (i, &idx) in row_indices.iter().enumerate() {
-                            if window.get_str(idx).is_none() {
-                                new_arr.set_null(i);
-                            }
-                        }
-                        Array::from_string32(new_arr)
                     }
-                    #[cfg(feature = "large_string")]
-                    TextArray::String64(_) => {
-                        let mut values: Vec<&str> = Vec::with_capacity(row_indices.len());
-                        for &idx in row_indices {
-                            if let Some(val) = window.get_str(idx) {
-                                values.push(val);
-                            } else {
-                                values.push("");
-                            }
-                        }
-                        let mut new_arr = StringArray::<u64>::from_vec(values, None);
-                        for (i, &idx) in row_indices.iter().enumerate() {
-                            if window.get_str(idx).is_none() {
-                                new_arr.set_null(i);
-                            }
-                        }
-                        Array::from_string64(new_arr)
-                    }
-                    TextArray::Categorical32(_) => {
-                        // Similar approach - collect strings and build categorical
-                        let mut values: Vec<&str> = Vec::with_capacity(row_indices.len());
-                        for &idx in row_indices {
-                            if let Some(val) = window.get_str(idx) {
-                                values.push(val);
-                            } else {
-                                values.push("");
-                            }
-                        }
-                        let mut new_arr = CategoricalArray::<u32>::from_vec(values, None);
-                        for (i, &idx) in row_indices.iter().enumerate() {
-                            if window.get_str(idx).is_none() {
-                                new_arr.set_null(i);
-                            }
-                        }
-                        Array::from_categorical32(new_arr)
-                    }
-                    #[cfg(feature = "extended_categorical")]
-                    TextArray::Categorical8(_) => {
-                        let mut values: Vec<&str> = Vec::with_capacity(row_indices.len());
-                        for &idx in row_indices {
-                            if let Some(val) = window.get_str(idx) {
-                                values.push(val);
-                            } else {
-                                values.push("");
-                            }
-                        }
-                        let mut new_arr = CategoricalArray::<u8>::from_vec(values, None);
-                        for (i, &idx) in row_indices.iter().enumerate() {
-                            if window.get_str(idx).is_none() {
-                                new_arr.set_null(i);
-                            }
-                        }
-                        Array::from_categorical8(new_arr)
-                    }
-                    #[cfg(feature = "extended_categorical")]
-                    TextArray::Categorical16(_) => {
-                        let mut values: Vec<&str> = Vec::with_capacity(row_indices.len());
-                        for &idx in row_indices {
-                            if let Some(val) = window.get_str(idx) {
-                                values.push(val);
-                            } else {
-                                values.push("");
-                            }
-                        }
-                        let mut new_arr = CategoricalArray::<u16>::from_vec(values, None);
-                        for (i, &idx) in row_indices.iter().enumerate() {
-                            if window.get_str(idx).is_none() {
-                                new_arr.set_null(i);
-                            }
-                        }
-                        Array::from_categorical16(new_arr)
-                    }
-                    #[cfg(feature = "extended_categorical")]
-                    TextArray::Categorical64(_) => {
-                        let mut values: Vec<&str> = Vec::with_capacity(row_indices.len());
-                        for &idx in row_indices {
-                            if let Some(val) = window.get_str(idx) {
-                                values.push(val);
-                            } else {
-                                values.push("");
-                            }
-                        }
-                        let mut new_arr = CategoricalArray::<u64>::from_vec(values, None);
-                        for (i, &idx) in row_indices.iter().enumerate() {
-                            if window.get_str(idx).is_none() {
-                                new_arr.set_null(i);
-                            }
-                        }
-                        Array::from_categorical64(new_arr)
-                    }
-                    TextArray::Null => return None,
+                    Array::from_int64(new_arr)
                 }
-            }
+                NumericArray::UInt32(_) => {
+                    let mut new_arr = IntegerArray::<u32>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<IntegerArray<u32>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_uint32(new_arr)
+                }
+                NumericArray::UInt64(_) => {
+                    let mut new_arr = IntegerArray::<u64>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<IntegerArray<u64>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_uint64(new_arr)
+                }
+                NumericArray::Float32(_) => {
+                    let mut new_arr = FloatArray::<f32>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<FloatArray<f32>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_float32(new_arr)
+                }
+                NumericArray::Float64(_) => {
+                    let mut new_arr = FloatArray::<f64>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<FloatArray<f64>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_float64(new_arr)
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(_) => {
+                    let mut new_arr = IntegerArray::<i8>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<IntegerArray<i8>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_int8(new_arr)
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(_) => {
+                    let mut new_arr = IntegerArray::<i16>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<IntegerArray<i16>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_int16(new_arr)
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(_) => {
+                    let mut new_arr = IntegerArray::<u8>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<IntegerArray<u8>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_uint8(new_arr)
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(_) => {
+                    let mut new_arr = IntegerArray::<u16>::with_capacity(row_indices.len(), true);
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<IntegerArray<u16>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_uint16(new_arr)
+                }
+                NumericArray::Null => return None,
+            },
+            Array::TextArray(text_arr) => match text_arr {
+                TextArray::String32(_) => {
+                    let mut new_arr = StringArray::<u32>::default();
+                    for &idx in row_indices {
+                        if let Some(val) = window.get_str(idx) {
+                            new_arr.push(val.to_string());
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_string32(new_arr)
+                }
+                #[cfg(feature = "large_string")]
+                TextArray::String64(_) => {
+                    let mut new_arr = StringArray::<u64>::default();
+                    for &idx in row_indices {
+                        if let Some(val) = window.get_str(idx) {
+                            new_arr.push(val.to_string());
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_string64(new_arr)
+                }
+                TextArray::Categorical32(_) => {
+                    use crate::{Bitmask, Vec64};
+                    use std::collections::HashMap;
+
+                    let mut codes = Vec64::<u32>::with_capacity(row_indices.len());
+                    let mut value_map = HashMap::<String, u32>::new();
+                    let mut mask = Bitmask::new_set_all(row_indices.len(), true);
+
+                    for (i, &idx) in row_indices.iter().enumerate() {
+                        if let Some(val) = window.get_str(idx) {
+                            let code = if let Some(&existing_code) = value_map.get(val) {
+                                existing_code
+                            } else {
+                                let new_code = value_map.len() as u32;
+                                value_map.insert(val.to_string(), new_code);
+                                new_code
+                            };
+                            codes.push(code);
+                        } else {
+                            codes.push(0);
+                            mask.set_false(i);
+                        }
+                    }
+
+                    let mut unique_values = Vec64::<String>::with_capacity(value_map.len());
+                    for (val, code) in value_map {
+                        unique_values[code as usize] = val;
+                    }
+
+                    let null_mask = if mask.all_set() { None } else { Some(mask) };
+
+                    let new_arr = CategoricalArray::<u32>::new(codes, unique_values, null_mask);
+                    Array::from_categorical32(new_arr)
+                }
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical8(_) => {
+                    use crate::{Bitmask, Vec64};
+                    use std::collections::HashMap;
+
+                    let mut codes = Vec64::<u8>::with_capacity(row_indices.len());
+                    let mut value_map = HashMap::<String, u8>::new();
+                    let mut mask = Bitmask::new_set_all(row_indices.len(), true);
+
+                    for (i, &idx) in row_indices.iter().enumerate() {
+                        if let Some(val) = window.get_str(idx) {
+                            let code = if let Some(&existing_code) = value_map.get(val) {
+                                existing_code
+                            } else {
+                                let new_code = value_map.len() as u8;
+                                value_map.insert(val.to_string(), new_code);
+                                new_code
+                            };
+                            codes.push(code);
+                        } else {
+                            codes.push(0);
+                            mask.set_false(i);
+                        }
+                    }
+
+                    let mut unique_values = Vec64::<String>::with_capacity(value_map.len());
+                    for (val, code) in value_map {
+                        unique_values[code as usize] = val;
+                    }
+
+                    let null_mask = if mask.all_set() { None } else { Some(mask) };
+
+                    let new_arr = CategoricalArray::<u8>::new(codes, unique_values, null_mask);
+                    Array::from_categorical8(new_arr)
+                }
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical16(_) => {
+                    use crate::{Bitmask, Vec64};
+                    use std::collections::HashMap;
+
+                    let mut codes = Vec64::<u16>::with_capacity(row_indices.len());
+                    let mut value_map = HashMap::<String, u16>::new();
+                    let mut mask = Bitmask::new_set_all(row_indices.len(), true);
+
+                    for (i, &idx) in row_indices.iter().enumerate() {
+                        if let Some(val) = window.get_str(idx) {
+                            let code = if let Some(&existing_code) = value_map.get(val) {
+                                existing_code
+                            } else {
+                                let new_code = value_map.len() as u16;
+                                value_map.insert(val.to_string(), new_code);
+                                new_code
+                            };
+                            codes.push(code);
+                        } else {
+                            codes.push(0);
+                            mask.set_false(i);
+                        }
+                    }
+
+                    let mut unique_values = Vec64::<String>::with_capacity(value_map.len());
+                    for (val, code) in value_map {
+                        unique_values[code as usize] = val;
+                    }
+
+                    let null_mask = if mask.all_set() { None } else { Some(mask) };
+
+                    let new_arr = CategoricalArray::<u16>::new(codes, unique_values, null_mask);
+                    Array::from_categorical16(new_arr)
+                }
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(_) => {
+                    use crate::{Bitmask, Vec64};
+                    use std::collections::HashMap;
+
+                    let mut codes = Vec64::<u64>::with_capacity(row_indices.len());
+                    let mut value_map = HashMap::<String, u64>::new();
+                    let mut mask = Bitmask::new_set_all(row_indices.len(), true);
+
+                    for (i, &idx) in row_indices.iter().enumerate() {
+                        if let Some(val) = window.get_str(idx) {
+                            let code = if let Some(&existing_code) = value_map.get(val) {
+                                existing_code
+                            } else {
+                                let new_code = value_map.len() as u64;
+                                value_map.insert(val.to_string(), new_code);
+                                new_code
+                            };
+                            codes.push(code);
+                        } else {
+                            codes.push(0);
+                            mask.set_false(i);
+                        }
+                    }
+
+                    let mut unique_values = Vec64::<String>::with_capacity(value_map.len());
+                    for (val, code) in value_map {
+                        unique_values[code as usize] = val;
+                    }
+
+                    let null_mask = if mask.all_set() { None } else { Some(mask) };
+
+                    let new_arr = CategoricalArray::<u64>::new(codes, unique_values, null_mask);
+                    Array::from_categorical64(new_arr)
+                }
+                TextArray::Null => return None,
+            },
             Array::BooleanArray(_) => {
                 let mut new_arr = BooleanArray::with_capacity(row_indices.len(), true);
                 for &idx in row_indices {
@@ -733,33 +591,39 @@ impl TableV {
                 Array::from_bool(new_arr)
             }
             #[cfg(feature = "datetime")]
-            Array::TemporalArray(temp_arr) => {
-                match temp_arr {
-                    TemporalArray::Datetime32(arr) => {
-                        let mut new_arr = DatetimeArray::<i32>::with_capacity(row_indices.len(), true, Some(arr.time_unit));
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<DatetimeArray<i32>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
+            Array::TemporalArray(temp_arr) => match temp_arr {
+                TemporalArray::Datetime32(arr) => {
+                    let mut new_arr = DatetimeArray::<i32>::with_capacity(
+                        row_indices.len(),
+                        true,
+                        Some(arr.time_unit),
+                    );
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<DatetimeArray<i32>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
                         }
-                        Array::from_datetime_i32(new_arr)
                     }
-                    TemporalArray::Datetime64(arr) => {
-                        let mut new_arr = DatetimeArray::<i64>::with_capacity(row_indices.len(), true, Some(arr.time_unit));
-                        for &idx in row_indices {
-                            if let Some(val) = window.get::<DatetimeArray<i64>>(idx) {
-                                new_arr.push(val);
-                            } else {
-                                new_arr.push_null();
-                            }
-                        }
-                        Array::from_datetime_i64(new_arr)
-                    }
-                    TemporalArray::Null => return None, // Cannot gather from null array
+                    Array::from_datetime_i32(new_arr)
                 }
-            }
+                TemporalArray::Datetime64(arr) => {
+                    let mut new_arr = DatetimeArray::<i64>::with_capacity(
+                        row_indices.len(),
+                        true,
+                        Some(arr.time_unit),
+                    );
+                    for &idx in row_indices {
+                        if let Some(val) = window.get::<DatetimeArray<i64>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_datetime_i64(new_arr)
+                }
+                TemporalArray::Null => return None,
+            },
         };
 
         Some(result)
@@ -775,6 +639,37 @@ impl TableV {
             field: field.clone().into(),
             array: sliced,
             null_count,
+        }
+    }
+
+    /// Gather specific row indices from this view into a materialised Table.
+    /// Indices are relative to this view's window.
+    #[cfg(feature = "select")]
+    pub fn gather_rows(&self, indices: &[usize]) -> Table {
+        if indices.is_empty() {
+            return Table::new(self.name.clone(), Some(vec![]));
+        }
+
+        let cols: Vec<_> = self
+            .fields
+            .iter()
+            .zip(&self.cols)
+            .filter_map(|(field, window)| {
+                let gathered_array = self.gather_rows_from_window(window, indices)?;
+                let null_count = gathered_array.null_count();
+
+                Some(FieldArray {
+                    field: field.clone(),
+                    array: gathered_array,
+                    null_count,
+                })
+            })
+            .collect();
+
+        Table {
+            cols,
+            n_rows: indices.len(),
+            name: self.name.clone(),
         }
     }
 }
@@ -801,20 +696,9 @@ impl Display for TableV {
         let mut headers: Vec<String> = Vec::with_capacity(n_cols);
         let mut widths: Vec<usize> = Vec::with_capacity(n_cols);
 
-        // Get fields respecting active_col_selection
-        #[cfg(feature = "select")]
-        let fields: Vec<Arc<Field>> = match &self.active_col_selection {
-            Some(indices) => indices.iter()
-                .filter_map(|&i| self.fields.get(i).cloned())
-                .collect(),
-            None => self.fields.clone(),
-        };
-        #[cfg(not(feature = "select"))]
-        let fields = &self.fields;
-
-        for logical_col_idx in 0..n_cols {
-            if let Some(_col_view) = self.col(logical_col_idx) {
-                let hdr = if let Some(f) = fields.get(logical_col_idx) {
+        for col_idx in 0..n_cols {
+            if let Some(_col_view) = self.col(col_idx) {
+                let hdr = if let Some(f) = self.fields.get(col_idx) {
                     format!("{}:{:?}", f.name, f.dtype)
                 } else {
                     "unknown".to_string()
@@ -827,23 +711,13 @@ impl Display for TableV {
         // Build matrix of cell strings
         let mut rows: Vec<Vec<String>> = Vec::with_capacity(row_indices.len());
 
-        for &logical_row_idx in &row_indices {
+        for &row_idx in &row_indices {
             let mut row: Vec<String> = Vec::with_capacity(n_cols);
 
-            for logical_col_idx in 0..n_cols {
-                if let Some(col_view) = self.col(logical_col_idx) {
-                    // Map logical row to physical row for active_row_selection
-                    #[cfg(feature = "select")]
-                    let physical_row_idx = if let Some(ref row_sel) = self.active_row_selection {
-                        row_sel.get(logical_row_idx).copied().unwrap_or(logical_row_idx)
-                    } else {
-                        logical_row_idx
-                    };
-                    #[cfg(not(feature = "select"))]
-                    let physical_row_idx = logical_row_idx;
-
-                    let val = value_to_string(&col_view.array, physical_row_idx);
-                    widths[logical_col_idx] = widths[logical_col_idx].max(val.len());
+            for col_idx in 0..n_cols {
+                if let Some(col_view) = self.col(col_idx) {
+                    let val = value_to_string(&col_view.array, row_idx);
+                    widths[col_idx] = widths[col_idx].max(val.len());
                     row.push(val);
                 } else {
                     row.push("·".to_string());
@@ -853,18 +727,10 @@ impl Display for TableV {
         }
 
         // Calculate idx column width
-        #[cfg(feature = "select")]
-        let max_physical_idx = if let Some(ref row_sel) = self.active_row_selection {
-            row_sel.iter().max().copied().unwrap_or(0)
-        } else {
-            n_rows.saturating_sub(1)
-        };
-        #[cfg(not(feature = "select"))]
-        let max_physical_idx = n_rows.saturating_sub(1);
-
+        let max_idx = n_rows.saturating_sub(1);
         let idx_width = usize::max(
             3, // "idx"
-            (max_physical_idx as f64).log10().floor() as usize + 1,
+            (max_idx as f64).log10().floor() as usize + 1,
         );
 
         // Render header
@@ -879,19 +745,9 @@ impl Display for TableV {
 
         // Render body
         for (i, cells) in rows.iter().enumerate() {
-            let logical_row = row_indices[i];
+            let row_idx = row_indices[i];
 
-            // Get physical row index for display
-            #[cfg(feature = "select")]
-            let physical_row = if let Some(ref row_sel) = self.active_row_selection {
-                row_sel.get(logical_row).copied().unwrap_or(logical_row)
-            } else {
-                logical_row
-            };
-            #[cfg(not(feature = "select"))]
-            let physical_row = logical_row;
-
-            write!(f, "| {idx:>w$} |", idx = physical_row, w = idx_width)?;
+            write!(f, "| {idx:>w$} |", idx = row_idx, w = idx_width)?;
             for (col_idx, cell) in cells.iter().enumerate() {
                 write!(f, " {val:^w$} |", val = cell, w = widths[col_idx])?;
             }
@@ -914,14 +770,14 @@ impl Shape for TableV {
 }
 
 impl Concatenate for TableV {
-    /// Concatenates two table views by materializing both to owned tables,
+    /// Concatenates two table views by materialising both to owned tables,
     /// concatenating them, and wrapping the result back in a view.
     ///
     /// # Notes
     /// - This operation copies data from both views to create owned tables.
     /// - The resulting view has offset=0 and length equal to the combined length.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
-        // Materialize both views to owned tables
+        // Materialise both views to owned tables
         let self_table = self.to_table();
         let other_table = other.to_table();
 
@@ -948,10 +804,6 @@ impl From<Table> for TableV {
             cols,
             offset: 0,
             len: table.n_rows,
-            #[cfg(feature = "select")]
-            active_col_selection: None,
-            #[cfg(feature = "select")]
-            active_row_selection: None,
         }
     }
 }
@@ -970,7 +822,7 @@ impl From<TableV> for Table {
                     Field::new(format!("col_{}", i), array_v.array.arrow_type(), true, None)
                 };
 
-                // If the view is windowed, we need to materialize the slice
+                // If the view is windowed, we need to materialise the slice
                 let array = if view.offset > 0 || view.len < array_v.len() {
                     // Need to slice the array - use the existing slice method
                     array_v.slice(0, view.len).array
@@ -993,64 +845,73 @@ impl From<TableV> for Table {
 // ===== Selection Trait Implementations =====
 
 #[cfg(feature = "select")]
-impl FieldSelection for TableV {
+impl ColumnSelection for TableV {
     type View = TableV;
 
-    fn f<S: FieldSelector>(&self, selection: S) -> TableV {
-        // Get current fields (filtered by active_col_selection)
-        let current_fields = self.get_fields();
+    fn c<S: FieldSelector>(&self, selection: S) -> TableV {
+        // Resolve selector to field indices
+        let indices = selection.resolve_fields(&self.fields);
 
-        // Resolve selection within current view's fields
-        let logical_indices = selection.resolve_fields(&current_fields);
+        // Filter fields and cols to only selected ones
+        let selected_fields: Vec<Arc<Field>> = indices
+            .iter()
+            .filter_map(|&i| self.fields.get(i).cloned())
+            .collect();
+        let selected_cols: Vec<ArrayV> = indices
+            .iter()
+            .filter_map(|&i| self.cols.get(i).cloned())
+            .collect();
 
-        // Map logical indices back to physical indices
-        let physical_indices: Vec<usize> = match &self.active_col_selection {
-            Some(existing) => logical_indices.iter()
-                .filter_map(|&i| existing.get(i).copied())
-                .collect(),
-            None => logical_indices,
-        };
-
-        let mut result = self.clone();
-        result.active_col_selection = Some(physical_indices);
-        result
+        TableV {
+            name: self.name.clone(),
+            fields: selected_fields,
+            cols: selected_cols,
+            offset: self.offset,
+            len: self.len,
+        }
     }
 
-    fn get_fields(&self) -> Vec<Arc<Field>> {
-        // Return fields filtered by active_col_selection
-        match &self.active_col_selection {
-            Some(indices) => indices.iter()
-                .filter_map(|&i| self.fields.get(i).cloned())
-                .collect(),
-            None => self.fields.clone(),
-        }
+    fn get_cols(&self) -> Vec<Arc<Field>> {
+        self.fields.clone()
     }
 }
 
 #[cfg(feature = "select")]
-impl DataSelection for TableV {
+impl RowSelection for TableV {
     type View = TableV;
 
-    fn d<S: DataSelector>(&self, selection: S) -> TableV {
-        // Resolve to logical indices within current view
-        let logical_n_rows = self.n_rows();
-        let logical_indices = selection.resolve_indices(logical_n_rows);
-
-        // Map logical indices back to physical indices
-        let physical_indices: Vec<usize> = match &self.active_row_selection {
-            Some(existing) => logical_indices.iter()
-                .filter_map(|&i| existing.get(i).copied())
-                .collect(),
-            None => logical_indices,
-        };
-
-        let mut result = self.clone();
-        result.active_row_selection = Some(physical_indices);
-        result
+    fn r<S: DataSelector>(&self, selection: S) -> TableV {
+        if selection.is_contiguous() {
+            // Contiguous selection (ranges): adjust offset and len
+            let indices = selection.resolve_indices(self.len);
+            if indices.is_empty() {
+                return TableV {
+                    name: self.name.clone(),
+                    fields: self.fields.clone(),
+                    cols: self.cols.clone(),
+                    offset: self.offset,
+                    len: 0,
+                };
+            }
+            let new_offset = self.offset + indices[0];
+            let new_len = indices.len();
+            TableV {
+                name: self.name.clone(),
+                fields: self.fields.clone(),
+                cols: self.cols.clone(),
+                offset: new_offset,
+                len: new_len,
+            }
+        } else {
+            // Non-contiguous selection (index arrays): materialise into Table
+            let indices = selection.resolve_indices(self.len);
+            let materialised_table = self.gather_rows(&indices);
+            TableV::from(materialised_table)
+        }
     }
 
-    fn get_data_count(&self) -> usize {
-        self.n_rows()
+    fn get_row_count(&self) -> usize {
+        self.len
     }
 }
 

@@ -17,19 +17,17 @@
 //! let result = a + b;  // Automatically broadcasts and performs element-wise addition
 //! ```
 
-// TODO: Go over this in detail
-
+#[cfg(feature = "views")]
+use crate::ArrayV;
 #[cfg(feature = "cube")]
 use crate::Cube;
 use crate::kernels::broadcast::{
     value_add, value_divide, value_multiply, value_remainder, value_subtract,
 };
 use crate::{Array, FieldArray, Table};
-#[cfg(feature = "views")]
-use crate::{ArrayV, BitmaskV};
 
+use crate::enums::error::MinarrowError;
 use crate::enums::value::Value;
-use crate::{Bitmask, enums::error::MinarrowError};
 
 #[cfg(feature = "chunked")]
 use crate::{SuperArray, SuperTable};
@@ -187,92 +185,6 @@ impl Rem for Array {
             _ => Err(MinarrowError::TypeError {
                 from: "Array",
                 to: "Array",
-                message: Some("Unexpected result type from remainder".to_string()),
-            }),
-        }
-    }
-}
-
-// Bitmask implementations
-impl Add for Bitmask {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn add(self, rhs: Self) -> Self::Output {
-        match value_add(
-            Value::Bitmask(Arc::new(self)),
-            Value::Bitmask(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "Bitmask",
-                to: "Bitmask",
-                message: Some("Unexpected result type from addition".to_string()),
-            }),
-        }
-    }
-}
-
-impl Sub for Bitmask {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn sub(self, rhs: Self) -> Self::Output {
-        match value_subtract(
-            Value::Bitmask(Arc::new(self)),
-            Value::Bitmask(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "Bitmask",
-                to: "Bitmask",
-                message: Some("Unexpected result type from subtraction".to_string()),
-            }),
-        }
-    }
-}
-
-impl Mul for Bitmask {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn mul(self, rhs: Self) -> Self::Output {
-        match value_multiply(
-            Value::Bitmask(Arc::new(self)),
-            Value::Bitmask(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "Bitmask",
-                to: "Bitmask",
-                message: Some("Unexpected result type from multiplication".to_string()),
-            }),
-        }
-    }
-}
-
-impl Div for Bitmask {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn div(self, rhs: Self) -> Self::Output {
-        match value_divide(
-            Value::Bitmask(Arc::new(self)),
-            Value::Bitmask(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "Bitmask",
-                to: "Bitmask",
-                message: Some("Unexpected result type from division".to_string()),
-            }),
-        }
-    }
-}
-
-impl Rem for Bitmask {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn rem(self, rhs: Self) -> Self::Output {
-        match value_remainder(
-            Value::Bitmask(Arc::new(self)),
-            Value::Bitmask(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "Bitmask",
-                to: "Bitmask",
                 message: Some("Unexpected result type from remainder".to_string()),
             }),
         }
@@ -989,97 +901,6 @@ impl Rem for Cube {
     }
 }
 
-// BitmaskView implementations
-#[cfg(feature = "views")]
-impl Add for BitmaskV {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn add(self, rhs: Self) -> Self::Output {
-        match value_add(
-            Value::BitmaskView(Arc::new(self)),
-            Value::BitmaskView(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "BitmaskView",
-                to: "Bitmask",
-                message: Some("Unexpected result type from addition".to_string()),
-            }),
-        }
-    }
-}
-
-#[cfg(feature = "views")]
-impl Sub for BitmaskV {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn sub(self, rhs: Self) -> Self::Output {
-        match value_subtract(
-            Value::BitmaskView(Arc::new(self)),
-            Value::BitmaskView(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "BitmaskView",
-                to: "Bitmask",
-                message: Some("Unexpected result type from subtraction".to_string()),
-            }),
-        }
-    }
-}
-
-#[cfg(feature = "views")]
-impl Mul for BitmaskV {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn mul(self, rhs: Self) -> Self::Output {
-        match value_multiply(
-            Value::BitmaskView(Arc::new(self)),
-            Value::BitmaskView(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "BitmaskView",
-                to: "Bitmask",
-                message: Some("Unexpected result type from multiplication".to_string()),
-            }),
-        }
-    }
-}
-
-#[cfg(feature = "views")]
-impl Div for BitmaskV {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn div(self, rhs: Self) -> Self::Output {
-        match value_divide(
-            Value::BitmaskView(Arc::new(self)),
-            Value::BitmaskView(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "BitmaskView",
-                to: "Bitmask",
-                message: Some("Unexpected result type from division".to_string()),
-            }),
-        }
-    }
-}
-
-#[cfg(feature = "views")]
-impl Rem for BitmaskV {
-    type Output = Result<Bitmask, MinarrowError>;
-    fn rem(self, rhs: Self) -> Self::Output {
-        match value_remainder(
-            Value::BitmaskView(Arc::new(self)),
-            Value::BitmaskView(Arc::new(rhs)),
-        )? {
-            Value::Bitmask(bm) => Ok(Arc::unwrap_or_clone(bm)),
-            _ => Err(MinarrowError::TypeError {
-                from: "BitmaskView",
-                to: "Bitmask",
-                message: Some("Unexpected result type from remainder".to_string()),
-            }),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1316,7 +1137,7 @@ mod tests {
         // Perform addition
         let result = (table_view_a + table_view_b).unwrap();
 
-        // Verify the result (should be a materialized Table)
+        // Verify the result (should be a materialised Table)
         if let Value::Table(result_table) = result {
             assert_eq!(result_table.n_cols(), 2);
             assert_eq!(result_table.n_rows(), 3);

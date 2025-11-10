@@ -235,7 +235,7 @@ pub use structs::views::collections::temporal_array_view::TemporalArrayV;
 pub use structs::views::collections::text_array_view::TextArrayV;
 
 pub use ffi::arrow_dtype::ArrowType;
-pub use structs::column::{column, Column};
+pub use structs::column::{Column, column};
 #[cfg(feature = "cube")]
 pub use structs::cube::Cube;
 pub use structs::field::Field;

@@ -89,7 +89,7 @@ impl TextArrayV {
             array.len()
         );
         let lock = OnceLock::new();
-        let _ = lock.set(null_count); // Pre-initialize with the provided count
+        let _ = lock.set(null_count); // Pre-initialise with the provided count
         Self {
             array,
             offset,
@@ -195,7 +195,7 @@ impl TextArrayV {
 
     /// Sets the cached null count for the view.
     ///
-    /// Returns Ok(()) if the value was set, or Err(count) if it was already initialized.
+    /// Returns Ok(()) if the value was set, or Err(count) if it was already initialised.
     /// This is thread-safe and can only succeed once per TextArrayV instance.
     #[inline]
     pub fn set_null_count(&self, count: usize) -> Result<(), usize> {
@@ -305,14 +305,14 @@ impl Shape for TextArrayV {
 }
 
 impl Concatenate for TextArrayV {
-    /// Concatenates two text array views by materializing both to owned text arrays,
+    /// Concatenates two text array views by materialising both to owned text arrays,
     /// concatenating them, and wrapping the result back in a view.
     ///
     /// # Notes
     /// - This operation copies data from both views to create owned text arrays.
     /// - The resulting view has offset=0 and length equal to the combined length.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
-        // Materialize both views to owned text arrays
+        // Materialise both views to owned text arrays
         let self_array = self.to_text_array();
         let other_array = other.to_text_array();
 
@@ -373,7 +373,7 @@ mod tests {
         let text = TextArray::String32(Arc::new(arr));
         let view = TextArrayV::with_null_count(text, 0, 2, 99);
         assert_eq!(view.null_count(), 99);
-        // Trying to set again should fail since it's already initialized
+        // Trying to set again should fail since it's already initialised
         assert!(view.set_null_count(101).is_err());
         // Still returns original value
         assert_eq!(view.null_count(), 99);

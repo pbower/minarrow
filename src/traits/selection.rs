@@ -1,4 +1,4 @@
-//! # **Selection Traits** - *Extensible selection across dimensions*
+//! # **Selection Traits** - *Selection across dimensions*
 //!
 //! Traits for field and data selection that enable polymorphic methods
 //! across Table, TableV, Cube, and future types.
@@ -9,12 +9,12 @@
 //! - **FieldSelection**: Capability trait for types that support field selection
 //! - **DataSelection**: Capability trait for types that support data selection
 //! - **Selection2D**: Combined 2D selection (FieldSelection + DataSelection)
-//! - **Selection3D**: Extension for 3D selection
-//! - **Selection4D**: Extension for 4D selection
+//! - **Selection3D**: Future Extension for 3D selection
+//! - **Selection4D**: Future Extension for 4D selection
 
-use std::ops::{Range, RangeFrom, RangeFull, RangeTo, RangeInclusive};
-use std::sync::Arc;
 use crate::Field;
+use std::ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo};
+use std::sync::Arc;
 
 // Input types that can be passed to selection methods
 // ===================================================
@@ -32,116 +32,83 @@ pub trait FieldSelector {
 pub trait DataSelector {
     /// Resolve this selection to indices (within the given count)
     fn resolve_indices(&self, count: usize) -> Vec<usize>;
+
+    /// Returns true if this selector represents a contiguous range.
+    /// Range types (Range, RangeFrom, etc.) return true.
+    /// Index arrays (&[usize], Vec<usize>) return false.
+    fn is_contiguous(&self) -> bool {
+        false // Default: assume non-contiguous
+    }
 }
 
-// Data structures that provide selection methods
-// ===============================================
 // These traits are implemented on structures like Table, ArrayV, etc.
 // They define what selection methods are available on each structure.
 // These are "what the structure can do" for selection operations.
 
 /// Trait for types that support field selection
-pub trait FieldSelection {
+pub trait ColumnSelection {
     /// The view type returned by selection operations
     type View;
 
     /// Select fields (columns) by name or index
-    fn f<S: FieldSelector>(&self, selection: S) -> Self::View;
+    fn c<S: FieldSelector>(&self, selection: S) -> Self::View;
 
-    /// Explicit alias for `.f()` - select fields
-    fn fields<S: FieldSelector>(&self, selection: S) -> Self::View {
-        self.f(selection)
+    /// Select fields (columns) by name or index
+    fn select_cols<S: FieldSelector>(&self, selection: S) -> Self::View {
+        self.c(selection)
     }
 
-    /// Spatial alias for `.f()` - Y-axis (vertical, schema dimension)
-    fn y<S: FieldSelector>(&self, selection: S) -> Self::View {
-        self.f(selection)
+    /// Spatial alias for `.c()` - x-axis
+    fn x<S: FieldSelector>(&self, selection: S) -> Self::View {
+        self.c(selection)
     }
 
     /// Get the fields for field resolution
-    fn get_fields(&self) -> Vec<Arc<Field>>;
+    fn get_cols(&self) -> Vec<Arc<Field>>;
 }
 
 /// Trait for types that support data selection
-pub trait DataSelection {
+pub trait RowSelection {
     /// The view type returned by selection operations
     type View;
 
     /// Select data (rows) by index or range
-    fn d<S: DataSelector>(&self, selection: S) -> Self::View;
+    fn r<S: DataSelector>(&self, selection: S) -> Self::View;
 
-    /// Explicit alias for `.d()` - select data
-    fn data<S: DataSelector>(&self, selection: S) -> Self::View {
-        self.d(selection)
+    /// Select data (rows) by index or range
+    fn select_rows<S: DataSelector>(&self, selection: S) -> Self::View {
+        self.r(selection)
     }
 
-    /// Spatial alias for `.d()` - X-axis (horizontal, data dimension)
-    fn x<S: DataSelector>(&self, selection: S) -> Self::View {
-        self.d(selection)
+    /// Spatial alias for `.r()` - y-axis
+    fn y<S: DataSelector>(&self, selection: S) -> Self::View {
+        self.r(selection)
     }
 
     /// Get the count for data resolution
-    fn get_data_count(&self) -> usize;
+    fn get_row_count(&self) -> usize;
 }
 
 /// Combined trait for 2D selection (field + data dimensions)
 ///
 /// This trait is automatically implemented for any type that implements
 /// both `FieldSelection` and `DataSelection` with the same `View` type.
-pub trait Selection2D: FieldSelection + DataSelection {}
+pub trait Selection2D: ColumnSelection + RowSelection {}
 
 /// Blanket implementation for any type that implements both traits
-impl<T> Selection2D for T
-where
-    T: FieldSelection + DataSelection<View = <T as FieldSelection>::View>,
-{}
-
-/// Extension trait for 3D selection (time/batch dimension)
-///
-/// TODO: Implement for Cube and CubeV when those types are added
-pub trait Selection3D: Selection2D {
-    /// Select along the time/batch dimension
-    fn t<S: DataSelector>(&self, selection: S) -> <Self as FieldSelection>::View;
-
-    /// Explicit alias for `.t()` - select time
-    fn time<S: DataSelector>(&self, selection: S) -> <Self as FieldSelection>::View {
-        self.t(selection)
-    }
-
-    /// Spatial alias for `.t()` - Z-axis (depth, time dimension)
-    fn z<S: DataSelector>(&self, selection: S) -> <Self as FieldSelection>::View {
-        self.t(selection)
-    }
-
-    /// Get the count for time resolution
-    fn get_time_count(&self) -> usize;
+impl<T> Selection2D for T where
+    T: ColumnSelection + RowSelection<View = <T as ColumnSelection>::View>
+{
 }
 
-/// Extension trait for 4D selection (space/semantic dimension)
-///
-/// TODO: Implement for 4D structures when those types are added
-pub trait Selection4D: Selection3D {
-    /// Select along the space/semantic dimension
-    fn s<S: DataSelector>(&self, selection: S) -> <Self as FieldSelection>::View;
-
-    /// Explicit alias for `.s()` - select space
-    fn space<S: DataSelector>(&self, selection: S) -> <Self as FieldSelection>::View {
-        self.s(selection)
-    }
-
-    /// Get the count for space resolution
-    fn get_space_count(&self) -> usize;
-}
-
-// FieldSelector implementations for common input types
-// ====================================================
 // These allow users to pass names, indices, and ranges when selecting fields.
-// For example: table.f("age"), table.f(&["name", "age"]), table.f(0..3)
+// For example: table.c("age"), table.c(&["name", "age"]), table.c(0..3)
 
 /// Single field by name
 impl FieldSelector for &str {
     fn resolve_fields(&self, fields: &[Arc<Field>]) -> Vec<usize> {
-        fields.iter()
+        fields
+            .iter()
             .position(|f| f.name == *self)
             .into_iter()
             .collect()
@@ -255,10 +222,8 @@ impl FieldSelector for RangeInclusive<usize> {
     }
 }
 
-// DataSelector implementations for common input types
-// ===================================================
 // These allow users to pass indices and ranges when selecting data (rows, time, etc.).
-// For example: table.d(5), table.d(&[1, 3, 5]), table.d(0..10)
+// For example: table.r(5), table.r(&[1, 3, 5]), table.r(0..10)
 
 /// Single data index
 impl DataSelector for usize {
@@ -274,30 +239,21 @@ impl DataSelector for usize {
 /// Multiple data indices
 impl DataSelector for &[usize] {
     fn resolve_indices(&self, count: usize) -> Vec<usize> {
-        self.iter()
-            .copied()
-            .filter(|&idx| idx < count)
-            .collect()
+        self.iter().copied().filter(|&idx| idx < count).collect()
     }
 }
 
 /// Multiple data indices (array reference)
 impl<const N: usize> DataSelector for &[usize; N] {
     fn resolve_indices(&self, count: usize) -> Vec<usize> {
-        self.iter()
-            .copied()
-            .filter(|&idx| idx < count)
-            .collect()
+        self.iter().copied().filter(|&idx| idx < count).collect()
     }
 }
 
 /// Multiple data indices (Vec)
 impl DataSelector for Vec<usize> {
     fn resolve_indices(&self, count: usize) -> Vec<usize> {
-        self.iter()
-            .copied()
-            .filter(|&idx| idx < count)
-            .collect()
+        self.iter().copied().filter(|&idx| idx < count).collect()
     }
 }
 
@@ -307,12 +263,20 @@ impl DataSelector for Range<usize> {
         let end = self.end.min(count);
         (self.start..end).collect()
     }
+
+    fn is_contiguous(&self) -> bool {
+        true
+    }
 }
 
 /// Data range from selection
 impl DataSelector for RangeFrom<usize> {
     fn resolve_indices(&self, count: usize) -> Vec<usize> {
         (self.start..count).collect()
+    }
+
+    fn is_contiguous(&self) -> bool {
+        true
     }
 }
 
@@ -322,12 +286,20 @@ impl DataSelector for RangeTo<usize> {
         let end = self.end.min(count);
         (0..end).collect()
     }
+
+    fn is_contiguous(&self) -> bool {
+        true
+    }
 }
 
 /// Data full range selection
 impl DataSelector for RangeFull {
     fn resolve_indices(&self, count: usize) -> Vec<usize> {
         (0..count).collect()
+    }
+
+    fn is_contiguous(&self) -> bool {
+        true
     }
 }
 
@@ -337,5 +309,9 @@ impl DataSelector for RangeInclusive<usize> {
         let start = *self.start();
         let end = (*self.end() + 1).min(count);
         (start..end).collect()
+    }
+
+    fn is_contiguous(&self) -> bool {
+        true
     }
 }

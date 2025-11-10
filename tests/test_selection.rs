@@ -2,8 +2,8 @@
 
 #![cfg(feature = "select")]
 
+use minarrow::traits::selection::{ColumnSelection, RowSelection};
 use minarrow::{Array, FieldArray, IntegerArray, MaskedArray, StringArray, Table};
-use minarrow::traits::selection::{FieldSelection, DataSelection};
 
 #[test]
 fn test_table_column_selection_by_names() {
@@ -160,10 +160,10 @@ fn test_to_table_respects_selections() {
     let view = table.c(&["id", "value"]).r(1..4);
 
     // Convert back to table
-    let materialized = view.to_table();
+    let materialised = view.to_table();
 
-    assert_eq!(materialized.n_cols(), 2);
-    assert_eq!(materialized.n_rows, 3);
+    assert_eq!(materialised.n_cols(), 2);
+    assert_eq!(materialised.n_rows, 3);
 }
 
 // ===== Tests for new extensible API (.f(), .d(), etc.) =====
@@ -173,17 +173,17 @@ fn test_field_selection_methods() {
     let table = create_test_table();
 
     // Test .f() method
-    let view1 = table.f(&["name", "value"]);
+    let view1 = table.c(&["name", "value"]);
     assert_eq!(view1.n_cols(), 2);
     assert_eq!(view1.col_names(), vec!["name", "value"]);
 
-    // Test .fields() alias
-    let view2 = table.fields(&["name", "value"]);
+    // Test .cols() alias
+    let view2 = table.c(&["name", "value"]);
     assert_eq!(view2.n_cols(), 2);
     assert_eq!(view2.col_names(), vec!["name", "value"]);
 
-    // Test .y() alias (spatial thinking)
-    let view3 = table.y(&["id", "value"]);
+    // Test .x() alias
+    let view3 = table.x(&["id", "value"]);
     assert_eq!(view3.n_cols(), 2);
     assert_eq!(view3.col_names(), vec!["id", "value"]);
 }
@@ -193,15 +193,15 @@ fn test_data_selection_methods() {
     let table = create_test_table();
 
     // Test .d() method
-    let view1 = table.d(1..4);
+    let view1 = table.r(1..4);
     assert_eq!(view1.n_rows(), 3);
 
     // Test .data() alias
-    let view2 = table.data(1..4);
+    let view2 = table.select_rows(1..4);
     assert_eq!(view2.n_rows(), 3);
 
-    // Test .x() alias (spatial thinking)
-    let view3 = table.x(&[0, 2, 4]);
+    // Test .x() alias
+    let view3 = table.y(&[0, 2, 4]);
     assert_eq!(view3.n_rows(), 3);
 }
 
@@ -210,22 +210,22 @@ fn test_mixed_api_chaining() {
     let table = create_test_table();
 
     // Chain .f() and .d()
-    let view1 = table.f(&["id", "value"]).d(1..4);
+    let view1 = table.c(&["id", "value"]).r(1..4);
     assert_eq!(view1.n_cols(), 2);
     assert_eq!(view1.n_rows(), 3);
 
     // Chain .c() (old) with .d() (new)
-    let view2 = table.c(&["id", "value"]).d(1..4);
+    let view2 = table.c(&["id", "value"]).r(1..4);
     assert_eq!(view2.n_cols(), 2);
     assert_eq!(view2.n_rows(), 3);
 
     // Chain .f() (new) with .r() (old)
-    let view3 = table.f(&["id", "value"]).r(1..4);
+    let view3 = table.c(&["id", "value"]).r(1..4);
     assert_eq!(view3.n_cols(), 2);
     assert_eq!(view3.n_rows(), 3);
 
     // Spatial aliases
-    let view4 = table.y(&["name"]).x(0..3);
+    let view4 = table.x(&["name"]).y(0..3);
     assert_eq!(view4.n_cols(), 1);
     assert_eq!(view4.n_rows(), 3);
 }
@@ -235,12 +235,12 @@ fn test_tablev_new_api_refinement() {
     let table = create_test_table();
 
     // Create initial view with .f() and .d()
-    let view1 = table.f(&["id", "name", "value"]).d(0..5);
+    let view1 = table.c(&["id", "name", "value"]).r(0..5);
     assert_eq!(view1.n_cols(), 3);
     assert_eq!(view1.n_rows(), 5);
 
     // Refine using new API
-    let view2 = view1.f(&["name", "value"]).d(&[1, 2, 3]);
+    let view2 = view1.c(&["name", "value"]).r(&[1, 2, 3]);
     assert_eq!(view2.n_cols(), 2);
     assert_eq!(view2.n_rows(), 3);
     assert_eq!(view2.col_names(), vec!["name", "value"]);
@@ -254,7 +254,7 @@ fn test_api_compatibility() {
     let view_old = table.c(&["id", "value"]).r(1..4);
 
     // New API (should produce identical results)
-    let view_new = table.f(&["id", "value"]).d(1..4);
+    let view_new = table.c(&["id", "value"]).r(1..4);
 
     assert_eq!(view_old.n_cols(), view_new.n_cols());
     assert_eq!(view_old.n_rows(), view_new.n_rows());
@@ -285,5 +285,8 @@ fn create_test_table() -> Table {
     let col_name = FieldArray::from_arr("name", Array::from_string32(name_arr));
     let col_value = FieldArray::from_arr("value", Array::from_int64(value_arr));
 
-    Table::new("TestTable".to_string(), Some(vec![col_id, col_name, col_value]))
+    Table::new(
+        "TestTable".to_string(),
+        Some(vec![col_id, col_name, col_value]),
+    )
 }

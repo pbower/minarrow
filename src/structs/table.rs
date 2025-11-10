@@ -26,12 +26,14 @@ use polars::prelude::Column;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use super::field_array::FieldArray;
-use crate::Field;
 #[cfg(all(feature = "views", feature = "select"))]
-use crate::traits::selection::{FieldSelector, DataSelector, FieldSelection, DataSelection};
+use crate::ArrayV;
+use crate::Field;
 #[cfg(feature = "views")]
 use crate::TableV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
+#[cfg(all(feature = "views", feature = "select"))]
+use crate::traits::selection::{ColumnSelection, DataSelector, FieldSelector, RowSelection};
 use crate::traits::{
     concatenate::Concatenate,
     print::{MAX_PREVIEW, print_ellipsis_row, print_header_row, print_rule, value_to_string},
@@ -239,6 +241,11 @@ impl Table {
         self.name = name.into();
     }
 
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.n_rows()
+    }
+
     /// Returns a new owned `Table` containing rows `[offset, offset+len)`.
     ///
     /// All columns are deeply copied, but only for the affected row(s).
@@ -265,55 +272,6 @@ impl Table {
         assert!(offset <= self.n_rows, "offset out of bounds");
         assert!(offset + len <= self.n_rows, "slice window out of bounds");
         TableV::from_table(self.clone(), offset, len)
-    }
-
-    /// Select columns by names, indices, or ranges (table-specific convenience method).
-    ///
-    /// This method delegates to `.f()` from the `Selection` trait.
-    /// For compatibility across dimensions, prefer using `.f()`, `.fields()`, or `.y()`.
-    ///
-    /// # Example
-    /// ```ignore
-    /// use minarrow::Table;
-    ///
-    /// // Select columns by names
-    /// let view = table.c(&["A", "B", "C"]);
-    ///
-    /// // Select columns by indices
-    /// let view = table.c(&[0, 1, 2]);
-    ///
-    /// // Select columns by range
-    /// let view = table.c(0..3);
-    ///
-    /// // Single column
-    /// let view = table.c("A");
-    /// ```
-    #[cfg(all(feature = "views", feature = "select"))]
-    pub fn c<S: FieldSelector>(&self, selection: S) -> TableV {
-        self.f(selection)
-    }
-
-    /// Select rows by indices or ranges (table-specific convenience method).
-    ///
-    /// This method delegates to `.d()` from the `Selection` trait.
-    /// For compatibility across dimensions, prefer using `.d()`, `.data()`, or `.x()`.
-    ///
-    /// # Example
-    /// ```ignore
-    /// use minarrow::Table;
-    ///
-    /// // Select rows by range
-    /// let view = table.r(10..20);
-    ///
-    /// // Select specific rows
-    /// let view = table.r(&[1, 5, 10, 15]);
-    ///
-    /// // Single row
-    /// let view = table.r(5);
-    /// ```
-    #[cfg(all(feature = "views", feature = "select"))]
-    pub fn r<S: DataSelector>(&self, selection: S) -> TableV {
-        self.d(selection)
     }
 
     /// Maps a function over a single column by name, returning the result.
@@ -653,34 +611,78 @@ impl Display for Table {
 // ===== Selection Trait Implementations =====
 
 #[cfg(all(feature = "views", feature = "select"))]
-impl FieldSelection for Table {
+impl ColumnSelection for Table {
     type View = TableV;
 
-    fn f<S: FieldSelector>(&self, selection: S) -> TableV {
-        let fields = self.cols.iter().map(|fa| fa.field.clone()).collect::<Vec<_>>();
+    fn c<S: FieldSelector>(&self, selection: S) -> TableV {
+        let fields = self
+            .cols
+            .iter()
+            .map(|fa| fa.field.clone())
+            .collect::<Vec<_>>();
         let col_indices = selection.resolve_fields(&fields);
-        let mut table_v = TableV::from(self.clone());
-        table_v.active_col_selection = Some(col_indices);
-        table_v
+
+        // Filter to selected columns
+        let selected_fields: Vec<Arc<Field>> = col_indices
+            .iter()
+            .filter_map(|&i| self.cols.get(i).map(|fa| fa.field.clone()))
+            .collect();
+        let selected_cols: Vec<ArrayV> = col_indices
+            .iter()
+            .filter_map(|&i| self.cols.get(i).map(|fa| ArrayV::from(fa.clone())))
+            .collect();
+
+        TableV {
+            name: self.name.clone(),
+            fields: selected_fields,
+            cols: selected_cols,
+            offset: 0,
+            len: self.n_rows,
+        }
     }
 
-    fn get_fields(&self) -> Vec<Arc<Field>> {
+    fn get_cols(&self) -> Vec<Arc<Field>> {
         self.cols.iter().map(|fa| fa.field.clone()).collect()
     }
 }
 
 #[cfg(all(feature = "views", feature = "select"))]
-impl DataSelection for Table {
+impl RowSelection for Table {
     type View = TableV;
 
-    fn d<S: DataSelector>(&self, selection: S) -> TableV {
-        let row_indices = selection.resolve_indices(self.n_rows);
-        let mut table_v = TableV::from(self.clone());
-        table_v.active_row_selection = Some(row_indices);
-        table_v
+    fn r<S: DataSelector>(&self, selection: S) -> TableV {
+        let table_v = TableV::from(self.clone());
+
+        if selection.is_contiguous() {
+            // Contiguous selection (ranges): adjust offset and len
+            let indices = selection.resolve_indices(self.n_rows);
+            if indices.is_empty() {
+                return TableV {
+                    name: self.name.clone(),
+                    fields: table_v.fields,
+                    cols: table_v.cols,
+                    offset: 0,
+                    len: 0,
+                };
+            }
+            let new_offset = indices[0];
+            let new_len = indices.len();
+            TableV {
+                name: self.name.clone(),
+                fields: table_v.fields,
+                cols: table_v.cols,
+                offset: new_offset,
+                len: new_len,
+            }
+        } else {
+            // Non-contiguous selection (index arrays): materialise
+            let indices = selection.resolve_indices(self.n_rows);
+            let materialised_table = table_v.gather_rows(&indices);
+            TableV::from(materialised_table)
+        }
     }
 
-    fn get_data_count(&self) -> usize {
+    fn get_row_count(&self) -> usize {
         self.n_rows
     }
 }

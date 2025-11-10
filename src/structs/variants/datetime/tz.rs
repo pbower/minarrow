@@ -9,11 +9,11 @@
 //! However, these are based on static entries. If you have any specific
 //! Datetime timezone requirements, you are responsible for checking and verifying
 //! them.
-//! 
-//! If you would like to update a timezone, please file a PR or issue. 
+//!
+//! If you would like to update a timezone, please file a PR or issue.
 
 #[cfg(feature = "datetime_ops")]
-use phf::{phf_map, Map};
+use phf::{Map, phf_map};
 
 /// Timezone information including standard and DST offsets with abbreviations
 #[cfg(feature = "datetime_ops")]
@@ -580,11 +580,19 @@ mod tests {
     #[test]
     fn test_all_timezones_have_valid_offsets() {
         for (tz_name, tz_info) in &TZ_DATABASE {
-            assert!(is_offset_string(tz_info.std_offset),
-                "Invalid std_offset for {}: {}", tz_name, tz_info.std_offset);
+            assert!(
+                is_offset_string(tz_info.std_offset),
+                "Invalid std_offset for {}: {}",
+                tz_name,
+                tz_info.std_offset
+            );
             if !tz_info.dst_offset.is_empty() {
-                assert!(is_offset_string(tz_info.dst_offset),
-                    "Invalid dst_offset for {}: {}", tz_name, tz_info.dst_offset);
+                assert!(
+                    is_offset_string(tz_info.dst_offset),
+                    "Invalid dst_offset for {}: {}",
+                    tz_name,
+                    tz_info.dst_offset
+                );
             }
         }
     }

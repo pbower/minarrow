@@ -18,6 +18,8 @@ use arrow::array::ArrayRef;
 #[cfg(feature = "cast_polars")]
 use polars::series::Series;
 
+#[cfg(all(feature = "select", feature = "views"))]
+use crate::ArrayV;
 #[cfg(feature = "views")]
 use crate::aliases::FieldAVT;
 use crate::enums::error::MinarrowError;
@@ -25,14 +27,12 @@ use crate::enums::shape_dim::ShapeDim;
 use crate::ffi::arrow_dtype::ArrowType;
 use crate::ffi::arrow_dtype::CategoricalIndexType;
 use crate::traits::concatenate::Concatenate;
+#[cfg(all(feature = "select", feature = "views"))]
+use crate::traits::selection::{DataSelector, RowSelection};
 use crate::traits::shape::Shape;
 use crate::{Array, Field, NumericArray, TextArray};
 #[cfg(feature = "datetime")]
 use crate::{TemporalArray, TimeUnit};
-#[cfg(all(feature = "select", feature = "views"))]
-use crate::traits::selection::{DataSelector, DataSelection};
-#[cfg(all(feature = "select", feature = "views"))]
-use crate::ArrayV;
 
 /// # FieldArray
 ///
@@ -430,11 +430,7 @@ fn format_field_array_with_timezone(
 }
 
 #[cfg(feature = "datetime")]
-fn format_datetime_with_tz<T>(
-    arr: &crate::DatetimeArray<T>,
-    idx: usize,
-    timezone: &str,
-) -> String
+fn format_datetime_with_tz<T>(arr: &crate::DatetimeArray<T>, idx: usize, timezone: &str) -> String
 where
     T: crate::Integer + std::fmt::Display,
 {
@@ -513,18 +509,27 @@ impl Concatenate for FieldArray {
 // ===== Selection Trait Implementation =====
 
 #[cfg(all(feature = "select", feature = "views"))]
-impl DataSelection for FieldArray {
+impl RowSelection for FieldArray {
     type View = ArrayV;
 
-    fn d<S: DataSelector>(&self, selection: S) -> ArrayV {
-        // Select rows from the array
-        let row_indices = selection.resolve_indices(self.array.len());
-        let mut view = ArrayV::from(self.array.clone());
-        view.active_data_selection = Some(row_indices);
-        view
+    fn r<S: DataSelector>(&self, selection: S) -> ArrayV {
+        if selection.is_contiguous() {
+            // Contiguous selection (ranges): adjust offset and len
+            let indices = selection.resolve_indices(self.array.len());
+            if indices.is_empty() {
+                return ArrayV::new(self.array.clone(), 0, 0);
+            }
+            ArrayV::new(self.array.clone(), indices[0], indices.len())
+        } else {
+            // Non-contiguous selection (index arrays): gather into new array
+            let view = ArrayV::from(self.array.clone());
+            let indices = selection.resolve_indices(self.array.len());
+            let gathered_array = view.gather_indices(&indices);
+            ArrayV::new(gathered_array, 0, indices.len())
+        }
     }
 
-    fn get_data_count(&self) -> usize {
+    fn get_row_count(&self) -> usize {
         self.array.len()
     }
 }

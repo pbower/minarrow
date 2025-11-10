@@ -382,14 +382,14 @@ impl Shape for TemporalArrayV {
 }
 
 impl Concatenate for TemporalArrayV {
-    /// Concatenates two temporal array views by materializing both to owned temporal arrays,
+    /// Concatenates two temporal array views by materialising both to owned temporal arrays,
     /// concatenating them, and wrapping the result back in a view.
     ///
     /// # Notes
     /// - This operation copies data from both views to create owned temporal arrays.
     /// - The resulting view has offset=0 and length equal to the combined length.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
-        // Materialize both views to owned temporal arrays
+        // Materialise both views to owned temporal arrays
         let self_array = self.to_temporal_array();
         let other_array = other.to_temporal_array();
 

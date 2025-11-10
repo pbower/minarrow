@@ -166,7 +166,11 @@ pub(crate) fn format_float<T: Float + Display>(v: T) -> String {
 }
 
 #[cfg(feature = "datetime")]
-pub(crate) fn format_datetime_value<T>(arr: &DatetimeArray<T>, idx: usize, timezone: Option<&str>) -> String
+pub(crate) fn format_datetime_value<T>(
+    arr: &DatetimeArray<T>,
+    idx: usize,
+    timezone: Option<&str>,
+) -> String
 where
     T: Integer + std::fmt::Display,
 {
@@ -263,8 +267,8 @@ fn format_with_timezone(utc_dt: time::OffsetDateTime, tz: &str) -> String {
 
 #[cfg(all(feature = "datetime", feature = "datetime_ops"))]
 fn parse_timezone_offset(tz: &str) -> Option<time::UtcOffset> {
-    use time::UtcOffset;
     use crate::structs::variants::datetime::tz::lookup_timezone;
+    use time::UtcOffset;
 
     // First try timezone database lookup (handles IANA IDs, abbreviations, and direct offsets)
     let tz_offset = lookup_timezone(tz)?;

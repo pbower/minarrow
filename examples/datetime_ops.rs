@@ -8,8 +8,8 @@
 
 #[cfg(feature = "datetime_ops")]
 fn main() {
-    use minarrow::{DatetimeArray, FieldArray, MaskedArray, Print, TimeUnit};
     use minarrow::ffi::arrow_dtype::ArrowType;
+    use minarrow::{DatetimeArray, FieldArray, MaskedArray, Print, TimeUnit};
     use time::Duration;
 
     println!("  Minarrow Datetime Operations Example");
@@ -177,14 +177,12 @@ fn main() {
         }
     }
 
-
-    // FieldArray with Timezone Metadata 
+    // FieldArray with Timezone Metadata
     println!("\n--- FieldArray with Timezone Metadata ---");
     println!("\nFieldArray allows timezone to be encoded in the ArrowType metadata,");
     println!("creating a self-describing datetime column with permanent timezone info.");
     println!("This is the standard pattern Tables with tz-aware columns leverage.");
     println!("After these examples, we will look at inline Tz cases.");
-
 
     // Example 1: Single FieldArray with timezone
     println!("\n1. FieldArray with Sydney timezone:");
@@ -213,7 +211,8 @@ fn main() {
     println!("\n2. Multiple FieldArrays with different timezones:");
 
     // New York events (EST/EDT)
-    let ny_events = DatetimeArray::<i64>::from_slice(&[1_700_000_000, 1_700_086_400], Some(TimeUnit::Seconds));
+    let ny_events =
+        DatetimeArray::<i64>::from_slice(&[1_700_000_000, 1_700_086_400], Some(TimeUnit::Seconds));
     let ny_field_array = FieldArray::from_parts(
         "ny_time",
         ArrowType::Timestamp(TimeUnit::Seconds, Some("America/New_York".to_string())),
@@ -223,7 +222,8 @@ fn main() {
     );
 
     // Tokyo events (JST)
-    let tokyo_events = DatetimeArray::<i64>::from_slice(&[1_700_000_000, 1_700_086_400], Some(TimeUnit::Seconds));
+    let tokyo_events =
+        DatetimeArray::<i64>::from_slice(&[1_700_000_000, 1_700_086_400], Some(TimeUnit::Seconds));
     let tokyo_field_array = FieldArray::from_parts(
         "tokyo_time",
         ArrowType::Timestamp(TimeUnit::Seconds, Some("Asia/Tokyo".to_string())),
@@ -285,7 +285,6 @@ fn main() {
             println!("  [{}] {}", i, dt);
         }
     }
-
 
     // Inline Timezone Operations
     println!("\n--- Inline Timezone Operations ---");

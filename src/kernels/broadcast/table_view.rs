@@ -124,10 +124,6 @@ pub fn broadcast_tableview_to_arrayview(
         cols: new_cols?,
         offset: table_view.offset,
         len: table_view.len,
-        #[cfg(feature = "select")]
-        active_col_selection: table_view.active_col_selection.clone(),
-        #[cfg(feature = "select")]
-        active_row_selection: table_view.active_row_selection.clone(),
     })
 }
 

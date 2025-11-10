@@ -191,7 +191,7 @@ impl Shape for SuperArrayV {
 }
 
 impl Concatenate for SuperArrayV {
-    /// Concatenates two super array views by materializing both to owned arrays,
+    /// Concatenates two super array views by materialising both to owned arrays,
     /// concatenating them, and wrapping the result back in a view.
     ///
     /// # Notes
@@ -199,7 +199,7 @@ impl Concatenate for SuperArrayV {
     /// - The resulting view contains a single slice wrapping the concatenated array.
     /// - The field metadata from the first view is preserved.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
-        // Materialize both views to owned arrays
+        // Materialise both views to owned arrays
         let self_array = self.copy_to_array();
         let other_array = other.copy_to_array();
 

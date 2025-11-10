@@ -85,6 +85,8 @@ impl SuperTableV {
         self.slices[0].fields.iter().map(|x| x.clone()).collect()
     }
 
+    // TODO: Must respect active selections
+
     /// Iterator over slice‐level `TableSlice`s.
     #[inline]
     pub fn chunks(&self) -> impl Iterator<Item = &TableV> {
@@ -191,14 +193,14 @@ impl Shape for SuperTableV {
 }
 
 impl Concatenate for SuperTableV {
-    /// Concatenates two super table views by materializing both to owned tables,
+    /// Concatenates two super table views by materialising both to owned tables,
     /// concatenating them, and wrapping the result back in a view.
     ///
     /// # Notes
     /// - This operation copies data from both views to create owned tables.
     /// - The resulting view contains a single slice wrapping the concatenated table.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
-        // Materialize both views to owned tables
+        // Materialise both views to owned tables
         let self_table = self.to_table(None);
         let other_table = other.to_table(None);
 

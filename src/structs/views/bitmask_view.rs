@@ -264,14 +264,14 @@ impl Shape for BitmaskV {
 }
 
 impl Concatenate for BitmaskV {
-    /// Concatenates two bitmask views by materializing both to owned bitmasks,
+    /// Concatenates two bitmask views by materialising both to owned bitmasks,
     /// concatenating them, and wrapping the result back in a view.
     ///
     /// # Notes
     /// - This operation copies data from both views to create owned bitmasks.
     /// - The resulting view has offset=0 and length equal to the combined length.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
-        // Materialize both views to owned bitmasks
+        // Materialise both views to owned bitmasks
         let self_bitmask = self.to_bitmask();
         let other_bitmask = other.to_bitmask();
 

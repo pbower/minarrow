@@ -23,7 +23,7 @@ use crate::Matrix;
 #[cfg(feature = "scalar_type")]
 use crate::Scalar;
 use crate::{
-    Array, Bitmask, BooleanArray, Field, FieldArray, FloatArray, IntegerArray, StringArray, Table,
+    Array, BooleanArray, FieldArray, FloatArray, IntegerArray, StringArray, Table,
     enums::error::MinarrowError, enums::shape_dim::ShapeDim, traits::concatenate::Concatenate,
     traits::custom_value::CustomValue, traits::shape::Shape,
 };
@@ -33,18 +33,11 @@ use crate::DatetimeArray;
 use std::convert::TryFrom;
 use std::{convert::From, sync::Arc};
 
-#[cfg(feature = "views")]
-use crate::{NumericArrayV, TextArrayV};
-
-#[cfg(feature = "views")]
-#[cfg(feature = "datetime")]
-use crate::TemporalArrayV;
-
 #[cfg(feature = "chunked")]
 use crate::{SuperArray, SuperTable};
 
 #[cfg(feature = "views")]
-use crate::{ArrayV, BitmaskV, TableV};
+use crate::{ArrayV, TableV};
 
 #[cfg(all(feature = "chunked", feature = "views"))]
 use crate::{SuperArrayV, SuperTableV};
@@ -74,18 +67,10 @@ pub enum Value {
     Array(Arc<Array>),
     #[cfg(feature = "views")]
     ArrayView(Arc<ArrayV>),
+    FieldArray(Arc<FieldArray>),
     Table(Arc<Table>),
     #[cfg(feature = "views")]
     TableView(Arc<TableV>),
-    #[cfg(all(feature = "views", feature = "views"))]
-    NumericArrayView(Arc<NumericArrayV>),
-    #[cfg(all(feature = "views", feature = "views"))]
-    TextArrayView(Arc<TextArrayV>),
-    #[cfg(all(feature = "views", feature = "datetime"))]
-    TemporalArrayView(Arc<TemporalArrayV>),
-    Bitmask(Arc<Bitmask>),
-    #[cfg(feature = "views")]
-    BitmaskView(Arc<BitmaskV>),
     #[cfg(feature = "chunked")]
     SuperArray(Arc<SuperArray>),
     #[cfg(all(feature = "chunked", feature = "views"))]
@@ -94,8 +79,6 @@ pub enum Value {
     SuperTable(Arc<SuperTable>),
     #[cfg(all(feature = "chunked", feature = "views"))]
     SuperTableView(Arc<SuperTableV>),
-    FieldArray(Arc<FieldArray>),
-    Field(Arc<Field>),
     #[cfg(feature = "matrix")]
     Matrix(Arc<Matrix>),
     #[cfg(feature = "cube")]
@@ -139,15 +122,6 @@ impl PartialEq for Value {
             (Table(a), Table(b)) => **a == **b,
             #[cfg(feature = "views")]
             (TableView(a), TableView(b)) => **a == **b,
-            #[cfg(feature = "views")]
-            (NumericArrayView(a), NumericArrayView(b)) => a == b,
-            #[cfg(feature = "views")]
-            (TextArrayView(a), TextArrayView(b)) => a == b,
-            #[cfg(all(feature = "views", feature = "datetime"))]
-            (TemporalArrayView(a), TemporalArrayView(b)) => a == b,
-            (Bitmask(a), Bitmask(b)) => a == b,
-            #[cfg(feature = "views")]
-            (BitmaskView(a), BitmaskView(b)) => a == b,
             #[cfg(feature = "chunked")]
             (SuperArray(a), SuperArray(b)) => a == b,
             #[cfg(all(feature = "chunked", feature = "views"))]
@@ -155,7 +129,6 @@ impl PartialEq for Value {
             #[cfg(feature = "chunked")]
             (SuperTable(a), SuperTable(b)) => **a == **b,
             (FieldArray(a), FieldArray(b)) => **a == **b,
-            (Field(a), Field(b)) => a == b,
             #[cfg(feature = "matrix")]
             (Matrix(a), Matrix(b)) => a == b,
             #[cfg(feature = "cube")]
@@ -262,53 +235,6 @@ impl From<Cube> for Value {
     #[inline]
     fn from(v: Cube) -> Self {
         Value::Cube(Arc::new(v))
-    }
-}
-
-// Non-Arc-wrapped types (small types) - now need Arc wrapping
-impl From<Bitmask> for Value {
-    #[inline]
-    fn from(v: Bitmask) -> Self {
-        Value::Bitmask(Arc::new(v))
-    }
-}
-
-#[cfg(feature = "views")]
-impl From<BitmaskV> for Value {
-    #[inline]
-    fn from(v: BitmaskV) -> Self {
-        Value::BitmaskView(Arc::new(v))
-    }
-}
-
-impl From<Field> for Value {
-    #[inline]
-    fn from(v: Field) -> Self {
-        Value::Field(Arc::new(v))
-    }
-}
-
-#[cfg(feature = "views")]
-impl From<NumericArrayV> for Value {
-    #[inline]
-    fn from(v: NumericArrayV) -> Self {
-        Value::NumericArrayView(Arc::new(v))
-    }
-}
-
-#[cfg(feature = "views")]
-impl From<TextArrayV> for Value {
-    #[inline]
-    fn from(v: TextArrayV) -> Self {
-        Value::TextArrayView(Arc::new(v))
-    }
-}
-
-#[cfg(all(feature = "datetime", feature = "views"))]
-impl From<TemporalArrayV> for Value {
-    #[inline]
-    fn from(v: TemporalArrayV) -> Self {
-        Value::TemporalArrayView(Arc::new(v))
     }
 }
 
@@ -441,105 +367,6 @@ impl TryFrom<Value> for Cube {
             _ => Err(MinarrowError::TypeError {
                 from: "Value",
                 to: "Cube",
-                message: Some("Value type mismatch".to_owned()),
-            }),
-        }
-    }
-}
-
-// TryFrom for Arc-wrapped types
-impl TryFrom<Value> for Bitmask {
-    type Error = MinarrowError;
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
-        match v {
-            Value::Bitmask(inner) => {
-                Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone()))
-            }
-            _ => Err(MinarrowError::TypeError {
-                from: "Value",
-                to: "Bitmask",
-                message: Some("Value type mismatch".to_owned()),
-            }),
-        }
-    }
-}
-
-#[cfg(feature = "views")]
-impl TryFrom<Value> for BitmaskV {
-    type Error = MinarrowError;
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
-        match v {
-            Value::BitmaskView(inner) => {
-                Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone()))
-            }
-            _ => Err(MinarrowError::TypeError {
-                from: "Value",
-                to: "BitmaskV",
-                message: Some("Value type mismatch".to_owned()),
-            }),
-        }
-    }
-}
-
-impl TryFrom<Value> for Field {
-    type Error = MinarrowError;
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
-        match v {
-            Value::Field(inner) => Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone())),
-            _ => Err(MinarrowError::TypeError {
-                from: "Value",
-                to: "Field",
-                message: Some("Value type mismatch".to_owned()),
-            }),
-        }
-    }
-}
-
-#[cfg(feature = "views")]
-impl TryFrom<Value> for NumericArrayV {
-    type Error = MinarrowError;
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
-        match v {
-            Value::NumericArrayView(inner) => {
-                Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone()))
-            }
-            _ => Err(MinarrowError::TypeError {
-                from: "Value",
-                to: "NumericArrayV",
-                message: Some("Value type mismatch".to_owned()),
-            }),
-        }
-    }
-}
-
-#[cfg(feature = "views")]
-impl TryFrom<Value> for TextArrayV {
-    type Error = MinarrowError;
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
-        match v {
-            Value::TextArrayView(inner) => {
-                Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone()))
-            }
-            _ => Err(MinarrowError::TypeError {
-                from: "Value",
-                to: "TextArrayV",
-                message: Some("Value type mismatch".to_owned()),
-            }),
-        }
-    }
-}
-
-#[cfg(all(feature = "datetime", feature = "views"))]
-impl TryFrom<Value> for TemporalArrayV {
-    type Error = MinarrowError;
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
-        match v {
-            Value::TemporalArrayView(inner) => {
-                Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone()))
-            }
-            _ => Err(MinarrowError::TypeError {
-                from: "Value",
-                to: "TemporalArrayV",
                 message: Some("Value type mismatch".to_owned()),
             }),
         }
@@ -730,15 +557,6 @@ impl Shape for Value {
             Value::Table(table) => table.shape(),
             #[cfg(feature = "views")]
             Value::TableView(table_view) => table_view.shape(),
-            #[cfg(all(feature = "views", feature = "views"))]
-            Value::NumericArrayView(numeric_view) => numeric_view.shape(),
-            #[cfg(all(feature = "views", feature = "views"))]
-            Value::TextArrayView(text_view) => text_view.shape(),
-            #[cfg(all(feature = "views", feature = "datetime"))]
-            Value::TemporalArrayView(temporal_view) => temporal_view.shape(),
-            Value::Bitmask(bitmask) => bitmask.shape(),
-            #[cfg(feature = "views")]
-            Value::BitmaskView(bitmask_view) => bitmask_view.shape(),
             #[cfg(feature = "chunked")]
             Value::SuperArray(chunked_array) => ShapeDim::Rank1(chunked_array.len()),
             #[cfg(all(feature = "chunked", feature = "views"))]
@@ -754,7 +572,6 @@ impl Shape for Value {
                 cols: chunked_view.n_cols(),
             },
             Value::FieldArray(field_array) => field_array.shape(),
-            Value::Field(_) => ShapeDim::Rank0(1),
             #[cfg(feature = "matrix")]
             Value::Matrix(matrix) => matrix.shape(),
             #[cfg(feature = "cube")]
@@ -1082,9 +899,7 @@ impl Concatenate for Value {
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
         use Value::*;
         match (self, other) {
-            // ─────────────────────────────────────────────────────────────────
             // Scalar + Scalar -> Array (length 2)
-            // ─────────────────────────────────────────────────────────────────
             #[cfg(feature = "scalar_type")]
             (Scalar(a), Scalar(b)) => {
                 use crate::Scalar::*;
@@ -1176,36 +991,21 @@ impl Concatenate for Value {
                 }
             }
 
-            // ─────────────────────────────────────────────────────────────────
             // Array + Array -> Array
-            // ─────────────────────────────────────────────────────────────────
             (Array(a), Array(b)) => {
                 let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
                 let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
                 Ok(Value::Array(Arc::new(a.concat(b)?)))
             }
 
-            // ─────────────────────────────────────────────────────────────────
             // Table + Table -> Table
-            // ─────────────────────────────────────────────────────────────────
             (Table(a), Table(b)) => {
                 let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
                 let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
                 Ok(Value::Table(Arc::new(a.concat(b)?)))
             }
 
-            // ─────────────────────────────────────────────────────────────────
-            // Bitmask + Bitmask -> Bitmask
-            // ─────────────────────────────────────────────────────────────────
-            (Bitmask(a), Bitmask(b)) => {
-                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
-                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
-                Ok(Value::Bitmask(Arc::new(a.concat(b)?)))
-            }
-
-            // ─────────────────────────────────────────────────────────────────
             // Matrix + Matrix -> Matrix
-            // ─────────────────────────────────────────────────────────────────
             #[cfg(feature = "matrix")]
             (Matrix(a), Matrix(b)) => {
                 let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
@@ -1213,9 +1013,7 @@ impl Concatenate for Value {
                 Ok(Value::Matrix(Arc::new(a.concat(b)?)))
             }
 
-            // ─────────────────────────────────────────────────────────────────
             // Cube + Cube -> Cube
-            // ─────────────────────────────────────────────────────────────────
             #[cfg(feature = "cube")]
             (Cube(a), Cube(b)) => {
                 let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
@@ -1223,9 +1021,7 @@ impl Concatenate for Value {
                 Ok(Value::Cube(Arc::new(a.concat(b)?)))
             }
 
-            // ─────────────────────────────────────────────────────────────────
             // Chunked types
-            // ─────────────────────────────────────────────────────────────────
             #[cfg(feature = "chunked")]
             (SuperArray(a), SuperArray(b)) => {
                 let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
@@ -1240,9 +1036,7 @@ impl Concatenate for Value {
                 Ok(Value::SuperTable(Arc::new(a.concat(b)?)))
             }
 
-            // ─────────────────────────────────────────────────────────────────
             // Tuples (element-wise concatenation, recursive)
-            // ─────────────────────────────────────────────────────────────────
             (Tuple2(a_arc), Tuple2(b_arc)) => {
                 let (a1, a2) = Arc::try_unwrap(a_arc).unwrap_or_else(|arc| (*arc).clone());
                 let (b1, b2) = Arc::try_unwrap(b_arc).unwrap_or_else(|arc| (*arc).clone());
@@ -1297,9 +1091,7 @@ impl Concatenate for Value {
                 Ok(Value::Tuple6(Arc::new((c1, c2, c3, c4, c5, c6))))
             }
 
-            // ─────────────────────────────────────────────────────────────────
             // Recursive containers (Box, Arc)
-            // ─────────────────────────────────────────────────────────────────
             (BoxValue(a), BoxValue(b)) => {
                 let result = (*a).concat(*b)?;
                 Ok(Value::BoxValue(Box::new(result)))
@@ -1312,9 +1104,7 @@ impl Concatenate for Value {
                 Ok(Value::ArcValue(Arc::new(result)))
             }
 
-            // ─────────────────────────────────────────────────────────────────
-            // Views (materialize to owned, concat, wrap back in view)
-            // ─────────────────────────────────────────────────────────────────
+            // Views (materialise to owned, concat, wrap back in view)
             #[cfg(feature = "views")]
             (ArrayView(a), ArrayView(b)) => {
                 let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
@@ -1327,34 +1117,6 @@ impl Concatenate for Value {
                 let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
                 let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
                 Ok(Value::TableView(Arc::new(a.concat(b)?)))
-            }
-
-            #[cfg(feature = "views")]
-            (NumericArrayView(a), NumericArrayView(b)) => {
-                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
-                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
-                Ok(Value::NumericArrayView(Arc::new(a.concat(b)?)))
-            }
-
-            #[cfg(feature = "views")]
-            (TextArrayView(a), TextArrayView(b)) => {
-                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
-                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
-                Ok(Value::TextArrayView(Arc::new(a.concat(b)?)))
-            }
-
-            #[cfg(all(feature = "views", feature = "datetime"))]
-            (TemporalArrayView(a), TemporalArrayView(b)) => {
-                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
-                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
-                Ok(Value::TemporalArrayView(Arc::new(a.concat(b)?)))
-            }
-
-            #[cfg(feature = "views")]
-            (BitmaskView(a), BitmaskView(b)) => {
-                let a = Arc::try_unwrap(a).unwrap_or_else(|arc| (*arc).clone());
-                let b = Arc::try_unwrap(b).unwrap_or_else(|arc| (*arc).clone());
-                Ok(Value::BitmaskView(Arc::new(a.concat(b)?)))
             }
 
             #[cfg(all(feature = "chunked", feature = "views"))]
@@ -1406,17 +1168,6 @@ impl Concatenate for Value {
                 Ok(Value::VecValue(Arc::new(result)))
             }
 
-            // ─────────────────────────────────────────────────────────────────
-            // Unsupported combinations (intentionally not implemented)
-            // ─────────────────────────────────────────────────────────────────
-
-            // Field is metadata only, not data - cannot be concatenated
-            (Field(_), Field(_)) => Err(MinarrowError::IncompatibleTypeError {
-                from: "Field",
-                to: "Field",
-                message: Some("Cannot concatenate Field - fields are metadata".to_string()),
-            }),
-
             // Custom values cannot be concatenated (no generic way to do it)
             (Custom(_), Custom(_)) => Err(MinarrowError::IncompatibleTypeError {
                 from: "Custom",
@@ -1424,9 +1175,7 @@ impl Concatenate for Value {
                 message: Some("Cannot concatenate Custom values".to_string()),
             }),
 
-            // ─────────────────────────────────────────────────────────────────
             // Mismatched types
-            // ─────────────────────────────────────────────────────────────────
             (lhs, rhs) => Err(MinarrowError::IncompatibleTypeError {
                 from: "Value",
                 to: "Value",
@@ -1484,15 +1233,6 @@ fn value_variant_name(value: &Value) -> &'static str {
         Value::Table(_) => "Table",
         #[cfg(feature = "views")]
         Value::TableView(_) => "TableView",
-        #[cfg(feature = "views")]
-        Value::NumericArrayView(_) => "NumericArrayView",
-        #[cfg(feature = "views")]
-        Value::TextArrayView(_) => "TextArrayView",
-        #[cfg(all(feature = "views", feature = "datetime"))]
-        Value::TemporalArrayView(_) => "TemporalArrayView",
-        Value::Bitmask(_) => "Bitmask",
-        #[cfg(feature = "views")]
-        Value::BitmaskView(_) => "BitmaskView",
         #[cfg(feature = "chunked")]
         Value::SuperArray(_) => "SuperArray",
         #[cfg(all(feature = "chunked", feature = "views"))]
@@ -1502,7 +1242,6 @@ fn value_variant_name(value: &Value) -> &'static str {
         #[cfg(all(feature = "chunked", feature = "views"))]
         Value::SuperTableView(_) => "SuperTableView",
         Value::FieldArray(_) => "FieldArray",
-        Value::Field(_) => "Field",
         #[cfg(feature = "matrix")]
         Value::Matrix(_) => "Matrix",
         #[cfg(feature = "cube")]

@@ -390,9 +390,9 @@ pub fn broadcast_tableview_to_cube(
     })
 }
 
-/// Helper: Materialize SuperArray into a single contiguous Array by concatenating chunks
+/// Helper: Materialise SuperArray into a single contiguous Array by concatenating chunks
 #[cfg(feature = "chunked")]
-fn materialize_super_array(super_array: &crate::SuperArray) -> Result<Array, MinarrowError> {
+fn materialise_super_array(super_array: &crate::SuperArray) -> Result<Array, MinarrowError> {
     use crate::NumericArray;
 
     let chunks = super_array.chunks();
@@ -473,7 +473,7 @@ fn materialize_super_array(super_array: &crate::SuperArray) -> Result<Array, Min
             // For other types, fall back to slower clone-based concatenation
             Err(MinarrowError::NotImplemented {
                 feature: format!(
-                    "Materialization not yet implemented for array type: {:?}",
+                    "Materialisation not yet implemented for array type: {:?}",
                     first_array
                 ),
             })
@@ -481,16 +481,16 @@ fn materialize_super_array(super_array: &crate::SuperArray) -> Result<Array, Min
     }
 }
 
-/// Helper: Materialize SuperArrayView into a single contiguous Array by concatenating view slices
+/// Helper: Materialise SuperArrayView into a single contiguous Array by concatenating view slices
 #[cfg(all(feature = "chunked", feature = "views"))]
-fn materialize_super_array_view(
+fn materialise_super_array_view(
     super_array_view: &crate::SuperArrayV,
 ) -> Result<Array, MinarrowError> {
     if super_array_view.slices.is_empty() {
         return Ok(Array::Null);
     }
 
-    // Materialize first slice to determine type
+    // Materialise first slice to determine type
     let first_array = super_array_view.slices[0].to_array();
 
     use crate::NumericArray;
@@ -564,7 +564,7 @@ fn materialize_super_array_view(
             Ok(Array::from_float64(FloatArray::from_vec(all_values, None)))
         }
         _ => Err(MinarrowError::NotImplemented {
-            feature: "SuperArrayView materialization for this array type".to_string(),
+            feature: "SuperArrayView materialisation for this array type".to_string(),
         }),
     }
 }
@@ -769,14 +769,14 @@ pub fn broadcast_superarray_to_cube(
         });
     }
 
-    // Materialize SuperArray chunks into a single array for efficient broadcasting
+    // Materialise SuperArray chunks into a single array for efficient broadcasting
     // Concatenate all chunks into one contiguous array
-    let materialized_array = materialize_super_array(super_array)?;
+    let materialised_array = materialise_super_array(super_array)?;
 
-    // Broadcast materialized array to each table in the cube
+    // Broadcast materialised array to each table in the cube
     let mut result_tables = Vec::with_capacity(cube.tables.len());
     for table in &cube.tables {
-        let broadcasted = broadcast_array_to_table(op, &materialized_array, table)?;
+        let broadcasted = broadcast_array_to_table(op, &materialised_array, table)?;
         result_tables.push(broadcasted);
     }
 
@@ -826,13 +826,13 @@ pub fn broadcast_cube_to_superarray(
         });
     }
 
-    // Materialize SuperArray chunks into a single array for efficient broadcasting
-    let materialized_array = materialize_super_array(super_array)?;
+    // Materialise SuperArray chunks into a single array for efficient broadcasting
+    let materialised_array = materialise_super_array(super_array)?;
 
-    // Broadcast each table to the materialized array
+    // Broadcast each table to the materialised array
     let mut result_tables = Vec::with_capacity(cube.tables.len());
     for table in &cube.tables {
-        let broadcasted = broadcast_table_to_array(op, table, &materialized_array)?;
+        let broadcasted = broadcast_table_to_array(op, table, &materialised_array)?;
         result_tables.push(broadcasted);
     }
 
@@ -935,13 +935,13 @@ pub fn broadcast_superarrayview_to_cube(
         });
     }
 
-    // Materialize view slices using helper
-    let materialized = materialize_super_array_view(super_array_view)?;
+    // Materialise view slices using helper
+    let materialised = materialise_super_array_view(super_array_view)?;
 
     // Broadcast to each table
     let mut result_tables = Vec::with_capacity(cube.tables.len());
     for table in &cube.tables {
-        let broadcasted = broadcast_array_to_table(op, &materialized, table)?;
+        let broadcasted = broadcast_array_to_table(op, &materialised, table)?;
         result_tables.push(broadcasted);
     }
 
@@ -990,13 +990,13 @@ pub fn broadcast_cube_to_superarrayview(
         });
     }
 
-    // Materialize view slices using helper
-    let materialized = materialize_super_array_view(super_array_view)?;
+    // Materialise view slices using helper
+    let materialised = materialise_super_array_view(super_array_view)?;
 
-    // Broadcast each table to the materialized array
+    // Broadcast each table to the materialised array
     let mut result_tables = Vec::with_capacity(cube.tables.len());
     for table in &cube.tables {
-        let broadcasted = broadcast_table_to_array(op, table, &materialized)?;
+        let broadcasted = broadcast_table_to_array(op, table, &materialised)?;
         result_tables.push(broadcasted);
     }
 

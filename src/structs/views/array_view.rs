@@ -34,10 +34,10 @@ use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
+#[cfg(feature = "select")]
+use crate::traits::selection::{DataSelector, RowSelection};
 use crate::traits::shape::Shape;
 use crate::{Array, BitmaskV, FieldArray, MaskedArray, TextArray};
-#[cfg(feature = "select")]
-use crate::traits::selection::{DataSelector, DataSelection};
 
 /// # ArrayView
 ///
@@ -64,9 +64,6 @@ pub struct ArrayV {
     pub offset: usize,
     len: usize,
     null_count: OnceLock<usize>,
-
-    #[cfg(feature = "select")]
-    pub active_data_selection: Option<Vec<usize>>,
 }
 
 impl ArrayV {
@@ -84,8 +81,6 @@ impl ArrayV {
             offset,
             len,
             null_count: OnceLock::new(),
-            #[cfg(feature = "select")]
-            active_data_selection: None,
         }
     }
 
@@ -105,18 +100,12 @@ impl ArrayV {
             offset,
             len,
             null_count: lock,
-            #[cfg(feature = "select")]
-            active_data_selection: None,
         }
     }
 
     /// Return the logical length of the view.
     #[inline]
     pub fn len(&self) -> usize {
-        #[cfg(feature = "select")]
-        if let Some(indices) = &self.active_data_selection {
-            return indices.len();
-        }
         self.len
     }
 
@@ -129,15 +118,6 @@ impl ArrayV {
     /// Returns the value at logical index `i` within the window, or `None` if out of bounds or null.
     #[inline]
     pub fn get<T: MaskedArray + 'static>(&self, i: usize) -> Option<T::CopyType> {
-        #[cfg(feature = "select")]
-        if let Some(ref sel) = self.active_data_selection {
-            if i >= sel.len() {
-                return None;
-            }
-            let physical_idx = sel[i];
-            return self.array.inner::<T>().get(self.offset + physical_idx);
-        }
-
         if i >= self.len {
             return None;
         }
@@ -153,38 +133,21 @@ impl ArrayV {
     /// Returns the string value at logical index `i` within the window, or `None` if out of bounds or null.
     #[inline]
     pub fn get_str(&self, i: usize) -> Option<&str> {
-        #[cfg(feature = "select")]
-        let physical_idx = if let Some(ref sel) = self.active_data_selection {
-            if i >= sel.len() {
-                return None;
-            }
-            sel[i]
-        } else {
-            if i >= self.len {
-                return None;
-            }
-            i
-        };
-
-        #[cfg(not(feature = "select"))]
-        let physical_idx = {
-            if i >= self.len {
-                return None;
-            }
-            i
-        };
+        if i >= self.len {
+            return None;
+        }
 
         match &self.array {
-            Array::TextArray(TextArray::String32(arr)) => arr.get_str(self.offset + physical_idx),
+            Array::TextArray(TextArray::String32(arr)) => arr.get_str(self.offset + i),
             #[cfg(feature = "large_string")]
-            Array::TextArray(TextArray::String64(arr)) => arr.get_str(self.offset + physical_idx),
+            Array::TextArray(TextArray::String64(arr)) => arr.get_str(self.offset + i),
             #[cfg(feature = "extended_categorical")]
-            Array::TextArray(TextArray::Categorical8(arr)) => arr.get_str(self.offset + physical_idx),
+            Array::TextArray(TextArray::Categorical8(arr)) => arr.get_str(self.offset + i),
             #[cfg(feature = "extended_categorical")]
-            Array::TextArray(TextArray::Categorical16(arr)) => arr.get_str(self.offset + physical_idx),
-            Array::TextArray(TextArray::Categorical32(arr)) => arr.get_str(self.offset + physical_idx),
+            Array::TextArray(TextArray::Categorical16(arr)) => arr.get_str(self.offset + i),
+            Array::TextArray(TextArray::Categorical32(arr)) => arr.get_str(self.offset + i),
             #[cfg(feature = "extended_categorical")]
-            Array::TextArray(TextArray::Categorical64(arr)) => arr.get_str(self.offset + physical_idx),
+            Array::TextArray(TextArray::Categorical64(arr)) => arr.get_str(self.offset + i),
             _ => None,
         }
     }
@@ -255,8 +218,6 @@ impl ArrayV {
             offset: self.offset + offset,
             len,
             null_count: OnceLock::new(),
-            #[cfg(feature = "select")]
-            active_data_selection: None,
         }
     }
 
@@ -264,6 +225,294 @@ impl ArrayV {
     #[inline]
     pub fn to_array(&self) -> Array {
         self.array.slice_clone(self.offset, self.len)
+    }
+
+    /// Gather specific indices from this view into a new materialised Array.
+    /// Indices are relative to this view's window.
+    #[cfg(feature = "select")]
+    pub fn gather_indices(&self, indices: &[usize]) -> Array {
+        use crate::{
+            BooleanArray, CategoricalArray, FloatArray, IntegerArray, NumericArray, StringArray,
+            TextArray,
+        };
+        #[cfg(feature = "datetime")]
+        use crate::{DatetimeArray, TemporalArray};
+
+        match &self.array {
+            Array::Null => Array::Null,
+            Array::NumericArray(num_arr) => match num_arr {
+                NumericArray::Int32(_) => {
+                    let mut new_arr = IntegerArray::<i32>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<IntegerArray<i32>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_int32(new_arr)
+                }
+                NumericArray::Int64(_) => {
+                    let mut new_arr = IntegerArray::<i64>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<IntegerArray<i64>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_int64(new_arr)
+                }
+                NumericArray::Float32(_) => {
+                    let mut new_arr = FloatArray::<f32>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<FloatArray<f32>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_float32(new_arr)
+                }
+                NumericArray::Float64(_) => {
+                    let mut new_arr = FloatArray::<f64>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<FloatArray<f64>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_float64(new_arr)
+                }
+                NumericArray::UInt32(_) => {
+                    let mut new_arr = IntegerArray::<u32>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<IntegerArray<u32>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_uint32(new_arr)
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(_) => {
+                    let mut new_arr = IntegerArray::<i8>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<IntegerArray<i8>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_int8(new_arr)
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(_) => {
+                    let mut new_arr = IntegerArray::<i16>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<IntegerArray<i16>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_int16(new_arr)
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(_) => {
+                    let mut new_arr = IntegerArray::<u8>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<IntegerArray<u8>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_uint8(new_arr)
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(_) => {
+                    let mut new_arr = IntegerArray::<u16>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<IntegerArray<u16>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_uint16(new_arr)
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt64(_) => {
+                    let mut new_arr = IntegerArray::<u64>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<IntegerArray<u64>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_uint64(new_arr)
+                }
+                NumericArray::Null => Array::Null,
+            },
+            Array::TextArray(text_arr) => match text_arr {
+                TextArray::String32(_) => {
+                    let mut values: Vec<&str> = Vec::with_capacity(indices.len());
+                    for &idx in indices {
+                        if let Some(val) = self.get_str(idx) {
+                            values.push(val);
+                        } else {
+                            values.push("");
+                        }
+                    }
+                    let mut new_arr = StringArray::<u32>::from_vec(values, None);
+                    for (i, &idx) in indices.iter().enumerate() {
+                        if self.get_str(idx).is_none() {
+                            new_arr.set_null(i);
+                        }
+                    }
+                    Array::from_string32(new_arr)
+                }
+                #[cfg(feature = "large_string")]
+                TextArray::String64(_) => {
+                    let mut values: Vec<&str> = Vec::with_capacity(indices.len());
+                    for &idx in indices {
+                        if let Some(val) = self.get_str(idx) {
+                            values.push(val);
+                        } else {
+                            values.push("");
+                        }
+                    }
+                    let mut new_arr = StringArray::<u64>::from_vec(values, None);
+                    for (i, &idx) in indices.iter().enumerate() {
+                        if self.get_str(idx).is_none() {
+                            new_arr.set_null(i);
+                        }
+                    }
+                    Array::from_string64(new_arr)
+                }
+                TextArray::Categorical32(_) => {
+                    let mut values: Vec<&str> = Vec::with_capacity(indices.len());
+                    for &idx in indices {
+                        if let Some(val) = self.get_str(idx) {
+                            values.push(val);
+                        } else {
+                            values.push("");
+                        }
+                    }
+                    let mut new_arr = CategoricalArray::<u32>::from_vec(values, None);
+                    for (i, &idx) in indices.iter().enumerate() {
+                        if self.get_str(idx).is_none() {
+                            new_arr.set_null(i);
+                        }
+                    }
+                    Array::from_categorical32(new_arr)
+                }
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical8(_) => {
+                    let mut values: Vec<&str> = Vec::with_capacity(indices.len());
+                    for &idx in indices {
+                        if let Some(val) = self.get_str(idx) {
+                            values.push(val);
+                        } else {
+                            values.push("");
+                        }
+                    }
+                    let mut new_arr = CategoricalArray::<u8>::from_vec(values, None);
+                    for (i, &idx) in indices.iter().enumerate() {
+                        if self.get_str(idx).is_none() {
+                            new_arr.set_null(i);
+                        }
+                    }
+                    Array::from_categorical8(new_arr)
+                }
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical16(_) => {
+                    let mut values: Vec<&str> = Vec::with_capacity(indices.len());
+                    for &idx in indices {
+                        if let Some(val) = self.get_str(idx) {
+                            values.push(val);
+                        } else {
+                            values.push("");
+                        }
+                    }
+                    let mut new_arr = CategoricalArray::<u16>::from_vec(values, None);
+                    for (i, &idx) in indices.iter().enumerate() {
+                        if self.get_str(idx).is_none() {
+                            new_arr.set_null(i);
+                        }
+                    }
+                    Array::from_categorical16(new_arr)
+                }
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(_) => {
+                    let mut values: Vec<&str> = Vec::with_capacity(indices.len());
+                    for &idx in indices {
+                        if let Some(val) = self.get_str(idx) {
+                            values.push(val);
+                        } else {
+                            values.push("");
+                        }
+                    }
+                    let mut new_arr = CategoricalArray::<u64>::from_vec(values, None);
+                    for (i, &idx) in indices.iter().enumerate() {
+                        if self.get_str(idx).is_none() {
+                            new_arr.set_null(i);
+                        }
+                    }
+                    Array::from_categorical64(new_arr)
+                }
+                TextArray::Null => Array::Null,
+            },
+            Array::BooleanArray(_) => {
+                let mut new_arr = BooleanArray::with_capacity(indices.len(), true);
+                for &idx in indices {
+                    if let Some(val) = self.get::<BooleanArray<()>>(idx) {
+                        new_arr.push(val);
+                    } else {
+                        new_arr.push_null();
+                    }
+                }
+                Array::from_bool(new_arr)
+            }
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(temp_arr) => match temp_arr {
+                TemporalArray::Datetime32(arr) => {
+                    let mut new_arr = DatetimeArray::<i32>::with_capacity(
+                        indices.len(),
+                        true,
+                        Some(arr.time_unit),
+                    );
+                    for &idx in indices {
+                        if let Some(val) = self.get::<DatetimeArray<i32>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_datetime_i32(new_arr)
+                }
+                TemporalArray::Datetime64(arr) => {
+                    let mut new_arr = DatetimeArray::<i64>::with_capacity(
+                        indices.len(),
+                        true,
+                        Some(arr.time_unit),
+                    );
+                    for &idx in indices {
+                        if let Some(val) = self.get::<DatetimeArray<i64>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_datetime_i64(new_arr)
+                }
+                TemporalArray::Null => Array::Null,
+            },
+        }
     }
 
     /// Returns a pointer and metadata for raw access
@@ -341,8 +590,6 @@ impl From<Array> for ArrayV {
             offset: 0,
             len,
             null_count: OnceLock::new(),
-            #[cfg(feature = "select")]
-            active_data_selection: None,
         }
     }
 }
@@ -358,8 +605,6 @@ impl From<FieldArray> for ArrayV {
             offset: 0,
             len,
             null_count: OnceLock::new(),
-            #[cfg(feature = "select")]
-            active_data_selection: None,
         }
     }
 }
@@ -441,14 +686,14 @@ impl Shape for ArrayV {
 }
 
 impl Concatenate for ArrayV {
-    /// Concatenates two array views by materializing both to owned arrays,
+    /// Concatenates two array views by materialising both to owned arrays,
     /// concatenating them, and wrapping the result back in a view.
     ///
     /// # Notes
     /// - This operation copies data from both views to create owned arrays.
     /// - The resulting view has offset=0 and length equal to the combined length.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
-        // Materialize both views to owned arrays
+        // Materialise both views to owned arrays
         let self_array = self.to_array();
         let other_array = other.to_array();
 
@@ -463,21 +708,28 @@ impl Concatenate for ArrayV {
 // ===== Selection Trait Implementation =====
 
 #[cfg(feature = "select")]
-impl DataSelection for ArrayV {
+impl RowSelection for ArrayV {
     type View = ArrayV;
 
-    fn d<S: DataSelector>(&self, selection: S) -> ArrayV {
-        let row_indices = selection.resolve_indices(self.len());
-        let mut result = self.clone();
-        result.active_data_selection = Some(row_indices);
-        result
+    fn r<S: DataSelector>(&self, selection: S) -> ArrayV {
+        if selection.is_contiguous() {
+            // Contiguous selection (ranges): adjust offset and len
+            let indices = selection.resolve_indices(self.len());
+            if indices.is_empty() {
+                return ArrayV::new(self.array.clone(), self.offset, 0);
+            }
+            let new_offset = self.offset + indices[0];
+            let new_len = indices.len();
+            ArrayV::new(self.array.clone(), new_offset, new_len)
+        } else {
+            // Non-contiguous selection (index arrays): gather into new array
+            let indices = selection.resolve_indices(self.len());
+            let gathered_array = self.gather_indices(&indices);
+            ArrayV::new(gathered_array, 0, indices.len())
+        }
     }
 
-    fn get_data_count(&self) -> usize {
-        #[cfg(feature = "select")]
-        if let Some(ref sel) = self.active_data_selection {
-            return sel.len();
-        }
+    fn get_row_count(&self) -> usize {
         self.len
     }
 }

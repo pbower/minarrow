@@ -1,5 +1,5 @@
+use minarrow::traits::selection::{ColumnSelection, RowSelection};
 use minarrow::*;
-use minarrow::traits::selection::{FieldSelection, DataSelection};
 
 fn main() {
     // Create a sample table
@@ -31,30 +31,30 @@ fn main() {
     println!("=== Aliases ===\n");
 
     println!("table.f(&[\"id\", \"age\"]).d(0..3)");
-    let view5 = table.f(&["id", "age"]).d(0..3);
+    let view5 = table.c(&["id", "age"]).r(0..3);
     println!("{}\n", view5);
 
     println!("table.fields(&[\"name\"]).data(1..5)");
-    let view6 = table.fields(&["name"]).data(1..5);
+    let view6 = table.c(&["name"]).r(1..5);
     println!("{}\n", view6);
 
     println!("table.f(0..2).d(&[0, 3, 6, 9])");
-    let view7 = table.f(0..2).d(&[0, 3, 6, 9]);
+    let view7 = table.c(0..2).r(&[0, 3, 6, 9]);
     println!("{}\n", view7);
 
     println!("table.y(2).x(..5)");
-    let view8 = table.y(2).x(..5);
+    let view8 = table.y(2).y(..5);
     println!("{}\n", view8);
 
     println!("table.fields(1..).data(5..)");
-    let view9 = table.fields(1..).data(5..);
+    let view9 = table.c(1..).r(5..);
     println!("{}\n", view9);
 
     // Materialise selections
     println!("=== Materialisation ===\n");
 
     println!("table.f(&[\"name\", \"age\"]).d(0..3).to_table()");
-    let view = table.f(&["name", "age"]).d(0..3);
+    let view = table.c(&["name", "age"]).r(0..3);
     let materialised = view.to_table();
     println!("{}\n", materialised);
 
@@ -63,16 +63,26 @@ fn main() {
 
     // Get a single column as FieldArray
     let age_col = table.col(2).unwrap().clone();
-    println!("Original age column (FieldArray):");
+    println!("Age column (FieldArray):");
     println!("  Field: {} ({})", age_col.field.name, age_col.arrow_type());
     println!("  Length: {}", age_col.len());
-    println!("  Values: {:?}\n", (0..age_col.len()).map(|i| age_col.array.inner::<IntegerArray<i32>>().get(i).unwrap()).collect::<Vec<_>>());
+    println!(
+        "  Values: {:?}\n",
+        (0..age_col.len())
+            .map(|i| age_col.array.inner::<IntegerArray<i32>>().get(i).unwrap())
+            .collect::<Vec<_>>()
+    );
 
     // Select specific rows from FieldArray using .d()
     println!("age_col.d(&[1, 3, 5, 7])");
-    let age_view = age_col.d(&[1, 3, 5, 7]);
+    let age_view = age_col.r(&[1, 3, 5, 7]);
     println!("  View length: {}", age_view.len());
-    println!("  Selected indices: {:?}\n", (0..age_view.len()).map(|i| age_view.get::<IntegerArray<i32>>(i).unwrap()).collect::<Vec<_>>());
+    println!(
+        "  Selected indices: {:?}\n",
+        (0..age_view.len())
+            .map(|i| age_view.get::<IntegerArray<i32>>(i).unwrap())
+            .collect::<Vec<_>>()
+    );
 
     // ArrayV selection (direct array view)
     let id_array = Array::from_int32({
@@ -83,20 +93,35 @@ fn main() {
         arr
     });
     let id_view = ArrayV::from(id_array);
-    println!("Original ArrayV:");
+    println!("ArrayV:");
     println!("  Length: {}", id_view.len());
-    println!("  Values: {:?}\n", (0..id_view.len()).map(|i| id_view.get::<IntegerArray<i32>>(i).unwrap()).collect::<Vec<_>>());
+    println!(
+        "  Values: {:?}\n",
+        (0..id_view.len())
+            .map(|i| id_view.get::<IntegerArray<i32>>(i).unwrap())
+            .collect::<Vec<_>>()
+    );
 
     // Select from ArrayV using .data() and .x() aliases
     println!("id_view.data(0..5)");
-    let id_selected1 = id_view.data(0..5);
+    let id_selected1 = id_view.select_rows(0..5);
     println!("  Length: {}", id_selected1.len());
-    println!("  Values: {:?}\n", (0..id_selected1.len()).map(|i| id_selected1.get::<IntegerArray<i32>>(i).unwrap()).collect::<Vec<_>>());
+    println!(
+        "  Values: {:?}\n",
+        (0..id_selected1.len())
+            .map(|i| id_selected1.get::<IntegerArray<i32>>(i).unwrap())
+            .collect::<Vec<_>>()
+    );
 
     println!("id_view.x(&[2, 4, 6, 8])");
-    let id_selected2 = id_view.x(&[2, 4, 6, 8]);
+    let id_selected2 = id_view.y(&[2, 4, 6, 8]);
     println!("  Length: {}", id_selected2.len());
-    println!("  Values: {:?}", (0..id_selected2.len()).map(|i| id_selected2.get::<IntegerArray<i32>>(i).unwrap()).collect::<Vec<_>>());
+    println!(
+        "  Values: {:?}",
+        (0..id_selected2.len())
+            .map(|i| id_selected2.get::<IntegerArray<i32>>(i).unwrap())
+            .collect::<Vec<_>>()
+    );
 }
 
 fn create_sample_table() -> Table {
@@ -108,7 +133,9 @@ fn create_sample_table() -> Table {
 
     // Create name column
     let mut name_arr = StringArray::<u32>::default();
-    let names = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry", "Iris", "Jack"];
+    let names = [
+        "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry", "Iris", "Jack",
+    ];
     for name in names {
         name_arr.push(name.to_string());
     }

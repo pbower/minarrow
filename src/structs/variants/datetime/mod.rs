@@ -3,14 +3,14 @@
 //! Arrow-compatible datetime/timestamp array implementation with optional null-mask,
 //! 64-byte alignment, and efficient memory layout for analytical workloads.
 //!
-//! **Notice**: When using the `datetime_ops` feature, all dates are stored in UTC time, 
-//! even when a timezone is stored in `Field` metadata. Encoding timezone in `Field` 
-//! ensures that the tz-aware time is displayed when printing. **Warning**: *All timezones 
-//! are static values in ./tz.rs and are subject to change over time. When performing 
-//! international time calculations with any specific accuracy requirements, please verify 
-//! your timezone(s) and raise a PR or Issue if and need to be updated. 
+//! **Notice**: When using the `datetime_ops` feature, all dates are stored in UTC time,
+//! even when a timezone is stored in `Field` metadata. Encoding timezone in `Field`
+//! ensures that the tz-aware time is displayed when printing. **Warning**: *All timezones
+//! are static values in ./tz.rs and are subject to change over time. When performing
+//! international time calculations with any specific accuracy requirements, please verify
+//! your timezone(s) and raise a PR or Issue if and need to be updated.
 //! For e.g., for regions who have moved on/off Daylight savings time, etc.*
-//! 
+//!
 //! ## Overview
 //! - Logical type: temporal values with a defined [`TimeUnit`] (seconds, milliseconds,
 //!   microseconds, nanoseconds, days).
@@ -22,7 +22,7 @@
 //! - ***Timezone information does not alter the underlying UTC storage***, only what value
 //! is displayed when printed. Therefore, when working with integer values whose times are physically
 //! those timezones - be sure to convert them to UTC first before storing them in Minarrow, otherwise
-//! it would 'offset the already offsetted' values. 
+//! it would 'offset the already offsetted' values.
 //!
 //! ## Features
 //! - **Construction** from slices, `Vec64` or plain `Vec` buffers, with optional null mask.
@@ -31,7 +31,7 @@
 //! - **Conversion**: when `datetime_ops` feature is enabled, convert to native date/time
 //!   values via the `time` crate, plus component extraction and datetime operations.
 //! - **Datetime operations**: full suite of standard datetime operations under ./datetime_ops
-//! - **Tz-aware**: see `examples/datetime_ops` for timezone usage. 
+//! - **Tz-aware**: see `examples/datetime_ops` for timezone usage.
 //!
 //! ## Use Cases
 //! - High-performance temporal analytics.
@@ -837,7 +837,6 @@ mod tests {
         ));
     }
 }
-
 
 #[cfg(test)]
 #[cfg(feature = "parallel_proc")]

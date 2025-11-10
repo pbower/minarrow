@@ -352,15 +352,6 @@ impl ByteSize for Value {
             Value::Table(tbl) => tbl.est_bytes(),
             #[cfg(feature = "views")]
             Value::TableView(_) => size_of::<crate::TableV>(), // Arc<T> + usize + usize
-            #[cfg(feature = "views")]
-            Value::NumericArrayView(_) => size_of::<crate::NumericArrayV>(), // Arc<T> + usize + usize
-            #[cfg(feature = "views")]
-            Value::TextArrayView(_) => size_of::<crate::TextArrayV>(), // Arc<T> + usize + usize
-            #[cfg(all(feature = "views", feature = "datetime"))]
-            Value::TemporalArrayView(_) => size_of::<crate::TemporalArrayV>(), // Arc<T> + usize + usize
-            Value::Bitmask(bm) => bm.est_bytes(),
-            #[cfg(feature = "views")]
-            Value::BitmaskView(_) => size_of::<crate::BitmaskV>(), // Arc<Bitmask> + usize + usize
             #[cfg(feature = "chunked")]
             Value::SuperArray(sa) => sa.est_bytes(),
             #[cfg(all(feature = "chunked", feature = "views"))]
@@ -370,7 +361,6 @@ impl ByteSize for Value {
             #[cfg(all(feature = "chunked", feature = "views"))]
             Value::SuperTableView(_) => size_of::<crate::SuperTableV>(), // Arc<T> + usize + usize
             Value::FieldArray(fa) => fa.est_bytes(),
-            Value::Field(f) => f.est_bytes(),
             #[cfg(feature = "matrix")]
             Value::Matrix(m) => m.est_bytes(),
             #[cfg(feature = "cube")]
