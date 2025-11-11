@@ -992,7 +992,9 @@ mod tests {
 
     #[cfg(feature = "datetime")]
     use crate::DatetimeArray;
-    use crate::ffi::arrow_c_ffi::{export_to_c, import_from_c};
+    #[cfg(feature = "datetime")]
+    use crate::ffi::arrow_c_ffi::import_from_c;
+    use crate::ffi::arrow_c_ffi::export_to_c;
     use crate::ffi::arrow_dtype::ArrowType;
     use crate::ffi::schema::Schema;
     use crate::{Array, BooleanArray, Field, FloatArray, IntegerArray, MaskedArray, StringArray};

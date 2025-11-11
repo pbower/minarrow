@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
@@ -187,16 +187,6 @@ default = [
     "chunked",
     "large_string",
     "simd",
-    "select",
-    "datetime",
-    "datetime_ops",
-    "matrix",
-    "cube",
-    "value_type",
-    "scalar_type",
-    "broadcast",
-    "extended_numeric_types",
-    "extended_categorical"
 ]
 
 [package.metadata.cargo-all-features]
