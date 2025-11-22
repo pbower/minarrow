@@ -412,6 +412,25 @@ impl<T: Clone> Buffer<T> {
     pub fn extend_from_slice(&mut self, s: &[T]) {
         self.make_owned_mut().extend_from_slice(s);
     }
+
+    /// Splits the buffer at the given index, returning a new Buffer containing elements [at, len).
+    ///
+    /// After calling this, self will contain elements [0, at) and the returned buffer contains [at, len).
+    /// Both buffers maintain Vec64 storage.
+    ///
+    /// # Panics
+    /// Panics if `at > len` or if the buffer is Shared (e.g., memory mapped).
+    #[inline]
+    pub fn split_off(&mut self, at: usize) -> Self {
+        match &mut self.storage {
+            Storage::Owned(vec) => Self {
+                storage: Storage::Owned(vec.split_off(at)),
+            },
+            Storage::Shared { .. } => {
+                panic!("split_off is not supported on Shared buffers")
+            }
+        }
+    }
 }
 
 #[inline]

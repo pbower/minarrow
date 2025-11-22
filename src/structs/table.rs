@@ -29,6 +29,8 @@ use super::field_array::FieldArray;
 #[cfg(all(feature = "views", feature = "select"))]
 use crate::ArrayV;
 use crate::Field;
+#[cfg(feature = "chunked")]
+use crate::SuperTable;
 #[cfg(feature = "views")]
 use crate::TableV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
@@ -336,6 +338,150 @@ impl Table {
         F: FnMut(&FieldArray) -> T,
     {
         self.cols.iter().map(func).collect()
+    }
+
+    /// Inserts rows from another table at the specified index.
+    ///
+    /// This is an **O(n)** operation where n is the number of rows after the insertion point.
+    ///
+    /// # Arguments
+    /// * `index` - Position before which to insert (0 = prepend, n_rows = append)
+    /// * `other` - Table to insert
+    ///
+    /// # Requirements
+    /// - Both tables must have the same number of columns
+    /// - Column names, types, and nullability must match in order
+    /// - `index` must be <= `self.n_rows()`
+    ///
+    /// # Errors
+    /// - `IndexError` if index > n_rows
+    /// - `IncompatibleTypeError` if column schemas don't match
+    pub fn insert_rows(&mut self, index: usize, other: &Self) -> Result<(), MinarrowError> {
+        // Validate index
+        if index > self.n_rows {
+            return Err(MinarrowError::IndexError(format!(
+                "Index {} out of bounds for table with {} rows",
+                index, self.n_rows
+            )));
+        }
+
+        // Check column count
+        if self.n_cols() != other.n_cols() {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "Table",
+                to: "Table",
+                message: Some(format!(
+                    "Cannot insert tables with different column counts: {} vs {}",
+                    self.n_cols(),
+                    other.n_cols()
+                )),
+            });
+        }
+
+        // If both tables are empty, nothing to do
+        if self.n_cols() == 0 {
+            return Ok(());
+        }
+
+        // Validate column schemas and insert into each column
+        for (col_idx, (self_col, other_col)) in
+            self.cols.iter_mut().zip(other.cols.iter()).enumerate()
+        {
+            // Check field compatibility
+            if self_col.field.name != other_col.field.name {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "Table",
+                    to: "Table",
+                    message: Some(format!(
+                        "Column {} name mismatch: '{}' vs '{}'",
+                        col_idx, self_col.field.name, other_col.field.name
+                    )),
+                });
+            }
+
+            if self_col.field.dtype != other_col.field.dtype {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "Table",
+                    to: "Table",
+                    message: Some(format!(
+                        "Column '{}' type mismatch: {:?} vs {:?}",
+                        self_col.field.name, self_col.field.dtype, other_col.field.dtype
+                    )),
+                });
+            }
+
+            if self_col.field.nullable != other_col.field.nullable {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "Table",
+                    to: "Table",
+                    message: Some(format!(
+                        "Column '{}' nullable mismatch: {} vs {}",
+                        self_col.field.name, self_col.field.nullable, other_col.field.nullable
+                    )),
+                });
+            }
+
+            // Insert into this column's array
+            self_col.array.insert_rows(index, &other_col.array)?;
+
+            // Update null count
+            self_col.null_count = self_col.array.null_count();
+        }
+
+        // Update row count
+        self.n_rows += other.n_rows;
+
+        Ok(())
+    }
+
+    /// Splits the Table at the specified row index, consuming self and returning a SuperTable
+    /// with two Table batches.
+    ///
+    /// Splits the underlying buffers, allocating new storage for the second half.
+    #[cfg(feature = "chunked")]
+    pub fn split(self, index: usize) -> Result<SuperTable, MinarrowError> {
+        if index == 0 || index >= self.n_rows {
+            return Err(MinarrowError::IndexError(format!(
+                "Split index {} out of valid range (0, {})",
+                index, self.n_rows
+            )));
+        }
+
+        // Split each column
+        let mut left_cols = Vec::with_capacity(self.cols.len());
+        let mut right_cols = Vec::with_capacity(self.cols.len());
+
+        for col in self.cols {
+            let split_result = col.array.split(index, &col.field)?;
+
+            // Extract the two arrays from the SuperArray
+            let mut left_arrays = split_result.into_arrays();
+            let mut right_arrays = left_arrays.split_off(1);
+
+            // Should have one array each after split
+            let left_field = left_arrays.remove(0);
+            let right_field = right_arrays.remove(0);
+
+            left_cols.push(left_field);
+            right_cols.push(right_field);
+        }
+
+        let left_table = Table {
+            cols: left_cols,
+            n_rows: index,
+            name: format!("{}_left", self.name),
+        };
+
+        let right_table = Table {
+            cols: right_cols,
+            n_rows: self.n_rows - index,
+            name: format!("{}_right", self.name),
+        };
+
+        Ok(SuperTable::from_batches(
+            vec![Arc::new(left_table), Arc::new(right_table)],
+            Some(self.name),
+        ))
     }
 }
 
@@ -902,6 +1048,192 @@ mod tests {
         // Test with out-of-bounds index (will warn but skip)
         let results = t.map_cols_by_index(&[0, 5, 1], |fa| fa.field.name.clone());
         assert_eq!(results, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn test_table_insert_rows_prepend() {
+        let mut t1 = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(1);
+        col1.push(2);
+        let mut col2 = IntegerArray::<i32>::default();
+        col2.push(10);
+        col2.push(20);
+        t1.add_col(field_array("a", Array::from_int32(col1)));
+        t1.add_col(field_array("b", Array::from_int32(col2)));
+
+        let mut t2 = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(99);
+        let mut col2 = IntegerArray::<i32>::default();
+        col2.push(88);
+        t2.add_col(field_array("a", Array::from_int32(col1)));
+        t2.add_col(field_array("b", Array::from_int32(col2)));
+
+        t1.insert_rows(0, &t2).unwrap();
+
+        assert_eq!(t1.n_rows(), 3);
+        match &t1.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[99, 1, 2]);
+            }
+            _ => panic!("wrong type"),
+        }
+        match &t1.cols[1].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[88, 10, 20]);
+            }
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[test]
+    fn test_table_insert_rows_middle() {
+        let mut t1 = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(1);
+        col1.push(2);
+        col1.push(3);
+        let mut col2 = IntegerArray::<i32>::default();
+        col2.push(10);
+        col2.push(20);
+        col2.push(30);
+        t1.add_col(field_array("a", Array::from_int32(col1)));
+        t1.add_col(field_array("b", Array::from_int32(col2)));
+
+        let mut t2 = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(99);
+        col1.push(88);
+        let mut col2 = IntegerArray::<i32>::default();
+        col2.push(77);
+        col2.push(66);
+        t2.add_col(field_array("a", Array::from_int32(col1)));
+        t2.add_col(field_array("b", Array::from_int32(col2)));
+
+        t1.insert_rows(1, &t2).unwrap();
+
+        assert_eq!(t1.n_rows(), 5);
+        match &t1.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1, 99, 88, 2, 3]);
+            }
+            _ => panic!("wrong type"),
+        }
+        match &t1.cols[1].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[10, 77, 66, 20, 30]);
+            }
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[test]
+    fn test_table_insert_rows_append() {
+        let mut t1 = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(1);
+        col1.push(2);
+        t1.add_col(field_array("a", Array::from_int32(col1)));
+
+        let mut t2 = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(3);
+        col1.push(4);
+        t2.add_col(field_array("a", Array::from_int32(col1)));
+
+        t1.insert_rows(2, &t2).unwrap();
+
+        assert_eq!(t1.n_rows(), 4);
+        match &t1.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4]);
+            }
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[test]
+    fn test_table_insert_rows_schema_mismatch() {
+        let mut t1 = Table::new_empty();
+        let col1 = IntegerArray::<i32>::default();
+        t1.add_col(field_array("a", Array::from_int32(col1)));
+
+        let mut t2 = Table::new_empty();
+        let col1 = IntegerArray::<i32>::default();
+        t2.add_col(field_array("b", Array::from_int32(col1)));
+
+        let result = t1.insert_rows(0, &t2);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_table_insert_rows_out_of_bounds() {
+        let mut t1 = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(1);
+        t1.add_col(field_array("a", Array::from_int32(col1)));
+
+        let t2 = Table::new_empty();
+        let result = t1.insert_rows(10, &t2);
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "chunked")]
+    #[test]
+    fn test_table_split_basic() {
+        let mut t = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(1);
+        col1.push(2);
+        col1.push(3);
+        col1.push(4);
+        let mut col2 = IntegerArray::<i32>::default();
+        col2.push(10);
+        col2.push(20);
+        col2.push(30);
+        col2.push(40);
+        t.add_col(field_array("a", Array::from_int32(col1)));
+        t.add_col(field_array("b", Array::from_int32(col2)));
+
+        let super_table = t.split(2).unwrap();
+
+        assert_eq!(super_table.n_batches(), 2);
+        assert_eq!(super_table.batches[0].n_rows(), 2);
+        assert_eq!(super_table.batches[1].n_rows(), 2);
+
+        match &super_table.batches[0].cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1, 2]);
+            }
+            _ => panic!("wrong type"),
+        }
+
+        match &super_table.batches[1].cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[3, 4]);
+            }
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[cfg(feature = "chunked")]
+    #[test]
+    fn test_table_split_invalid_index() {
+        let mut t1 = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(1);
+        col1.push(2);
+        t1.add_col(field_array("a", Array::from_int32(col1.clone())));
+        assert!(t1.split(0).is_err());
+
+        let mut t2 = Table::new_empty();
+        t2.add_col(field_array("a", Array::from_int32(col1.clone())));
+        assert!(t2.split(2).is_err());
+
+        let mut t3 = Table::new_empty();
+        t3.add_col(field_array("a", Array::from_int32(col1)));
+        assert!(t3.split(10).is_err());
     }
 }
 
