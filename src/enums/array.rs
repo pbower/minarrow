@@ -14,8 +14,6 @@ use std::any::TypeId;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-#[cfg(any(feature = "cast_arrow", feature = "cast_polars"))]
-use crate::Field;
 #[cfg(feature = "cast_arrow")]
 use crate::ffi::arrow_c_ffi::export_to_c;
 #[cfg(feature = "cast_arrow")]
@@ -29,6 +27,8 @@ use crate::ArrayV;
 use crate::ArrayVT;
 #[cfg(feature = "datetime")]
 use crate::DatetimeArray;
+#[cfg(feature = "chunked")]
+use crate::SuperArray;
 #[cfg(feature = "datetime")]
 use crate::TemporalArray;
 use crate::enums::error::MinarrowError;
@@ -37,8 +37,8 @@ use crate::ffi::arrow_dtype::{ArrowType, CategoricalIndexType};
 use crate::traits::{concatenate::Concatenate, shape::Shape};
 use crate::utils::{float_to_text_array, int_to_text_array};
 use crate::{
-    Bitmask, BooleanArray, CategoricalArray, FloatArray, IntegerArray, MaskedArray, NumericArray,
-    StringArray, TextArray, Vec64, match_array,
+    Bitmask, BooleanArray, CategoricalArray, Field, FieldArray, FloatArray, IntegerArray,
+    MaskedArray, NumericArray, StringArray, TextArray, Vec64, match_array,
 };
 
 /// # Array
@@ -1714,6 +1714,77 @@ impl Array {
                 rhs.arrow_type(),
                 lhs.arrow_type()
             ),
+        }
+    }
+
+    /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
+    ///
+    /// This is an **O(n)** operation.
+    ///
+    /// Returns an error if the two arrays are of different variants or incompatible types,
+    /// or if the index is out of bounds.
+    pub fn insert_rows(&mut self, index: usize, other: &Self) -> Result<(), MinarrowError> {
+        match (self, other) {
+            (Array::NumericArray(lhs), Array::NumericArray(rhs)) => lhs.insert_rows(index, rhs),
+            (Array::BooleanArray(a), Array::BooleanArray(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (Array::TextArray(lhs), Array::TextArray(rhs)) => lhs.insert_rows(index, rhs),
+            #[cfg(feature = "datetime")]
+            (Array::TemporalArray(lhs), Array::TemporalArray(rhs)) => lhs.insert_rows(index, rhs),
+            (Array::Null, Array::Null) => Ok(()),
+            (lhs, rhs) => Err(MinarrowError::TypeError {
+                from: "Array",
+                to: "Array",
+                message: Some(format!(
+                    "Cannot insert {} into {}: incompatible types",
+                    rhs.arrow_type(),
+                    lhs.arrow_type()
+                )),
+            }),
+        }
+    }
+
+    /// Splits the Array at the specified index, consuming self and returning a SuperArray
+    /// with two FieldArray chunks.
+    ///
+    /// Splits the underlying buffers (via vec `.split_off()`), allocating new storage for the second half.
+    /// More efficient than cloning the entire array but requires allocation.
+    #[cfg(feature = "chunked")]
+    pub fn split(self, index: usize, field: &Arc<Field>) -> Result<SuperArray, MinarrowError> {
+        match self {
+            Array::NumericArray(arr) => {
+                let (left, right) = arr.split(index)?;
+                Ok(SuperArray::from_field_array_chunks(vec![
+                    FieldArray::new((**field).clone(), Array::NumericArray(left)),
+                    FieldArray::new((**field).clone(), Array::NumericArray(right)),
+                ]))
+            }
+            Array::TextArray(arr) => {
+                let (left, right) = arr.split(index)?;
+                Ok(SuperArray::from_field_array_chunks(vec![
+                    FieldArray::new((**field).clone(), Array::TextArray(left)),
+                    FieldArray::new((**field).clone(), Array::TextArray(right)),
+                ]))
+            }
+            Array::BooleanArray(arr) => {
+                let (left, right) = arr.split(index)?;
+                Ok(SuperArray::from_field_array_chunks(vec![
+                    FieldArray::new((**field).clone(), Array::BooleanArray(left)),
+                    FieldArray::new((**field).clone(), Array::BooleanArray(right)),
+                ]))
+            }
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(arr) => {
+                let (left, right) = arr.split(index)?;
+                Ok(SuperArray::from_field_array_chunks(vec![
+                    FieldArray::new((**field).clone(), Array::TemporalArray(left)),
+                    FieldArray::new((**field).clone(), Array::TemporalArray(right)),
+                ]))
+            }
+            Array::Null => Err(MinarrowError::IndexError(
+                "Cannot split Null array".to_string(),
+            )),
         }
     }
 

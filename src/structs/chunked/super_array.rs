@@ -703,6 +703,163 @@ impl SuperArray {
             self.arrays.push(chunk);
         }
     }
+
+    /// Inserts rows from another SuperArray (or Array) at the specified index.
+    ///
+    /// This is an **O(n)** operation where n is the number of elements in the chunk
+    /// containing the insertion point.
+    ///
+    /// # Arguments
+    /// * `index` - Global row position before which to insert (0 = prepend, len() = append)
+    /// * `other` - SuperArray or Array to insert (via `Into<SuperArray>`)
+    ///
+    /// # Requirements
+    /// - Field metadata (name, type, nullability) must match
+    /// - `index` must be <= `self.len()`
+    ///
+    /// # Strategy
+    /// Finds the chunk containing the insertion point and inserts all of `other`'s data
+    /// into that chunk. This may cause the target chunk to grow significantly.
+    ///
+    /// # Errors
+    /// - `IndexError` if index > len()
+    /// - Schema mismatch if field metadata doesn't match
+    pub fn insert_rows(
+        &mut self,
+        index: usize,
+        other: impl Into<SuperArray>,
+    ) -> Result<(), MinarrowError> {
+        let other = other.into();
+        let total_len = self.len();
+
+        // Validate index
+        if index > total_len {
+            return Err(MinarrowError::IndexError(format!(
+                "Index {} out of bounds for SuperArray of length {}",
+                index, total_len
+            )));
+        }
+
+        // If other is empty, nothing to do
+        if other.is_empty() {
+            return Ok(());
+        }
+
+        // Validate schema match
+        if !self.arrays.is_empty() {
+            let self_field = &self.arrays[0].field;
+            let other_field = &other.arrays[0].field;
+
+            if self_field.name != other_field.name {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "SuperArray",
+                    to: "SuperArray",
+                    message: Some(format!(
+                        "Field name mismatch: '{}' vs '{}'",
+                        self_field.name, other_field.name
+                    )),
+                });
+            }
+
+            if self_field.dtype != other_field.dtype {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "SuperArray",
+                    to: "SuperArray",
+                    message: Some(format!(
+                        "Type mismatch: {:?} vs {:?}",
+                        self_field.dtype, other_field.dtype
+                    )),
+                });
+            }
+
+            if self_field.nullable != other_field.nullable {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "SuperArray",
+                    to: "SuperArray",
+                    message: Some(format!(
+                        "Nullable mismatch: {} vs {}",
+                        self_field.nullable, other_field.nullable
+                    )),
+                });
+            }
+        }
+
+        // Handle empty self - just append other's chunks
+        if self.arrays.is_empty() {
+            self.arrays = other.arrays;
+            return Ok(());
+        }
+
+        // Find which chunk contains the insertion index
+        let mut cumulative = 0;
+        let mut chunk_idx = None;
+        for (i, chunk) in self.arrays.iter().enumerate() {
+            let chunk_len = chunk.len();
+
+            // Check if index falls within this chunk or at its boundary
+            if index <= cumulative + chunk_len {
+                chunk_idx = Some((i, index - cumulative));
+                break;
+            }
+
+            cumulative += chunk_len;
+        }
+
+        let (target_idx, local_index) = chunk_idx.ok_or_else(|| {
+            MinarrowError::IndexError(format!("Failed to find chunk for index {}", index))
+        })?;
+
+        let target_chunk_len = self.arrays[target_idx].len();
+
+        // Handle edge cases: prepend or append to a chunk without splitting
+        if local_index == 0 {
+            // Insert before target chunk
+            let mut new_chunks = Vec::with_capacity(self.arrays.len() + other.arrays.len());
+            new_chunks.extend(self.arrays.drain(0..target_idx));
+            new_chunks.extend(other.arrays.into_iter());
+            new_chunks.extend(self.arrays.drain(..));
+            self.arrays = new_chunks;
+        } else if local_index == target_chunk_len {
+            // Insert after target chunk
+            let mut new_chunks = Vec::with_capacity(self.arrays.len() + other.arrays.len());
+            new_chunks.extend(self.arrays.drain(0..=target_idx));
+            new_chunks.extend(other.arrays.into_iter());
+            new_chunks.extend(self.arrays.drain(..));
+            self.arrays = new_chunks;
+        } else {
+            // Split the target chunk at the insertion point
+            let target_chunk = self.arrays.remove(target_idx);
+            let mut split_chunks = target_chunk.array.split(local_index, &target_chunk.field)?;
+
+            // Build new chunk list: left chunk + other's chunks + right chunk
+            let mut new_chunks = Vec::with_capacity(self.arrays.len() + other.arrays.len() + 2);
+
+            // Add chunks before target
+            new_chunks.extend(self.arrays.drain(0..target_idx));
+
+            // Add left half of split
+            new_chunks.extend(split_chunks.arrays.drain(0..1));
+
+            // Add other's chunks
+            new_chunks.extend(other.arrays.into_iter());
+
+            // Add right half of split
+            new_chunks.extend(split_chunks.arrays.drain(..));
+
+            // Add remaining chunks after target
+            new_chunks.extend(self.arrays.drain(..));
+
+            self.arrays = new_chunks;
+        }
+
+        Ok(())
+    }
+
+    /// Consumes the SuperArray and returns the underlying Vec<FieldArray> chunks.
+    #[inline]
+    pub fn into_arrays(self) -> Vec<FieldArray> {
+        self.arrays
+    }
 }
 
 /// Concatenates Bitmask null masks into a single mask for the output array.
@@ -981,5 +1138,103 @@ mod tests {
         assert!(!ca.is_nullable());
         assert_eq!(ca.field().name, "z");
         assert_eq!(ca.chunks().len(), 1);
+    }
+
+    #[test]
+    fn test_insert_rows_into_first_chunk() {
+        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0), fa("a", &[4, 5], 0)]);
+
+        let other = SuperArray::from_chunks(vec![fa("a", &[99, 88], 0)]);
+
+        ca.insert_rows(1, other).unwrap();
+
+        assert_eq!(ca.len(), 7);
+        assert_eq!(ca.n_chunks(), 4);
+
+        let result = ca.copy_to_array();
+        if let Array::NumericArray(NumericArray::Int32(ia)) = result {
+            assert_eq!(&*ia.data, &[1, 99, 88, 2, 3, 4, 5]);
+        } else {
+            panic!("Expected Int32");
+        }
+    }
+
+    #[test]
+    fn test_insert_rows_into_second_chunk() {
+        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2], 0), fa("a", &[3, 4, 5], 0)]);
+
+        let other = SuperArray::from_chunks(vec![fa("a", &[99], 0)]);
+
+        ca.insert_rows(3, other).unwrap();
+
+        assert_eq!(ca.len(), 6);
+        assert_eq!(ca.n_chunks(), 4);
+
+        let result = ca.copy_to_array();
+        if let Array::NumericArray(NumericArray::Int32(ia)) = result {
+            assert_eq!(&*ia.data, &[1, 2, 3, 99, 4, 5]);
+        } else {
+            panic!("Expected Int32");
+        }
+    }
+
+    #[test]
+    fn test_insert_rows_prepend() {
+        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
+
+        let other = SuperArray::from_chunks(vec![fa("a", &[99], 0)]);
+
+        ca.insert_rows(0, other).unwrap();
+
+        assert_eq!(ca.len(), 4);
+
+        let result = ca.copy_to_array();
+        if let Array::NumericArray(NumericArray::Int32(ia)) = result {
+            assert_eq!(&*ia.data, &[99, 1, 2, 3]);
+        } else {
+            panic!("Expected Int32");
+        }
+    }
+
+    #[test]
+    fn test_insert_rows_append() {
+        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
+
+        let other = SuperArray::from_chunks(vec![fa("a", &[99], 0)]);
+
+        ca.insert_rows(3, other).unwrap();
+
+        assert_eq!(ca.len(), 4);
+
+        let result = ca.copy_to_array();
+        if let Array::NumericArray(NumericArray::Int32(ia)) = result {
+            assert_eq!(&*ia.data, &[1, 2, 3, 99]);
+        } else {
+            panic!("Expected Int32");
+        }
+    }
+
+    #[test]
+    fn test_insert_rows_schema_mismatch() {
+        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
+
+        let wrong_name = FieldArray {
+            field: field("b", ArrowType::Int32, false).into(),
+            array: int_array(&[99]),
+            null_count: 0,
+        };
+        let other = SuperArray::from_chunks(vec![wrong_name]);
+
+        let result = ca.insert_rows(0, other);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_insert_rows_out_of_bounds() {
+        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
+        let other = SuperArray::from_chunks(vec![fa("a", &[99], 0)]);
+
+        let result = ca.insert_rows(10, other);
+        assert!(result.is_err());
     }
 }

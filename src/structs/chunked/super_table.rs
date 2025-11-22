@@ -134,6 +134,164 @@ impl SuperTable {
         self.batches.push(batch);
     }
 
+    /// Inserts rows from another SuperTable (or Table) at the specified index.
+    ///
+    /// This is an **O(n)** operation where n is the number of rows in the batch
+    /// containing the insertion point.
+    ///
+    /// # Arguments
+    /// * `index` - Global row position before which to insert (0 = prepend, n_rows = append)
+    /// * `other` - SuperTable or Table to insert (via `Into<SuperTable>`)
+    ///
+    /// # Requirements
+    /// - Schema (column names, types, nullability) must match
+    /// - `index` must be <= `self.n_rows`
+    ///
+    /// # Strategy
+    /// Finds the batch containing the insertion point, splits it at that position, then
+    /// inserts other's batches in between the split halves. This redistributes rows across
+    /// batches while preserving chunked structure.
+    ///
+    /// # Errors
+    /// - `IndexError` if index > n_rows
+    /// - Schema mismatch if field metadata doesn't match
+    pub fn insert_rows(
+        &mut self,
+        index: usize,
+        other: impl Into<SuperTable>,
+    ) -> Result<(), MinarrowError> {
+        let other = other.into();
+
+        // Validate index
+        if index > self.n_rows {
+            return Err(MinarrowError::IndexError(format!(
+                "Index {} out of bounds for SuperTable with {} rows",
+                index, self.n_rows
+            )));
+        }
+
+        // If other is empty, nothing to do
+        if other.n_rows == 0 {
+            return Ok(());
+        }
+
+        // Validate schema match
+        if !self.batches.is_empty() {
+            if self.schema.len() != other.schema.len() {
+                return Err(MinarrowError::IncompatibleTypeError {
+                    from: "SuperTable",
+                    to: "SuperTable",
+                    message: Some(format!(
+                        "Column count mismatch: {} vs {}",
+                        self.schema.len(),
+                        other.schema.len()
+                    )),
+                });
+            }
+
+            for (col_idx, (self_field, other_field)) in
+                self.schema.iter().zip(other.schema.iter()).enumerate()
+            {
+                if self_field.name != other_field.name {
+                    return Err(MinarrowError::IncompatibleTypeError {
+                        from: "SuperTable",
+                        to: "SuperTable",
+                        message: Some(format!(
+                            "Column {} name mismatch: '{}' vs '{}'",
+                            col_idx, self_field.name, other_field.name
+                        )),
+                    });
+                }
+
+                if self_field.dtype != other_field.dtype {
+                    return Err(MinarrowError::IncompatibleTypeError {
+                        from: "SuperTable",
+                        to: "SuperTable",
+                        message: Some(format!(
+                            "Column '{}' type mismatch: {:?} vs {:?}",
+                            self_field.name, self_field.dtype, other_field.dtype
+                        )),
+                    });
+                }
+
+                if self_field.nullable != other_field.nullable {
+                    return Err(MinarrowError::IncompatibleTypeError {
+                        from: "SuperTable",
+                        to: "SuperTable",
+                        message: Some(format!(
+                            "Column '{}' nullable mismatch: {} vs {}",
+                            self_field.name, self_field.nullable, other_field.nullable
+                        )),
+                    });
+                }
+            }
+        }
+
+        // Handle empty self - just append other's batches
+        if self.batches.is_empty() {
+            self.batches = other.batches;
+            self.schema = other.schema;
+            self.n_rows = other.n_rows;
+            return Ok(());
+        }
+
+        // Find which batch contains the insertion index
+        let mut cumulative = 0;
+        let mut target_idx = 0;
+        let mut local_index = index;
+
+        for (idx, batch) in self.batches.iter().enumerate() {
+            let batch_rows = batch.n_rows;
+
+            if index <= cumulative + batch_rows {
+                target_idx = idx;
+                local_index = index - cumulative;
+                break;
+            }
+
+            cumulative += batch_rows;
+        }
+
+        let target_batch_rows = self.batches[target_idx].n_rows;
+
+        // Handle edge cases: prepend or append to a batch without splitting
+        if local_index == 0 {
+            // Insert before target batch
+            let mut new_batches = Vec::with_capacity(self.batches.len() + other.batches.len());
+            new_batches.extend(self.batches.drain(0..target_idx));
+            new_batches.extend(other.batches.into_iter());
+            new_batches.extend(self.batches.drain(..));
+            self.batches = new_batches;
+            self.n_rows += other.n_rows;
+        } else if local_index == target_batch_rows {
+            // Insert after target batch
+            let mut new_batches = Vec::with_capacity(self.batches.len() + other.batches.len());
+            new_batches.extend(self.batches.drain(0..=target_idx));
+            new_batches.extend(other.batches.into_iter());
+            new_batches.extend(self.batches.drain(..));
+            self.batches = new_batches;
+            self.n_rows += other.n_rows;
+        } else {
+            // Split the target batch at the insertion point
+            let target_batch = self.batches.remove(target_idx);
+            let target_table = Arc::try_unwrap(target_batch).unwrap_or_else(|arc| (*arc).clone());
+            let mut split_batches = target_table.split(local_index)?;
+
+            // Build new batch list: batches before target + left batch + other's batches + right batch + remaining batches
+            let mut new_batches = Vec::with_capacity(self.batches.len() + other.batches.len() + 2);
+            new_batches.extend(self.batches.drain(0..target_idx));
+            new_batches.extend(split_batches.batches.drain(0..1));
+            new_batches.extend(other.batches.into_iter());
+            new_batches.extend(split_batches.batches.drain(..));
+            new_batches.extend(self.batches.drain(..));
+
+            self.batches = new_batches;
+            self.n_rows += other.n_rows;
+        }
+
+        Ok(())
+    }
+
     /// Materialise a single `Table` containing all rows (concatenated).
     ///
     /// Uses arc data clones
@@ -605,5 +763,117 @@ mod tests {
                 panic!("unexpected array type at col {col_idx}");
             }
         }
+    }
+
+    #[test]
+    fn test_insert_rows_into_first_batch() {
+        let batch1 = Arc::new(table(vec![fa("a", &[1, 2, 3]), fa("b", &[10, 20, 30])]));
+        let batch2 = Arc::new(table(vec![fa("a", &[4, 5]), fa("b", &[40, 50])]));
+        let mut st = SuperTable::from_batches(vec![batch1, batch2], None);
+
+        let insert_batch = Arc::new(table(vec![fa("a", &[99]), fa("b", &[88])]));
+        let insert_st = SuperTable::from_batches(vec![insert_batch], None);
+
+        st.insert_rows(1, insert_st).unwrap();
+
+        assert_eq!(st.n_rows(), 6);
+        assert_eq!(st.n_batches(), 4);
+
+        let materialized = st.to_table(None);
+        match &materialized.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1, 99, 2, 3, 4, 5]);
+            }
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[test]
+    fn test_insert_rows_into_second_batch() {
+        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
+        let batch2 = Arc::new(table(vec![fa("a", &[3, 4, 5])]));
+        let mut st = SuperTable::from_batches(vec![batch1, batch2], None);
+
+        let insert_batch = Arc::new(table(vec![fa("a", &[99, 88])]));
+        let insert_st = SuperTable::from_batches(vec![insert_batch], None);
+
+        st.insert_rows(3, insert_st).unwrap();
+
+        assert_eq!(st.n_rows(), 7);
+
+        let materialized = st.to_table(None);
+        match &materialized.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1, 2, 3, 99, 88, 4, 5]);
+            }
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[test]
+    fn test_insert_rows_prepend() {
+        let batch1 = Arc::new(table(vec![fa("a", &[1, 2, 3])]));
+        let mut st = SuperTable::from_batches(vec![batch1], None);
+
+        let insert_batch = Arc::new(table(vec![fa("a", &[99])]));
+        let insert_st = SuperTable::from_batches(vec![insert_batch], None);
+
+        st.insert_rows(0, insert_st).unwrap();
+
+        assert_eq!(st.n_rows(), 4);
+
+        let materialized = st.to_table(None);
+        match &materialized.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[99, 1, 2, 3]);
+            }
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[test]
+    fn test_insert_rows_append() {
+        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
+        let batch2 = Arc::new(table(vec![fa("a", &[3, 4])]));
+        let mut st = SuperTable::from_batches(vec![batch1, batch2], None);
+
+        let insert_batch = Arc::new(table(vec![fa("a", &[99])]));
+        let insert_st = SuperTable::from_batches(vec![insert_batch], None);
+
+        st.insert_rows(4, insert_st).unwrap();
+
+        assert_eq!(st.n_rows(), 5);
+
+        let materialized = st.to_table(None);
+        match &materialized.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4, 99]);
+            }
+            _ => panic!("wrong type"),
+        }
+    }
+
+    #[test]
+    fn test_insert_rows_schema_mismatch() {
+        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
+        let mut st = SuperTable::from_batches(vec![batch1], None);
+
+        let wrong_batch = Arc::new(table(vec![fa("b", &[99])]));
+        let wrong_st = SuperTable::from_batches(vec![wrong_batch], None);
+
+        let result = st.insert_rows(0, wrong_st);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_insert_rows_out_of_bounds() {
+        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
+        let mut st = SuperTable::from_batches(vec![batch1], None);
+
+        let insert_batch = Arc::new(table(vec![fa("a", &[99])]));
+        let insert_st = SuperTable::from_batches(vec![insert_batch], None);
+
+        let result = st.insert_rows(10, insert_st);
+        assert!(result.is_err());
     }
 }

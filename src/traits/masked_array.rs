@@ -6,7 +6,7 @@
 //! ensuring consistent null-handling behaviour across fixed-width and variable-length arrays.
 //! It also provides default implementations for common mask operations to reduce duplication.
 
-use crate::{Bitmask, Length, Offset};
+use crate::{Bitmask, Length, Offset, enums::error::MinarrowError};
 
 /// # MaskedArray
 ///
@@ -276,6 +276,49 @@ pub trait MaskedArray {
     /// mutate the array without reconstructing first, and a `ChunkedArray`
     /// is an alternative option.
     fn append_array(&mut self, other: &Self);
+
+    /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
+    ///
+    /// The inserted array must be of the same concrete type and element type.
+    /// Elements at and after `index` are shifted to make room for the inserted values.
+    ///
+    /// # Performance
+    /// This is an **O(n)** operation, where n is the number of elements that need to be shifted.
+    /// For appending to the end, prefer `append_array` which is more efficient.
+    ///
+    /// # Arguments
+    /// * `index` - Position before which to insert (0 = prepend, self.len() = append)
+    /// * `other` - Array to insert
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// * `index > self.len()` (out of bounds)
+    /// * Type mismatch between self and other (for enum variants)
+    ///
+    /// # Example
+    /// ```ignore
+    /// let mut arr = IntegerArray::from(vec![1, 2, 5, 6]);
+    /// let insert = IntegerArray::from(vec![3, 4]);
+    /// arr.insert_rows(2, &insert)?; // Now: [1, 2, 3, 4, 5, 6]
+    /// ```
+    fn insert_rows(&mut self, index: usize, other: &Self) -> Result<(), MinarrowError>;
+
+    /// Splits this array at the specified index, consuming self and returning two arrays.
+    ///
+    /// The original array's memory is split between the two resulting arrays without copying.
+    /// The first array contains elements [0..index), the second contains [index..len).
+    ///
+    /// # Arguments
+    /// * `index` - Position to split at (0 < index < len)
+    ///
+    /// # Errors
+    /// - Returns an error if index == 0 or index >= len()
+    ///
+    /// # Returns
+    /// A tuple of (before, after) where before contains [0..index) and after contains [index..len)
+    fn split(self, index: usize) -> Result<(Self, Self), MinarrowError>
+    where
+        Self: Sized;
 
     /// Extends the array from an iterator with pre-allocated capacity.
     ///

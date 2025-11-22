@@ -296,6 +296,17 @@ impl ArrayV {
                     }
                     Array::from_uint32(new_arr)
                 }
+                NumericArray::UInt64(_) => {
+                    let mut new_arr = IntegerArray::<u64>::with_capacity(indices.len(), true);
+                    for &idx in indices {
+                        if let Some(val) = self.get::<IntegerArray<u64>>(idx) {
+                            new_arr.push(val);
+                        } else {
+                            new_arr.push_null();
+                        }
+                    }
+                    Array::from_uint64(new_arr)
+                }
                 #[cfg(feature = "extended_numeric_types")]
                 NumericArray::Int8(_) => {
                     let mut new_arr = IntegerArray::<i8>::with_capacity(indices.len(), true);

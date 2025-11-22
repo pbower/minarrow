@@ -122,6 +122,64 @@ impl TemporalArray {
         }
     }
 
+    /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
+    ///
+    /// This is an **O(n)** operation.
+    ///
+    /// Returns an error if the two arrays are of different variants or incompatible types,
+    /// or if the index is out of bounds.
+    ///
+    /// This function uses copy-on-write semantics for arrays wrapped in `Arc`.
+    pub fn insert_rows(&mut self, index: usize, other: &Self) -> Result<(), MinarrowError> {
+        match (self, other) {
+            (TemporalArray::Datetime32(a), TemporalArray::Datetime32(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (TemporalArray::Datetime64(a), TemporalArray::Datetime64(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (TemporalArray::Null, TemporalArray::Null) => Ok(()),
+            (lhs, rhs) => Err(MinarrowError::TypeError {
+                from: "TemporalArray",
+                to: "TemporalArray",
+                message: Some(format!(
+                    "Cannot insert {} into {}: incompatible types",
+                    temporal_variant_name(rhs),
+                    temporal_variant_name(lhs)
+                )),
+            }),
+        }
+    }
+
+    /// Splits the TemporalArray at the specified index, consuming self and returning two arrays.
+    pub fn split(self, index: usize) -> Result<(Self, Self), MinarrowError> {
+        use std::sync::Arc;
+
+        match self {
+            TemporalArray::Datetime32(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    TemporalArray::Datetime32(Arc::new(left)),
+                    TemporalArray::Datetime32(Arc::new(right)),
+                ))
+            }
+            TemporalArray::Datetime64(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    TemporalArray::Datetime64(Arc::new(left)),
+                    TemporalArray::Datetime64(Arc::new(right)),
+                ))
+            }
+            TemporalArray::Null => Err(MinarrowError::IndexError(
+                "Cannot split Null array".to_string(),
+            )),
+        }
+    }
+
     /// Returns an Arc<DatetimeArray<i32>> (casting if needed).
     pub fn dt32(self) -> Result<DatetimeArray<i32>, MinarrowError> {
         match self {
