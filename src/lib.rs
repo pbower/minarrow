@@ -219,7 +219,10 @@ pub use enums::value::Value;
 pub use structs::bitmask::Bitmask;
 pub use structs::buffer::Buffer;
 #[cfg(feature = "chunked")]
-pub use structs::chunked::{super_array::SuperArray, super_table::SuperTable};
+pub use structs::chunked::{
+    super_array::{RechunkStrategy, SuperArray},
+    super_table::SuperTable,
+};
 #[cfg(feature = "views")]
 pub use structs::views::array_view::ArrayV;
 pub use structs::views::bitmask_view::BitmaskV;

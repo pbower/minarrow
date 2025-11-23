@@ -25,10 +25,14 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
+use crate::structs::chunked::super_array::RechunkStrategy;
 use crate::structs::field::Field;
 use crate::structs::field_array::FieldArray;
 use crate::structs::table::Table;
-use crate::traits::{concatenate::Concatenate, shape::Shape};
+#[cfg(feature = "size")]
+use crate::traits::byte_size::ByteSize;
+use crate::traits::concatenate::Concatenate;
+use crate::traits::shape::Shape;
 #[cfg(feature = "views")]
 use crate::{SuperTableV, TableV};
 
@@ -419,6 +423,221 @@ impl SuperTable {
             name,
         }
     }
+
+    /// Rechunks the table according to the specified strategy.
+    ///
+    /// Redistributes rows across batches using an efficient incremental approach
+    /// that avoids full materialization:
+    /// - `Count(n)`: Creates batches of `n` rows (last batch may be smaller)
+    /// - `Auto`: Uses a default size of 8192 rows
+    /// - `Memory(bytes)`: Targets a specific memory size per batch
+    ///
+    /// # Arguments
+    /// * `strategy` - The rechunking strategy to use
+    ///
+    /// # Errors
+    /// - Returns `IndexError` if `Count(0)` is specified
+    /// - Returns `IndexError` if memory-based calculation results in 0 chunk size
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Rechunk into 1024-row batches
+    /// table.rechunk(RechunkStrategy::Count(1024))?;
+    ///
+    /// // Rechunk with default size
+    /// table.rechunk(RechunkStrategy::Auto)?;
+    ///
+    /// // Target 64KB per batch
+    /// table.rechunk(RechunkStrategy::Memory(65536))?;
+    /// ```
+    pub fn rechunk(&mut self, strategy: RechunkStrategy) -> Result<(), MinarrowError> {
+        if self.batches.is_empty() || self.n_rows == 0 {
+            return Ok(());
+        }
+
+        // Determine chunk size based on strategy
+        let chunk_size = match strategy {
+            RechunkStrategy::Count(size) => {
+                if size == 0 {
+                    return Err(MinarrowError::IndexError(
+                        "Count chunk size must be greater than 0".to_string(),
+                    ));
+                }
+                size
+            }
+            RechunkStrategy::Auto => 8192,
+            #[cfg(feature = "size")]
+            RechunkStrategy::Memory(bytes_per_chunk) => {
+                let total_bytes = self.est_bytes();
+                let total_rows = self.n_rows;
+
+                if total_bytes == 0 {
+                    return Err(MinarrowError::IndexError(
+                        "Cannot rechunk: table has 0 estimated bytes".to_string(),
+                    ));
+                }
+
+                ((bytes_per_chunk * total_rows) / total_bytes).max(1)
+            }
+        };
+
+        // Fast path: single batch already at target size
+        if self.batches.len() == 1 && self.batches[0].n_rows == chunk_size {
+            return Ok(());
+        }
+
+        let mut new_batches = Vec::new();
+        let mut accumulator: Option<Table> = None;
+
+        // Process each existing batch
+        for batch_arc in self.batches.drain(..) {
+            let batch = Arc::try_unwrap(batch_arc).unwrap_or_else(|arc| (*arc).clone());
+            let mut remaining = batch;
+
+            while remaining.n_rows > 0 {
+                if let Some(ref mut acc) = accumulator {
+                    let acc_rows = acc.n_rows;
+                    let needed = chunk_size - acc_rows;
+
+                    if remaining.n_rows <= needed {
+                        // Entire remaining batch fits in accumulator
+                        *acc = acc.clone().concat(remaining)?;
+
+                        // If accumulator is now full, emit it
+                        if acc.n_rows == chunk_size {
+                            new_batches.push(Arc::new(accumulator.take().unwrap()));
+                        }
+                        break; // consumed remaining
+                    } else {
+                        // Split remaining batch to complete accumulator
+                        let split_result = remaining.split(needed)?;
+                        let mut parts = split_result.batches;
+                        let to_add =
+                            Arc::try_unwrap(parts.remove(0)).unwrap_or_else(|arc| (*arc).clone());
+                        remaining =
+                            Arc::try_unwrap(parts.remove(0)).unwrap_or_else(|arc| (*arc).clone());
+
+                        // Complete and emit the accumulator
+                        *acc = acc.clone().concat(to_add)?;
+                        new_batches.push(Arc::new(accumulator.take().unwrap()));
+                    }
+                } else {
+                    // No accumulator - start processing remaining
+                    if remaining.n_rows == chunk_size {
+                        // Exact fit - use remaining as-is
+                        new_batches.push(Arc::new(remaining));
+                        break;
+                    } else if remaining.n_rows > chunk_size {
+                        // Split off one chunk_size portion
+                        let split_result = remaining.split(chunk_size)?;
+                        let mut parts = split_result.batches;
+                        new_batches.push(parts.remove(0));
+                        remaining =
+                            Arc::try_unwrap(parts.remove(0)).unwrap_or_else(|arc| (*arc).clone());
+                    } else {
+                        // Remaining becomes new accumulator
+                        accumulator = Some(remaining);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Emit any remaining accumulator as final batch
+        if let Some(final_batch) = accumulator {
+            new_batches.push(Arc::new(final_batch));
+        }
+
+        self.batches = new_batches;
+        Ok(())
+    }
+
+    /// Rechunks only the first `up_to_row` rows, leaving the rest untouched.
+    ///
+    /// This is useful for streaming scenarios where new data is being appended
+    /// and you want to rechunk stable data while leaving recent additions alone.
+    ///
+    /// # Arguments
+    /// * `up_to_row` - Rechunk only rows before this index
+    /// * `strategy` - The rechunking strategy to use
+    ///
+    /// # Errors
+    /// - Returns `IndexError` if `up_to_row` is greater than total row count
+    /// - Returns same errors as `rechunk()` for invalid strategies
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Rechunk first 1000 rows, leave the rest untouched
+    /// table.rechunk_to(1000, RechunkStrategy::Count(512))?;
+    /// ```
+    pub fn rechunk_to(
+        &mut self,
+        up_to_row: usize,
+        strategy: RechunkStrategy,
+    ) -> Result<(), MinarrowError> {
+        let total_rows = self.n_rows;
+
+        if up_to_row > total_rows {
+            return Err(MinarrowError::IndexError(format!(
+                "rechunk_to row {} out of bounds for table with {} rows",
+                up_to_row, total_rows
+            )));
+        }
+
+        if up_to_row == 0 || self.batches.is_empty() {
+            return Ok(());
+        }
+
+        if up_to_row == total_rows {
+            // Rechunk everything
+            return self.rechunk(strategy);
+        }
+
+        // Find which batches contain the data up to up_to_row
+        let mut current_offset = 0;
+        let mut split_point = 0;
+
+        for (i, batch) in self.batches.iter().enumerate() {
+            let batch_end = current_offset + batch.n_rows;
+            if batch_end > up_to_row {
+                split_point = i;
+                break;
+            }
+            current_offset = batch_end;
+        }
+
+        // Extract batches to rechunk and batches to keep
+        let mut to_rechunk = self.batches.drain(..=split_point).collect::<Vec<_>>();
+        let keep_batches = self.batches.drain(..).collect::<Vec<_>>();
+
+        // If the split batch needs to be divided
+        if current_offset < up_to_row {
+            let split_batch_arc = to_rechunk.pop().unwrap();
+            let split_batch = Arc::try_unwrap(split_batch_arc).unwrap_or_else(|arc| (*arc).clone());
+            let split_at = up_to_row - current_offset;
+
+            let split_result = split_batch.split(split_at)?;
+            let mut parts = split_result.batches;
+            to_rechunk.push(parts.remove(0));
+            self.batches.push(parts.remove(0));
+        }
+
+        // Rechunk the selected portion
+        self.batches.extend(keep_batches);
+        // from_batches infers schema from the batches, second param is name
+        let mut temp = SuperTable::from_batches(to_rechunk.into(), Some(self.name.clone()));
+        temp.rechunk(strategy)?;
+
+        // Reconstruct rechunked portion + untouched portion
+        let mut result = temp.batches;
+        result.extend(self.batches.drain(..));
+        self.batches = result;
+
+        // Recalculate n_rows
+        self.n_rows = self.batches.iter().map(|b| b.n_rows).sum();
+
+        Ok(())
+    }
 }
 
 impl Default for SuperTable {
@@ -779,8 +998,8 @@ mod tests {
         assert_eq!(st.n_rows(), 6);
         assert_eq!(st.n_batches(), 4);
 
-        let materialized = st.to_table(None);
-        match &materialized.cols[0].array {
+        let materialised = st.to_table(None);
+        match &materialised.cols[0].array {
             Array::NumericArray(NumericArray::Int32(arr)) => {
                 assert_eq!(arr.data.as_slice(), &[1, 99, 2, 3, 4, 5]);
             }
@@ -801,8 +1020,8 @@ mod tests {
 
         assert_eq!(st.n_rows(), 7);
 
-        let materialized = st.to_table(None);
-        match &materialized.cols[0].array {
+        let materialised = st.to_table(None);
+        match &materialised.cols[0].array {
             Array::NumericArray(NumericArray::Int32(arr)) => {
                 assert_eq!(arr.data.as_slice(), &[1, 2, 3, 99, 88, 4, 5]);
             }
@@ -822,8 +1041,8 @@ mod tests {
 
         assert_eq!(st.n_rows(), 4);
 
-        let materialized = st.to_table(None);
-        match &materialized.cols[0].array {
+        let materialised = st.to_table(None);
+        match &materialised.cols[0].array {
             Array::NumericArray(NumericArray::Int32(arr)) => {
                 assert_eq!(arr.data.as_slice(), &[99, 1, 2, 3]);
             }
@@ -844,8 +1063,8 @@ mod tests {
 
         assert_eq!(st.n_rows(), 5);
 
-        let materialized = st.to_table(None);
-        match &materialized.cols[0].array {
+        let materialised = st.to_table(None);
+        match &materialised.cols[0].array {
             Array::NumericArray(NumericArray::Int32(arr)) => {
                 assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4, 99]);
             }
@@ -875,5 +1094,133 @@ mod tests {
 
         let result = st.insert_rows(10, insert_st);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rechunk_uniform() {
+        // Create a SuperTable with 3 batches of varying sizes
+        let batch1 = Arc::new(table(vec![fa("x", &[1, 2, 3]), fa("y", &[10, 20, 30])]));
+        let batch2 = Arc::new(table(vec![
+            fa("x", &[4, 5, 6, 7]),
+            fa("y", &[40, 50, 60, 70]),
+        ]));
+        let batch3 = Arc::new(table(vec![fa("x", &[8, 9]), fa("y", &[80, 90])]));
+        let mut st = SuperTable::from_batches(vec![batch1, batch2, batch3], None);
+
+        // Total rows: 3 + 4 + 2 = 9 rows
+        assert_eq!(st.n_rows(), 9);
+        assert_eq!(st.n_batches(), 3);
+
+        // Rechunk to batches of 4 rows each
+        st.rechunk(RechunkStrategy::Count(4)).unwrap();
+
+        // Should have 3 batches: [4 rows, 4 rows, 1 row]
+        assert_eq!(st.n_batches(), 3);
+        assert_eq!(st.batch(0).unwrap().n_rows, 4);
+        assert_eq!(st.batch(1).unwrap().n_rows, 4);
+        assert_eq!(st.batch(2).unwrap().n_rows, 1);
+        assert_eq!(st.n_rows(), 9);
+    }
+
+    #[test]
+    fn test_rechunk_auto() {
+        // Create a SuperTable with many rows spread across small batches
+        let mut batches = Vec::new();
+        for i in 0..100 {
+            let vals: Vec<i32> = vec![i * 10, i * 10 + 1];
+            batches.push(Arc::new(table(vec![fa("col", &vals)])));
+        }
+        let mut st = SuperTable::from_batches(batches.into(), None);
+
+        // Total rows: 100 batches * 2 rows = 200 rows
+        assert_eq!(st.n_rows(), 200);
+        assert_eq!(st.n_batches(), 100);
+
+        // Rechunk with Auto strategy (default 8192 rows per batch)
+        st.rechunk(RechunkStrategy::Auto).unwrap();
+
+        // Should consolidate to 1 batch since 200 < 8192
+        assert_eq!(st.n_batches(), 1);
+        assert_eq!(st.batch(0).unwrap().n_rows, 200);
+        assert_eq!(st.n_rows(), 200);
+    }
+
+    #[test]
+    #[cfg(feature = "size")]
+    fn test_rechunk_by_memory() {
+        // Create a SuperTable with i32 data
+        let batch1 = Arc::new(table(vec![fa("a", &[1, 2, 3, 4]), fa("b", &[5, 6, 7, 8])]));
+        let batch2 = Arc::new(table(vec![
+            fa("a", &[9, 10, 11, 12]),
+            fa("b", &[13, 14, 15, 16]),
+        ]));
+        let mut st = SuperTable::from_batches(vec![batch1, batch2], None);
+
+        assert_eq!(st.n_rows(), 8);
+        assert_eq!(st.n_batches(), 2);
+
+        // Use a larger memory target to get predictable chunking
+        // The actual byte size includes overhead beyond raw data
+        st.rechunk(RechunkStrategy::Memory(64)).unwrap();
+
+        // Should rechunk into batches
+        assert!(st.n_batches() >= 1);
+        assert_eq!(st.n_rows(), 8);
+
+        // Verify data integrity after rechunking
+        let materialized = st.to_table(None);
+        assert_eq!(materialized.n_rows, 8);
+    }
+
+    #[test]
+    fn test_rechunk_uniform_zero_error() {
+        let batch1 = Arc::new(table(vec![fa("x", &[1, 2, 3])]));
+        let mut st = SuperTable::from_batches(vec![batch1], None);
+
+        let result = st.rechunk(RechunkStrategy::Count(0));
+        assert!(result.is_err());
+        if let Err(MinarrowError::IndexError(msg)) = result {
+            assert!(msg.contains("Count chunk size must be greater than 0"));
+        } else {
+            panic!("Expected IndexError for zero chunk size");
+        }
+    }
+
+    #[test]
+    fn test_rechunk_empty_table() {
+        let mut st = SuperTable::default();
+        assert!(st.is_empty());
+
+        // Rechunking an empty table should succeed and remain empty
+        st.rechunk(RechunkStrategy::Auto).unwrap();
+        assert!(st.is_empty());
+        assert_eq!(st.n_batches(), 0);
+
+        st.rechunk(RechunkStrategy::Count(10)).unwrap();
+        assert!(st.is_empty());
+        assert_eq!(st.n_batches(), 0);
+    }
+
+    #[test]
+    fn test_rechunk_preserves_data_order() {
+        // Create batches with sequential data
+        let batch1 = Arc::new(table(vec![fa("num", &[1, 2, 3])]));
+        let batch2 = Arc::new(table(vec![fa("num", &[4, 5, 6, 7])]));
+        let batch3 = Arc::new(table(vec![fa("num", &[8, 9])]));
+        let mut st = SuperTable::from_batches(vec![batch1, batch2, batch3], None);
+
+        assert_eq!(st.n_rows(), 9);
+
+        // Rechunk with different size
+        st.rechunk(RechunkStrategy::Count(5)).unwrap();
+
+        // Materialize to verify order is preserved
+        let materialized = st.to_table(None);
+        match &materialized.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
+            }
+            _ => panic!("Expected Int32 array"),
+        }
     }
 }

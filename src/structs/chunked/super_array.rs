@@ -17,22 +17,26 @@ use std::sync::Arc;
 use crate::ArrayV;
 #[cfg(feature = "views")]
 use crate::SuperArrayV;
-#[cfg(feature = "datetime")]
-use crate::enums::time_units::TimeUnit;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
 use crate::ffi::arrow_dtype::ArrowType;
-use crate::traits::{
-    concatenate::Concatenate,
-    masked_array::MaskedArray,
-    shape::Shape,
-    type_unions::{Float, Integer},
-};
-use crate::{
-    Array, Bitmask, BooleanArray, CategoricalArray, Field, FieldArray, FloatArray, IntegerArray,
-    NumericArray, StringArray, TextArray, Vec64,
-};
-#[cfg(feature = "datetime")]
-use crate::{DatetimeArray, TemporalArray};
+#[cfg(feature = "size")]
+use crate::traits::byte_size::ByteSize;
+use crate::traits::{concatenate::Concatenate, shape::Shape};
+use crate::{Array, Field, FieldArray};
+
+/// Strategy for rechunking arrays and tables.
+///
+/// Defines how to redistribute data across chunks/batches.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RechunkStrategy {
+    /// Rechunk into uniform chunks of the specified element/row count.
+    Count(usize),
+    /// Rechunk targeting a specific memory size per chunk in bytes.
+    #[cfg(feature = "size")]
+    Memory(usize),
+    /// Rechunk using a default size of 8192 elements/rows.
+    Auto,
+}
 
 /// # SuperArray
 ///
@@ -177,454 +181,16 @@ impl SuperArray {
             !self.arrays.is_empty(),
             "to_array() called on empty ChunkedArray"
         );
-        match &self.arrays[0].array {
-            Array::NumericArray(inner) => match inner {
-                #[cfg(feature = "extended_numeric_types")]
-                NumericArray::Int8(_) => self.concat_integer::<i8>(),
-                #[cfg(feature = "extended_numeric_types")]
-                NumericArray::Int16(_) => self.concat_integer::<i16>(),
-                NumericArray::Int32(_) => self.concat_integer::<i32>(),
-                NumericArray::Int64(_) => self.concat_integer::<i64>(),
-                #[cfg(feature = "extended_numeric_types")]
-                NumericArray::UInt8(_) => self.concat_integer::<u8>(),
-                #[cfg(feature = "extended_numeric_types")]
-                NumericArray::UInt16(_) => self.concat_integer::<u16>(),
-                NumericArray::UInt32(_) => self.concat_integer::<u32>(),
-                NumericArray::UInt64(_) => self.concat_integer::<u64>(),
-                NumericArray::Float32(_) => self.concat_float::<f32>(),
-                NumericArray::Float64(_) => self.concat_float::<f64>(),
-                NumericArray::Null => unreachable!(),
-            },
-            Array::BooleanArray(_) => self.concat_bool(),
-            Array::TextArray(inner) => match inner {
-                TextArray::String32(_) => self.concat_string::<u32>(),
-                #[cfg(feature = "large_string")]
-                TextArray::String64(_) => self.concat_string::<u64>(),
-                #[cfg(feature = "extended_categorical")]
-                TextArray::Categorical8(_) => self.concat_dictionary::<u8>(),
-                #[cfg(feature = "extended_categorical")]
-                TextArray::Categorical16(_) => self.concat_dictionary::<u16>(),
-                TextArray::Categorical32(_) => self.concat_dictionary::<u32>(),
-                #[cfg(feature = "extended_categorical")]
-                TextArray::Categorical64(_) => self.concat_dictionary::<u64>(),
-                TextArray::Null => unreachable!(),
-            },
-            #[cfg(feature = "datetime")]
-            Array::TemporalArray(inner) => match inner {
-                TemporalArray::Datetime32(_) => self.concat_datetime::<i32>(),
-                TemporalArray::Datetime64(_) => self.concat_datetime::<i64>(),
-                TemporalArray::Null => unreachable!(),
-            },
-            Array::Null => unreachable!(),
-        }
-    }
 
-    /// Concatenates 2 or more integer numerical arrays, producing a single Array.
-    /// The input arrays must all be the same underlying type.
-    ///
-    /// # Panics
-    /// Panics if an input is not a numerical array of the correct type.
-    fn concat_integer<T>(&self) -> Array
-    where
-        T: Integer + Default + Copy + 'static,
-    {
-        let total: usize = self.arrays.iter().map(|c| c.len()).sum();
-        let mut data = Vec64::<T>::with_capacity(total);
-        let mut null_mask: Option<Bitmask> = None;
+        // Use the Concatenate trait to combine all FieldArrays
+        let result = self
+            .arrays
+            .iter()
+            .cloned()
+            .reduce(|acc, arr| acc.concat(arr).expect("Failed to concatenate arrays"))
+            .expect("Expected at least one array");
 
-        for c in &self.arrays {
-            let src = match &c.array {
-                Array::NumericArray(inner) => match inner {
-                    #[cfg(feature = "extended_numeric_types")]
-                    NumericArray::Int8(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const IntegerArray<T>)
-                    },
-                    #[cfg(feature = "extended_numeric_types")]
-                    NumericArray::Int16(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const IntegerArray<T>)
-                    },
-                    NumericArray::Int32(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const IntegerArray<T>)
-                    },
-                    NumericArray::Int64(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const IntegerArray<T>)
-                    },
-                    #[cfg(feature = "extended_numeric_types")]
-                    NumericArray::UInt8(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const IntegerArray<T>)
-                    },
-                    #[cfg(feature = "extended_numeric_types")]
-                    NumericArray::UInt16(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const IntegerArray<T>)
-                    },
-                    NumericArray::UInt32(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const IntegerArray<T>)
-                    },
-                    NumericArray::UInt64(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const IntegerArray<T>)
-                    },
-                    NumericArray::Null => unreachable!(),
-                    _ => unreachable!(),
-                },
-                _ => unreachable!("concat_integer called on non-numerical array"),
-            };
-
-            let dst_before = data.len();
-            data.extend_from_slice(&src.data);
-            if src.is_nullable() {
-                null_mask.get_or_insert_with(|| Bitmask::new_set_all(total, true));
-                concat_null_masks_bitmask(
-                    null_mask.as_mut().unwrap(),
-                    dst_before,
-                    src.null_mask.as_ref(),
-                    src.len(),
-                );
-            }
-        }
-
-        let out = IntegerArray::<T> {
-            data: data.into(),
-            null_mask,
-        };
-
-        match &self.arrays[0].array {
-            Array::NumericArray(inner) => match inner {
-                #[cfg(feature = "extended_numeric_types")]
-                NumericArray::Int8(_) => {
-                    Array::from_int8(unsafe { std::mem::transmute::<_, IntegerArray<i8>>(out) })
-                }
-                #[cfg(feature = "extended_numeric_types")]
-                NumericArray::Int16(_) => {
-                    Array::from_int16(unsafe { std::mem::transmute::<_, IntegerArray<i16>>(out) })
-                }
-                NumericArray::Int32(_) => {
-                    Array::from_int32(unsafe { std::mem::transmute::<_, IntegerArray<i32>>(out) })
-                }
-                NumericArray::Int64(_) => {
-                    Array::from_int64(unsafe { std::mem::transmute::<_, IntegerArray<i64>>(out) })
-                }
-                #[cfg(feature = "extended_numeric_types")]
-                NumericArray::UInt8(_) => {
-                    Array::from_uint8(unsafe { std::mem::transmute::<_, IntegerArray<u8>>(out) })
-                }
-                #[cfg(feature = "extended_numeric_types")]
-                NumericArray::UInt16(_) => {
-                    Array::from_uint16(unsafe { std::mem::transmute::<_, IntegerArray<u16>>(out) })
-                }
-                NumericArray::UInt32(_) => {
-                    Array::from_uint32(unsafe { std::mem::transmute::<_, IntegerArray<u32>>(out) })
-                }
-                NumericArray::UInt64(_) => {
-                    Array::from_uint64(unsafe { std::mem::transmute::<_, IntegerArray<u64>>(out) })
-                }
-                NumericArray::Null => unreachable!(),
-                _ => unreachable!(),
-            },
-            _ => unreachable!("concat_integer called on non-numerical array"),
-        }
-    }
-
-    /// Concatenates 2 or more float numerical arrays, producing a single Array.
-    /// The input arrays must all be the same underlying type.
-    ///
-    /// # Panics
-    /// Panics if an input is not a numerical array of the correct type.
-    fn concat_float<T>(&self) -> Array
-    where
-        T: Float + Default + Copy + 'static,
-    {
-        let total: usize = self.arrays.iter().map(|c| c.len()).sum();
-        let mut data = Vec64::<T>::with_capacity(total);
-        let mut null_mask: Option<Bitmask> = None;
-
-        for c in &self.arrays {
-            let src = match &c.array {
-                Array::NumericArray(inner) => match inner {
-                    NumericArray::Float32(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const FloatArray<T>)
-                    },
-                    NumericArray::Float64(a) => unsafe {
-                        &*(a.as_ref() as *const _ as *const FloatArray<T>)
-                    },
-                    NumericArray::Null => unreachable!(),
-                    _ => unreachable!(),
-                },
-                _ => unreachable!("concat_float called on non-numerical array"),
-            };
-            let dst_before = data.len();
-            data.extend_from_slice(&src.data);
-            if src.is_nullable() {
-                null_mask.get_or_insert_with(|| Bitmask::new_set_all(total, true));
-                concat_null_masks_bitmask(
-                    null_mask.as_mut().unwrap(),
-                    dst_before,
-                    src.null_mask.as_ref(),
-                    src.len(),
-                );
-            }
-        }
-
-        let out = FloatArray::<T> {
-            data: data.into(),
-            null_mask,
-        };
-
-        match &self.arrays[0].array {
-            Array::NumericArray(inner) => match inner {
-                NumericArray::Float32(_) => {
-                    Array::from_float32(unsafe { std::mem::transmute::<_, FloatArray<f32>>(out) })
-                }
-                NumericArray::Float64(_) => {
-                    Array::from_float64(unsafe { std::mem::transmute::<_, FloatArray<f64>>(out) })
-                }
-                NumericArray::Null => unreachable!(),
-                _ => unreachable!(),
-            },
-            _ => unreachable!("concat_float called on non-numerical array"),
-        }
-    }
-
-    /// Concatenates 2 boolean arrays
-    fn concat_bool(&self) -> Array {
-        let total_len: usize = self.arrays.iter().map(|c| c.len()).sum();
-
-        // Construct bit-packed buffer for data.
-        let mut data = Vec64::<u8>::with_capacity((total_len + 7) / 8);
-        let mut null_mask: Option<Bitmask> = None;
-        let mut dst_len = 0;
-
-        for c in &self.arrays {
-            let src = match &c.array {
-                Array::BooleanArray(a) => a,
-                _ => unreachable!(),
-            };
-            let bytes = (src.len() + 7) / 8;
-            for b in 0..bytes {
-                data.push(src.data.as_ref()[b]);
-            }
-            if src.is_nullable() {
-                null_mask.get_or_insert_with(|| Bitmask::new_set_all(total_len, true));
-                concat_null_masks_bitmask(
-                    null_mask.as_mut().unwrap(),
-                    dst_len,
-                    src.null_mask.as_ref(),
-                    src.len(),
-                );
-            }
-            dst_len += src.len();
-        }
-
-        // Finalise as Bitmask for API.
-        let bit_data = Bitmask::from_bytes(&data, total_len);
-        let out = BooleanArray::from_bitmask(bit_data, null_mask);
-        Array::BooleanArray(out.into())
-    }
-
-    /// Concatenates 2 string arrays
-    fn concat_string<O>(&self) -> Array
-    where
-        O: crate::traits::type_unions::Integer + num_traits::Unsigned,
-    {
-        let mut values = Vec64::<u8>::new();
-        let mut offsets = Vec64::<O>::with_capacity(1);
-        let mut null_mask: Option<Bitmask> = None;
-        offsets.push(O::zero());
-        let mut total_rows = 0usize;
-        for c in &self.arrays {
-            let src = match &c.array {
-                Array::TextArray(inner) => match inner {
-                    TextArray::String32(a) => unsafe { &*(a as *const _ as *const StringArray<O>) },
-                    #[cfg(feature = "large_string")]
-                    TextArray::String64(a) => unsafe { &*(a as *const _ as *const StringArray<O>) },
-                    _ => unreachable!(),
-                },
-                _ => unreachable!(),
-            };
-            let base = values.len();
-            values.extend_from_slice(&src.data);
-            for i in 1..src.offsets.len() {
-                let off = src.offsets[i].to_usize() + base;
-                offsets.push(O::from_usize(off));
-            }
-            if src.is_nullable() {
-                null_mask.get_or_insert_with(|| Bitmask::new_set_all(total_rows + src.len(), true));
-                concat_null_masks_bitmask(
-                    null_mask.as_mut().unwrap(),
-                    total_rows,
-                    src.null_mask.as_ref(),
-                    src.len(),
-                );
-            }
-            total_rows += src.len();
-        }
-        let out = StringArray::<O>::from_parts(offsets, values, null_mask);
-        match &self.arrays[0].array {
-            Array::TextArray(inner) => match inner {
-                TextArray::String32(_) => {
-                    Array::from_string32(unsafe { std::mem::transmute::<_, StringArray<u32>>(out) })
-                }
-                #[cfg(feature = "large_string")]
-                TextArray::String64(_) => {
-                    Array::from_string64(unsafe { std::mem::transmute::<_, StringArray<u64>>(out) })
-                }
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
-        }
-    }
-
-    /// Concatenates 2 dict arrays
-    fn concat_dictionary<Idx>(&self) -> Array
-    where
-        Idx: crate::traits::type_unions::Integer + Default + Copy,
-    {
-        use std::collections::HashMap;
-        let mut dict: Vec64<String> = Vec64::new();
-        let mut dict_map: HashMap<String, Idx> = HashMap::new();
-        let mut indices = Vec64::<Idx>::new();
-        let mut null_mask: Option<Bitmask> = None;
-        let mut dst_rows = 0usize;
-        for c in &self.arrays {
-            let src = match &c.array {
-                Array::TextArray(inner) => match inner {
-                    #[cfg(feature = "extended_categorical")]
-                    TextArray::Categorical8(a) => unsafe {
-                        &*(a as *const _ as *const CategoricalArray<Idx>)
-                    },
-                    #[cfg(feature = "extended_categorical")]
-                    TextArray::Categorical16(a) => unsafe {
-                        &*(a as *const _ as *const CategoricalArray<Idx>)
-                    },
-                    TextArray::Categorical32(a) => unsafe {
-                        &*(a as *const _ as *const CategoricalArray<Idx>)
-                    },
-                    #[cfg(feature = "extended_categorical")]
-                    TextArray::Categorical64(a) => unsafe {
-                        &*(a as *const _ as *const CategoricalArray<Idx>)
-                    },
-                    _ => unreachable!(),
-                },
-                _ => unreachable!(),
-            };
-            for &idx in &src.data {
-                let str_val = &src.unique_values[idx.to_usize()];
-                let new_idx = *dict_map.entry(str_val.clone()).or_insert_with(|| {
-                    let i = dict.len();
-                    dict.push(str_val.clone());
-                    Idx::from_usize(i)
-                });
-                indices.push(new_idx);
-            }
-            if src.is_nullable() {
-                null_mask.get_or_insert_with(|| Bitmask::new_set_all(dst_rows + src.len(), true));
-                concat_null_masks_bitmask(
-                    null_mask.as_mut().unwrap(),
-                    dst_rows,
-                    src.null_mask.as_ref(),
-                    src.len(),
-                );
-            }
-            dst_rows += src.len();
-        }
-        let out = CategoricalArray::<Idx>::from_parts(indices, dict, null_mask);
-        match &self.arrays[0].array {
-            Array::TextArray(inner) => match inner {
-                #[cfg(feature = "extended_categorical")]
-                TextArray::Categorical8(_) => Array::from_categorical8(unsafe {
-                    std::mem::transmute::<_, CategoricalArray<u8>>(out)
-                }),
-                #[cfg(feature = "extended_categorical")]
-                TextArray::Categorical16(_) => Array::from_categorical16(unsafe {
-                    std::mem::transmute::<_, CategoricalArray<u16>>(out)
-                }),
-                TextArray::Categorical32(_) => Array::from_categorical32(unsafe {
-                    std::mem::transmute::<_, CategoricalArray<u32>>(out)
-                }),
-                #[cfg(feature = "extended_categorical")]
-                TextArray::Categorical64(_) => Array::from_categorical64(unsafe {
-                    std::mem::transmute::<_, CategoricalArray<u64>>(out)
-                }),
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
-        }
-    }
-
-    /// Concatenates 2 datetime arrays
-    #[cfg(feature = "datetime")]
-    fn concat_datetime<T>(&self) -> Array
-    where
-        T: Integer + Default + Copy,
-    {
-        let total: usize = self.arrays.iter().map(|c| c.len()).sum();
-        let mut data = Vec64::<T>::with_capacity(total);
-        let mut null_mask: Option<Bitmask> = None;
-        let mut time_unit: Option<TimeUnit> = None;
-
-        for c in &self.arrays {
-            let src = match &c.array {
-                Array::TemporalArray(inner) => match inner {
-                    TemporalArray::Datetime32(a) => {
-                        if time_unit.is_none() {
-                            time_unit = Some(a.time_unit.clone());
-                        } else {
-                            assert_eq!(
-                                time_unit,
-                                Some(a.time_unit.clone()),
-                                "Mismatched TimeUnit across chunks"
-                            );
-                        }
-                        unsafe { &*(a as *const _ as *const DatetimeArray<T>) }
-                    }
-                    TemporalArray::Datetime64(a) => {
-                        if time_unit.is_none() {
-                            time_unit = Some(a.time_unit.clone());
-                        } else {
-                            assert_eq!(
-                                time_unit,
-                                Some(a.time_unit.clone()),
-                                "Mismatched TimeUnit across chunks"
-                            );
-                        }
-                        unsafe { &*(a as *const _ as *const DatetimeArray<T>) }
-                    }
-                    TemporalArray::Null => unreachable!(),
-                },
-                _ => unreachable!(),
-            };
-
-            let dst_before = data.len();
-            data.extend_from_slice(&src.data);
-
-            if src.is_nullable() {
-                null_mask.get_or_insert_with(|| Bitmask::new_set_all(total, true));
-                concat_null_masks_bitmask(
-                    null_mask.as_mut().unwrap(),
-                    dst_before,
-                    src.null_mask.as_ref(),
-                    src.len(),
-                );
-            }
-        }
-
-        let out = DatetimeArray::<T> {
-            data: data.into(),
-            null_mask,
-            time_unit: time_unit.expect("Expected time unit"),
-        };
-
-        match &self.arrays[0].array {
-            Array::TemporalArray(inner) => match inner {
-                TemporalArray::Datetime32(_) => Array::from_datetime_i32(unsafe {
-                    std::mem::transmute::<_, crate::DatetimeArray<i32>>(out)
-                }),
-                TemporalArray::Datetime64(_) => Array::from_datetime_i64(unsafe {
-                    std::mem::transmute::<_, crate::DatetimeArray<i64>>(out)
-                }),
-                TemporalArray::Null => unreachable!(),
-            },
-            _ => unreachable!(),
-        }
+        result.array
     }
 
     // Metadata
@@ -855,30 +421,218 @@ impl SuperArray {
         Ok(())
     }
 
+    /// Rechunks the array according to the specified strategy.
+    ///
+    /// Redistributes data across chunks using an efficient incremental approach
+    /// that avoids full materialization:
+    /// - `Count(n)`: Creates chunks of `n` elements. The last chunk may be smaller.
+    /// - `Auto`: Uses a default size of 8192 elements
+    /// - `Memory(bytes)`: Targets a specific memory size per chunk
+    ///
+    /// # Arguments
+    /// * `strategy` - The rechunking strategy to use
+    ///
+    /// # Errors
+    /// - Returns `IndexError` if `Count(0)` is specified
+    /// - Returns `IndexError` if memory-based calculation results in 0 chunk size
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Rechunk into 1024-element chunks
+    /// array.rechunk(RechunkStrategy::Count(1024))?;
+    ///
+    /// // Rechunk with default size
+    /// array.rechunk(RechunkStrategy::Auto)?;
+    ///
+    /// // Target 64KB per chunk
+    /// array.rechunk(RechunkStrategy::Memory(65536))?;
+    /// ```
+    pub fn rechunk(&mut self, strategy: RechunkStrategy) -> Result<(), MinarrowError> {
+        if self.arrays.is_empty() || self.len() == 0 {
+            return Ok(());
+        }
+
+        // Determine chunk size based on strategy
+        let chunk_size = match strategy {
+            RechunkStrategy::Count(size) => {
+                if size == 0 {
+                    return Err(MinarrowError::IndexError(
+                        "Count chunk size must be greater than 0".to_string(),
+                    ));
+                }
+                size
+            }
+            RechunkStrategy::Auto => 8192,
+            #[cfg(feature = "size")]
+            RechunkStrategy::Memory(bytes_per_chunk) => {
+                let total_bytes = self.est_bytes();
+                let total_len = self.len();
+
+                if total_bytes == 0 {
+                    return Err(MinarrowError::IndexError(
+                        "Cannot rechunk: array has 0 estimated bytes".to_string(),
+                    ));
+                }
+
+                ((bytes_per_chunk * total_len) / total_bytes).max(1)
+            }
+        };
+
+        // Fast path: single chunk already at target size
+        if self.arrays.len() == 1 && self.arrays[0].len() == chunk_size {
+            return Ok(());
+        }
+
+        let field = self.arrays[0].field.clone();
+        let mut new_chunks = Vec::new();
+        let mut accumulator: Option<FieldArray> = None;
+
+        // Process each existing chunk
+        for chunk in self.arrays.drain(..) {
+            let mut remaining = chunk;
+
+            while remaining.len() > 0 {
+                if let Some(ref mut acc) = accumulator {
+                    let acc_len = acc.len();
+                    let needed = chunk_size - acc_len;
+
+                    if remaining.len() <= needed {
+                        // Entire remaining chunk fits in accumulator
+                        *acc = acc.clone().concat(remaining)?;
+
+                        // If accumulator is now full, emit it
+                        if acc.len() == chunk_size {
+                            new_chunks.push(accumulator.take().unwrap());
+                        }
+                        break; // consumed remaining
+                    } else {
+                        // Split remaining chunk to complete accumulator
+                        let split_result = remaining.array.split(needed, &field)?;
+                        let mut parts = split_result.into_arrays();
+                        let to_add = parts.remove(0);
+                        remaining = parts.remove(0);
+
+                        // Complete and emit the accumulator
+                        *acc = acc.clone().concat(to_add)?;
+                        new_chunks.push(accumulator.take().unwrap());
+                    }
+                } else {
+                    // No accumulator - start processing remaining
+                    if remaining.len() == chunk_size {
+                        // Exact fit - use remaining as-is
+                        new_chunks.push(remaining);
+                        break;
+                    } else if remaining.len() > chunk_size {
+                        // Split off one chunk_size portion
+                        let split_result = remaining.array.split(chunk_size, &field)?;
+                        let mut parts = split_result.into_arrays();
+                        new_chunks.push(parts.remove(0));
+                        remaining = parts.remove(0);
+                    } else {
+                        // Remaining becomes new accumulator
+                        accumulator = Some(remaining);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Emit any remaining accumulator as final chunk
+        if let Some(final_chunk) = accumulator {
+            new_chunks.push(final_chunk);
+        }
+
+        self.arrays = new_chunks;
+        Ok(())
+    }
+
+    /// Rechunks only the first `up_to_index` elements, leaving the rest untouched.
+    ///
+    /// This is useful for streaming scenarios where new data is being appended
+    /// and you want to rechunk stable data while leaving recent additions alone.
+    ///
+    /// # Arguments
+    /// * `up_to_index` - Rechunk only elements before this index
+    /// * `strategy` - The rechunking strategy to use
+    ///
+    /// # Errors
+    /// - Returns `IndexError` if `up_to_index` is greater than array length
+    /// - Returns same errors as `rechunk()` for invalid strategies
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Rechunk first 1000 elements, leave the rest untouched
+    /// array.rechunk_to(1000, RechunkStrategy::Count(512))?;
+    /// ```
+    pub fn rechunk_to(
+        &mut self,
+        up_to_index: usize,
+        strategy: RechunkStrategy,
+    ) -> Result<(), MinarrowError> {
+        let total_len = self.len();
+
+        if up_to_index > total_len {
+            return Err(MinarrowError::IndexError(format!(
+                "rechunk_to index {} out of bounds for array of length {}",
+                up_to_index, total_len
+            )));
+        }
+
+        if up_to_index == 0 || self.arrays.is_empty() {
+            return Ok(());
+        }
+
+        if up_to_index == total_len {
+            // Rechunk everything
+            return self.rechunk(strategy);
+        }
+
+        // Find which chunks contain the data up to up_to_index
+        let mut current_offset = 0;
+        let mut split_point = 0;
+
+        for (i, chunk) in self.arrays.iter().enumerate() {
+            let chunk_end = current_offset + chunk.len();
+            if chunk_end > up_to_index {
+                split_point = i;
+                break;
+            }
+            current_offset = chunk_end;
+        }
+
+        // Extract chunks to rechunk and chunks to keep
+        let mut to_rechunk = self.arrays.drain(..=split_point).collect::<Vec<_>>();
+        let keep_chunks = self.arrays.drain(..).collect::<Vec<_>>();
+
+        // If the split chunk needs to be divided
+        if current_offset < up_to_index {
+            let split_chunk = to_rechunk.pop().unwrap();
+            let split_at = up_to_index - current_offset;
+            let field = split_chunk.field.clone();
+
+            let split_result = split_chunk.array.split(split_at, &field)?;
+            let mut parts = split_result.into_arrays();
+            to_rechunk.push(parts.remove(0));
+            self.arrays.push(parts.remove(0));
+        }
+
+        // Rechunk the selected portion
+        self.arrays.extend(keep_chunks);
+        let mut temp = SuperArray::from_field_array_chunks(to_rechunk);
+        temp.rechunk(strategy)?;
+
+        // Reconstruct rechunked portion + untouched portion
+        let mut result = temp.arrays;
+        result.extend(self.arrays.drain(..));
+        self.arrays = result;
+
+        Ok(())
+    }
+
     /// Consumes the SuperArray and returns the underlying Vec<FieldArray> chunks.
     #[inline]
     pub fn into_arrays(self) -> Vec<FieldArray> {
         self.arrays
-    }
-}
-
-/// Concatenates Bitmask null masks into a single mask for the output array.
-fn concat_null_masks_bitmask(
-    dst: &mut Bitmask,
-    dst_len_before: usize,
-    src_mask: Option<&Bitmask>,
-    src_len: usize,
-) {
-    if let Some(src) = src_mask {
-        dst.ensure_capacity(dst_len_before + src_len);
-        for i in 0..src_len {
-            let valid = src.get(i);
-            dst.set(dst_len_before + i, valid);
-        }
-    } else {
-        for i in 0..src_len {
-            dst.set(dst_len_before + i, true);
-        }
     }
 }
 
@@ -1013,6 +767,8 @@ impl Display for SuperArray {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "views")]
+    use crate::NumericArray;
     use crate::ffi::arrow_dtype::ArrowType;
     use crate::{Array, Field, FieldArray, Vec64};
 
@@ -1095,6 +851,8 @@ mod tests {
     #[cfg(feature = "views")]
     #[test]
     fn test_slice_and_materialise() {
+        use crate::NumericArray;
+
         let c1 = fa("a", &[10, 20, 30], 0);
         let c2 = fa("a", &[40, 50], 0);
         let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()].into());
@@ -1140,6 +898,7 @@ mod tests {
         assert_eq!(ca.chunks().len(), 1);
     }
 
+    #[cfg(feature = "views")]
     #[test]
     fn test_insert_rows_into_first_chunk() {
         let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0), fa("a", &[4, 5], 0)]);
@@ -1159,6 +918,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "views")]
     #[test]
     fn test_insert_rows_into_second_chunk() {
         let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2], 0), fa("a", &[3, 4, 5], 0)]);
@@ -1178,6 +938,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "views")]
     #[test]
     fn test_insert_rows_prepend() {
         let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
@@ -1196,6 +957,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "views")]
     #[test]
     fn test_insert_rows_append() {
         let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
@@ -1236,5 +998,94 @@ mod tests {
 
         let result = ca.insert_rows(10, other);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rechunk_uniform() {
+        let mut ca = SuperArray::from_chunks(vec![
+            fa("a", &[1, 2, 3], 0),
+            fa("a", &[4, 5], 0),
+            fa("a", &[6, 7, 8, 9], 0),
+        ]);
+
+        ca.rechunk(RechunkStrategy::Count(3)).unwrap();
+
+        assert_eq!(ca.n_chunks(), 3);
+        assert_eq!(ca.len(), 9);
+        assert_eq!(ca.arrays[0].len(), 3);
+        assert_eq!(ca.arrays[1].len(), 3);
+        assert_eq!(ca.arrays[2].len(), 3);
+
+        let result = ca.copy_to_array();
+        if let Array::NumericArray(NumericArray::Int32(ia)) = result {
+            assert_eq!(&*ia.data, &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        } else {
+            panic!("Expected Int32");
+        }
+    }
+
+    #[test]
+    fn test_rechunk_auto() {
+        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0), fa("a", &[4, 5], 0)]);
+
+        ca.rechunk(RechunkStrategy::Auto).unwrap();
+
+        assert_eq!(ca.n_chunks(), 1);
+        assert_eq!(ca.len(), 5);
+    }
+
+    #[test]
+    #[cfg(feature = "size")]
+    fn test_rechunk_by_memory() {
+        let mut ca = SuperArray::from_chunks(vec![
+            fa("a", &[1, 2, 3, 4, 5, 6, 7, 8], 0),
+            fa("a", &[9, 10, 11, 12], 0),
+        ]);
+
+        // i32 is 4 bytes, so 16 bytes = 4 elements
+        ca.rechunk(RechunkStrategy::Memory(16)).unwrap();
+
+        assert_eq!(ca.len(), 12);
+        assert!(ca.n_chunks() >= 3);
+
+        let result = ca.copy_to_array();
+        if let Array::NumericArray(NumericArray::Int32(ia)) = result {
+            assert_eq!(&*ia.data, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        } else {
+            panic!("Expected Int32");
+        }
+    }
+
+    #[test]
+    fn test_rechunk_uniform_zero_error() {
+        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
+
+        let result = ca.rechunk(RechunkStrategy::Count(0));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rechunk_empty_array() {
+        let mut ca = SuperArray::new();
+        ca.rechunk(RechunkStrategy::Auto).unwrap();
+        assert_eq!(ca.n_chunks(), 0);
+    }
+
+    #[test]
+    fn test_rechunk_preserves_data_order() {
+        let mut ca = SuperArray::from_chunks(vec![
+            fa("a", &[10, 20], 0),
+            fa("a", &[30], 0),
+            fa("a", &[40, 50, 60], 0),
+        ]);
+
+        ca.rechunk(RechunkStrategy::Count(2)).unwrap();
+
+        let result = ca.copy_to_array();
+        if let Array::NumericArray(NumericArray::Int32(ia)) = result {
+            assert_eq!(&*ia.data, &[10, 20, 30, 40, 50, 60]);
+        } else {
+            panic!("Expected Int32");
+        }
     }
 }
