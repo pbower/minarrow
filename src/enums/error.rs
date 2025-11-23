@@ -49,6 +49,7 @@ pub enum MinarrowError {
     NotImplemented {
         feature: String,
     },
+    IndexError(String),
 }
 
 impl fmt::Display for MinarrowError {
@@ -124,6 +125,9 @@ impl fmt::Display for MinarrowError {
             }
             MinarrowError::NotImplemented { feature } => {
                 write!(f, "Not implemented: {}", feature)
+            }
+            MinarrowError::IndexError(message) => {
+                write!(f, "Index error: {}", message)
             }
         }
     }

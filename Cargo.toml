@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.4.3"
+version = "0.4.4"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
@@ -51,7 +51,7 @@ ryu = { version = "1.0.20", optional = true }
 memchr = { version = "2.7.5", optional = true }
 ahash = { version = "0.8.12", optional = true }
 regex = { version = "1.11.1", optional = true }
-vec64 = { version = "0.2"}
+vec64 = { version = "0.2.1"}
 
 [build-dependencies]
 cc = { version = "1", optional = true }

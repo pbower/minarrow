@@ -28,6 +28,7 @@ use std::slice::{Iter, IterMut};
 use rayon::iter::ParallelIterator;
 
 use crate::aliases::CategoricalAVT;
+use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::shape::Shape;
@@ -827,6 +828,139 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
                 // No mask in either: nothing to do.
             }
         }
+    }
+
+    /// Inserts all values from `other` into `self` at the specified index.
+    ///
+    /// This is an O(n) operation for CategoricalArray.
+    fn insert_rows(&mut self, index: usize, other: &Self) -> Result<(), MinarrowError> {
+        use crate::enums::error::MinarrowError;
+
+        let orig_len = self.len();
+        let other_len = other.len();
+
+        if index > orig_len {
+            return Err(MinarrowError::IndexError(format!(
+                "Index {} out of bounds for array of length {}",
+                index, orig_len
+            )));
+        }
+
+        if other_len == 0 {
+            return Ok(());
+        }
+
+        // Build mapping from other's dictionary indices to self's dictionary indices
+        let mut index_map: Vec<T> = Vec::with_capacity(other.unique_values.len());
+        for other_value in &other.unique_values {
+            let self_idx = match self.unique_values.iter().position(|v| v == other_value) {
+                Some(idx) => T::from_usize(idx),
+                None => {
+                    let idx = self.unique_values.len();
+                    self.unique_values.push(other_value.clone());
+                    T::from_usize(idx)
+                }
+            };
+            index_map.push(self_idx);
+        }
+
+        // Insert and remap other's data
+        let new_len = orig_len + other_len;
+        self.data.resize(new_len, T::from_usize(0));
+
+        // Shift existing elements using unchecked operations
+        for i in (index..orig_len).rev() {
+            unsafe {
+                let val = *self.data.as_ref().get_unchecked(i);
+                *self.data.as_mut().get_unchecked_mut(i + other_len) = val;
+            }
+        }
+
+        // Copy and remap other's data
+        for i in 0..other_len {
+            unsafe {
+                let other_idx = *other.data.as_ref().get_unchecked(i);
+                let remapped_idx = *index_map.get_unchecked(other_idx.to_usize());
+                *self.data.as_mut().get_unchecked_mut(index + i) = remapped_idx;
+            }
+        }
+
+        // Handle null masks with unchecked operations
+        match (self.null_mask.as_mut(), other.null_mask.as_ref()) {
+            (Some(self_mask), Some(other_mask)) => {
+                let mut new_mask = Bitmask::new_set_all(new_len, true);
+                for i in 0..index {
+                    unsafe {
+                        new_mask.set_unchecked(i, self_mask.get_unchecked(i));
+                    }
+                }
+                for i in 0..other_len {
+                    unsafe {
+                        new_mask.set_unchecked(index + i, other_mask.get_unchecked(i));
+                    }
+                }
+                for i in index..orig_len {
+                    unsafe {
+                        new_mask.set_unchecked(other_len + i, self_mask.get_unchecked(i));
+                    }
+                }
+                *self_mask = new_mask;
+            }
+            (Some(self_mask), None) => {
+                let mut new_mask = Bitmask::new_set_all(new_len, true);
+                for i in 0..index {
+                    unsafe {
+                        new_mask.set_unchecked(i, self_mask.get_unchecked(i));
+                    }
+                }
+                for i in index..orig_len {
+                    unsafe {
+                        new_mask.set_unchecked(other_len + i, self_mask.get_unchecked(i));
+                    }
+                }
+                *self_mask = new_mask;
+            }
+            (None, Some(other_mask)) => {
+                let mut new_mask = Bitmask::new_set_all(new_len, true);
+                for i in 0..other_len {
+                    unsafe {
+                        new_mask.set_unchecked(index + i, other_mask.get_unchecked(i));
+                    }
+                }
+                self.null_mask = Some(new_mask);
+            }
+            (None, None) => {}
+        }
+
+        Ok(())
+    }
+
+    /// Splits the CategoricalArray at the specified index, consuming self and returning two arrays.
+    fn split(mut self, index: usize) -> Result<(Self, Self), MinarrowError> {
+        use crate::enums::error::MinarrowError;
+
+        if index == 0 || index >= self.len() {
+            return Err(MinarrowError::IndexError(format!(
+                "Split index {} out of valid range (0, {})",
+                index,
+                self.len()
+            )));
+        }
+
+        // Split the data buffer
+        let after_data = self.data.split_off(index);
+
+        // Split null mask
+        let after_mask = self.null_mask.as_mut().map(|mask| mask.split_off(index));
+
+        // Both arrays share the same dictionary
+        let after = CategoricalArray {
+            data: after_data,
+            unique_values: self.unique_values.clone(),
+            null_mask: after_mask,
+        };
+
+        Ok((self, after))
     }
 
     /// Extends the categorical array from an iterator with pre-allocated capacity.

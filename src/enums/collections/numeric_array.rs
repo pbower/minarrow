@@ -167,6 +167,170 @@ impl NumericArray {
         }
     }
 
+    /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
+    ///
+    /// This is an **O(n)** operation.
+    ///
+    /// Returns an error if the two arrays are of different variants or incompatible types,
+    /// or if the index is out of bounds.
+    ///
+    /// This function uses copy-on-write semantics for arrays wrapped in `Arc`.
+    pub fn insert_rows(&mut self, index: usize, other: &Self) -> Result<(), MinarrowError> {
+        match (self, other) {
+            #[cfg(feature = "extended_numeric_types")]
+            (NumericArray::Int8(a), NumericArray::Int8(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            (NumericArray::Int16(a), NumericArray::Int16(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (NumericArray::Int32(a), NumericArray::Int32(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (NumericArray::Int64(a), NumericArray::Int64(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+
+            #[cfg(feature = "extended_numeric_types")]
+            (NumericArray::UInt8(a), NumericArray::UInt8(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            (NumericArray::UInt16(a), NumericArray::UInt16(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (NumericArray::UInt32(a), NumericArray::UInt32(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (NumericArray::UInt64(a), NumericArray::UInt64(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+
+            (NumericArray::Float32(a), NumericArray::Float32(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (NumericArray::Float64(a), NumericArray::Float64(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+
+            (NumericArray::Null, NumericArray::Null) => Ok(()),
+            (lhs, rhs) => Err(MinarrowError::TypeError {
+                from: "NumericArray",
+                to: "NumericArray",
+                message: Some(format!(
+                    "Cannot insert {} into {}: incompatible types",
+                    rhs, lhs
+                )),
+            }),
+        }
+    }
+
+    /// Splits the NumericArray at the specified index, consuming self and returning two arrays.
+    pub fn split(self, index: usize) -> Result<(Self, Self), MinarrowError> {
+        use std::sync::Arc;
+
+        match self {
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::Int8(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::Int8(Arc::new(left)),
+                    NumericArray::Int8(Arc::new(right)),
+                ))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt8(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::UInt8(Arc::new(left)),
+                    NumericArray::UInt8(Arc::new(right)),
+                ))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::Int16(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::Int16(Arc::new(left)),
+                    NumericArray::Int16(Arc::new(right)),
+                ))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt16(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::UInt16(Arc::new(left)),
+                    NumericArray::UInt16(Arc::new(right)),
+                ))
+            }
+            NumericArray::Int32(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::Int32(Arc::new(left)),
+                    NumericArray::Int32(Arc::new(right)),
+                ))
+            }
+            NumericArray::Int64(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::Int64(Arc::new(left)),
+                    NumericArray::Int64(Arc::new(right)),
+                ))
+            }
+            NumericArray::UInt32(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::UInt32(Arc::new(left)),
+                    NumericArray::UInt32(Arc::new(right)),
+                ))
+            }
+            NumericArray::UInt64(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::UInt64(Arc::new(left)),
+                    NumericArray::UInt64(Arc::new(right)),
+                ))
+            }
+            NumericArray::Float32(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::Float32(Arc::new(left)),
+                    NumericArray::Float32(Arc::new(right)),
+                ))
+            }
+            NumericArray::Float64(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    NumericArray::Float64(Arc::new(left)),
+                    NumericArray::Float64(Arc::new(right)),
+                ))
+            }
+            NumericArray::Null => Err(MinarrowError::IndexError(
+                "Cannot split Null array".to_string(),
+            )),
+        }
+    }
+
     /// Convert to IntegerArray<i32> using From/TryFrom as appropriate per conversion.
     pub fn i32(self) -> Result<IntegerArray<i32>, MinarrowError> {
         match self {

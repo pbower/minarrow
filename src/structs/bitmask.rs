@@ -411,6 +411,75 @@ impl Bitmask {
         self.mask_trailing_bits();
     }
 
+    /// Splits the bitmask at the given bit position, returning a new Bitmask
+    /// containing bits [at..len) and leaving self with bits [0..at).
+    ///
+    /// For byte-aligned splits (at % 8 == 0), this uses an efficient buffer split.
+    /// For non-byte-aligned splits, this creates a new buffer and repositions bits.
+    ///
+    /// # Panics
+    /// Panics if called on a Shared buffer or if `at > self.len`.
+    pub fn split_off(&mut self, at: usize) -> Self {
+        assert!(at <= self.len, "split_off index out of bounds");
+
+        if at == self.len {
+            // Splitting at the end - return empty mask
+            return Bitmask::new_set_all(0, false);
+        }
+
+        let start_byte = at / 8;
+        let bit_offset = at % 8;
+        let new_len = self.len - at;
+
+        if bit_offset == 0 {
+            // Byte-aligned - clean split using buffer split_off
+            let after_bits = self.bits.split_off(start_byte);
+            self.len = at;
+            self.mask_trailing_bits();
+
+            let mut after = Bitmask {
+                bits: after_bits,
+                len: new_len,
+            };
+            after.mask_trailing_bits();
+            return after;
+        }
+
+        // Non-byte-aligned - need to shift bits into a new buffer
+        let after_bytes_needed = (new_len + 7) / 8;
+        let mut after_buf = Vec64::with_capacity(after_bytes_needed);
+        after_buf.resize(after_bytes_needed, 0);
+
+        // Copy and reposition bits from [at..len) to [0..new_len) in new buffer
+        let original_bytes = self.bits.as_slice();
+        for i in 0..new_len {
+            let src_bit = at + i;
+            let src_byte = src_bit / 8;
+            let src_offset = src_bit % 8;
+
+            if src_byte < original_bytes.len() {
+                let bit_value = (original_bytes[src_byte] >> src_offset) & 1;
+
+                let dst_byte = i / 8;
+                let dst_offset = i % 8;
+                after_buf[dst_byte] |= bit_value << dst_offset;
+            }
+        }
+
+        // Truncate self to `at` bits
+        let self_bytes_needed = (at + 7) / 8;
+        self.bits.resize(self_bytes_needed, 0);
+        self.len = at;
+        self.mask_trailing_bits();
+
+        let mut after = Bitmask {
+            bits: after_buf.into(),
+            len: new_len,
+        };
+        after.mask_trailing_bits();
+        after
+    }
+
     /// Extends the Bitmask with bits from an iterator of bools.
     /// The new bits are appended after the current length.
     #[inline]

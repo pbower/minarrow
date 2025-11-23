@@ -36,6 +36,7 @@ use num_traits::{NumCast, Zero};
 #[cfg(feature = "parallel_proc")]
 use rayon::iter::ParallelIterator;
 
+use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::masked_array::MaskedArray;
@@ -1011,6 +1012,146 @@ impl<T: Integer> MaskedArray for StringArray<T> {
                 // No mask in either: nothing to do.
             }
         }
+    }
+
+    /// Inserts all values from `other` into `self` at the specified index.
+    ///
+    /// This is an O(n) operation for StringArray due to variable-length data.
+    fn insert_rows(&mut self, index: usize, other: &Self) -> Result<(), MinarrowError> {
+        use crate::enums::error::MinarrowError;
+
+        let orig_len = self.len();
+        let other_len = other.len();
+
+        if index > orig_len {
+            return Err(MinarrowError::IndexError(format!(
+                "Index {} out of bounds for array of length {}",
+                index, orig_len
+            )));
+        }
+
+        if other_len == 0 {
+            return Ok(());
+        }
+
+        // Get byte ranges for insertion point
+        let insert_byte_offset = self.offsets[index].to_usize();
+        let other_data_len = other.data.len();
+
+        // Build new data using Vec64
+        let mut new_data = Vec64::with_capacity(self.data.len() + other_data_len);
+        new_data.extend_from_slice(&self.data.as_ref()[..insert_byte_offset]);
+        new_data.extend_from_slice(&other.data);
+        new_data.extend_from_slice(&self.data.as_ref()[insert_byte_offset..]);
+        self.data = new_data.into();
+
+        // Build new offsets using Vec64
+        let mut new_offsets = Vec64::with_capacity(orig_len + other_len + 1);
+        new_offsets.extend_from_slice(&self.offsets.as_ref()[..=index]);
+
+        // Add other's offsets with adjustment
+        let other_base = other.offsets[0].to_usize();
+        for &off in other.offsets.as_ref().iter().skip(1) {
+            new_offsets.push(T::from_usize(
+                insert_byte_offset + off.to_usize() - other_base,
+            ));
+        }
+
+        // Add remaining self offsets adjusted by other's data length
+        for &off in self.offsets.as_ref().iter().skip(index + 1) {
+            new_offsets.push(T::from_usize(off.to_usize() + other_data_len));
+        }
+
+        self.offsets = new_offsets.into();
+
+        // Handle null masks with unchecked operations after validation
+        match (self.null_mask.as_mut(), other.null_mask.as_ref()) {
+            (Some(self_mask), Some(other_mask)) => {
+                let mut new_mask = Bitmask::new_set_all(orig_len + other_len, true);
+                for i in 0..index {
+                    unsafe {
+                        new_mask.set_unchecked(i, self_mask.get_unchecked(i));
+                    }
+                }
+                for i in 0..other_len {
+                    unsafe {
+                        new_mask.set_unchecked(index + i, other_mask.get_unchecked(i));
+                    }
+                }
+                for i in index..orig_len {
+                    unsafe {
+                        new_mask.set_unchecked(other_len + i, self_mask.get_unchecked(i));
+                    }
+                }
+                *self_mask = new_mask;
+            }
+            (Some(self_mask), None) => {
+                let mut new_mask = Bitmask::new_set_all(orig_len + other_len, true);
+                for i in 0..index {
+                    unsafe {
+                        new_mask.set_unchecked(i, self_mask.get_unchecked(i));
+                    }
+                }
+                for i in index..orig_len {
+                    unsafe {
+                        new_mask.set_unchecked(other_len + i, self_mask.get_unchecked(i));
+                    }
+                }
+                *self_mask = new_mask;
+            }
+            (None, Some(other_mask)) => {
+                let mut new_mask = Bitmask::new_set_all(orig_len + other_len, true);
+                for i in 0..other_len {
+                    unsafe {
+                        new_mask.set_unchecked(index + i, other_mask.get_unchecked(i));
+                    }
+                }
+                self.null_mask = Some(new_mask);
+            }
+            (None, None) => {}
+        }
+
+        Ok(())
+    }
+
+    /// Splits the StringArray at the specified index, consuming self and returning two arrays.
+    fn split(mut self, index: usize) -> Result<(Self, Self), MinarrowError> {
+        use crate::enums::error::MinarrowError;
+
+        let orig_len = self.len();
+
+        if index == 0 || index >= orig_len {
+            return Err(MinarrowError::IndexError(format!(
+                "Split index {} out of valid range (0, {})",
+                index, orig_len
+            )));
+        }
+
+        // Split at byte boundary for the given string index
+        let split_byte_offset = self.offsets[index].to_usize();
+
+        // Split the data buffer
+        let after_data = self.data.split_off(split_byte_offset);
+
+        // Split offsets
+        let mut after_offsets = self.offsets.split_off(index);
+
+        // Adjust after_offsets to start from 0
+        let base_offset = after_offsets[0];
+        for off in &mut after_offsets {
+            *off = T::from_usize(off.to_usize() - base_offset.to_usize());
+        }
+
+        // Split null mask
+        let after_mask = self.null_mask.as_mut().map(|mask| mask.split_off(index));
+
+        let after = StringArray {
+            data: after_data,
+            offsets: after_offsets,
+            null_mask: after_mask,
+        };
+
+        Ok((self, after))
     }
 
     /// Extends the string array from an iterator with pre-allocated capacity.

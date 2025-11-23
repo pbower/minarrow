@@ -41,6 +41,7 @@ use rayon::iter::IntoParallelIterator;
 use rayon::prelude::ParallelIterator;
 
 use crate::aliases::BooleanAVT;
+use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
 use crate::structs::bitmask::Bitmask;
 use crate::traits::concatenate::Concatenate;
@@ -607,6 +608,141 @@ impl MaskedArray for BooleanArray<()> {
                 // No mask in either: nothing to do.
             }
         }
+    }
+
+    /// Inserts all values from `other` into `self` at the specified index.
+    ///
+    /// This is an O(n) operation for BooleanArray due to bit-packed data.
+    fn insert_rows(&mut self, index: usize, other: &Self) -> Result<(), MinarrowError> {
+        let orig_len = self.len();
+        let other_len = other.len();
+
+        if index > orig_len {
+            return Err(MinarrowError::IndexError(format!(
+                "Index {} out of bounds for array of length {}",
+                index, orig_len
+            )));
+        }
+
+        if other_len == 0 {
+            return Ok(());
+        }
+
+        // Create new data bitmask and copy bits with unchecked operations
+        let new_len = orig_len + other_len;
+        let mut new_data = Bitmask::new_set_all(new_len, false);
+
+        for i in 0..index {
+            unsafe {
+                new_data.set_unchecked(i, self.data.get_unchecked(i));
+            }
+        }
+
+        for i in 0..other_len {
+            unsafe {
+                new_data.set_unchecked(index + i, other.data.get_unchecked(i));
+            }
+        }
+
+        for i in index..orig_len {
+            unsafe {
+                new_data.set_unchecked(other_len + i, self.data.get_unchecked(i));
+            }
+        }
+
+        self.data = new_data;
+        self.len = new_len;
+
+        // Handle null masks with unchecked operations
+        match (self.null_mask.as_mut(), other.null_mask.as_ref()) {
+            (Some(self_mask), Some(other_mask)) => {
+                let mut new_mask = Bitmask::new_set_all(new_len, true);
+
+                for i in 0..index {
+                    unsafe {
+                        new_mask.set_unchecked(i, self_mask.get_unchecked(i));
+                    }
+                }
+
+                for i in 0..other_len {
+                    unsafe {
+                        new_mask.set_unchecked(index + i, other_mask.get_unchecked(i));
+                    }
+                }
+
+                for i in index..orig_len {
+                    unsafe {
+                        new_mask.set_unchecked(other_len + i, self_mask.get_unchecked(i));
+                    }
+                }
+
+                *self_mask = new_mask;
+            }
+            (Some(self_mask), None) => {
+                let mut new_mask = Bitmask::new_set_all(new_len, true);
+
+                for i in 0..index {
+                    unsafe {
+                        new_mask.set_unchecked(i, self_mask.get_unchecked(i));
+                    }
+                }
+
+                for i in index..orig_len {
+                    unsafe {
+                        new_mask.set_unchecked(other_len + i, self_mask.get_unchecked(i));
+                    }
+                }
+
+                *self_mask = new_mask;
+            }
+            (None, Some(other_mask)) => {
+                let mut new_mask = Bitmask::new_set_all(new_len, true);
+
+                for i in 0..other_len {
+                    unsafe {
+                        new_mask.set_unchecked(index + i, other_mask.get_unchecked(i));
+                    }
+                }
+
+                self.null_mask = Some(new_mask);
+            }
+            (None, None) => {}
+        }
+
+        Ok(())
+    }
+
+    /// Splits the BooleanArray at the specified index, consuming self and returning two arrays.
+    fn split(mut self, index: usize) -> Result<(Self, Self), MinarrowError> {
+        use crate::enums::error::MinarrowError;
+
+        if index == 0 || index >= self.len {
+            return Err(MinarrowError::IndexError(format!(
+                "Split index {} out of valid range (0, {})",
+                index, self.len
+            )));
+        }
+
+        let after_len = self.len - index;
+
+        // Split the data bitmask
+        let after_data = self.data.split_off(index);
+
+        // Split the null mask if present
+        let after_mask = self.null_mask.as_mut().map(|mask| mask.split_off(index));
+
+        // Update self length
+        self.len = index;
+
+        // Create the after array
+        let after = BooleanArray {
+            data: after_data,
+            null_mask: after_mask,
+            len: after_len,
+            _phantom: PhantomData,
+        };
+
+        Ok((self, after))
     }
 
     /// Extends the array from an iterator with pre-allocated capacity.

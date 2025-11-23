@@ -147,6 +147,12 @@ impl PartialEq for Value {
     }
 }
 
+/// Implements `Eq` for `Value`
+///
+/// Since PartialEq is reflexive, symmetric, and transitive for Value,
+/// we can safely implement Eq.
+impl Eq for Value {}
+
 /// Macro to implement `From` for `Value` variants.
 macro_rules! impl_value_from {
     ($variant:ident: $t:ty) => {

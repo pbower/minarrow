@@ -146,6 +146,119 @@ impl TextArray {
         }
     }
 
+    /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
+    ///
+    /// This is an **O(n)** operation.
+    ///
+    /// Returns an error if the two arrays are of different variants or incompatible types,
+    /// or if the index is out of bounds.
+    ///
+    /// This function uses copy-on-write semantics for arrays wrapped in `Arc`.
+    pub fn insert_rows(&mut self, index: usize, other: &Self) -> Result<(), MinarrowError> {
+        match (self, other) {
+            (TextArray::String32(a), TextArray::String32(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            #[cfg(feature = "large_string")]
+            (TextArray::String64(a), TextArray::String64(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            #[cfg(feature = "extended_categorical")]
+            (TextArray::Categorical8(a), TextArray::Categorical8(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            #[cfg(feature = "extended_categorical")]
+            (TextArray::Categorical16(a), TextArray::Categorical16(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (TextArray::Categorical32(a), TextArray::Categorical32(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            #[cfg(feature = "extended_categorical")]
+            (TextArray::Categorical64(a), TextArray::Categorical64(b)) => {
+                Arc::make_mut(a).insert_rows(index, b)
+            }
+            (TextArray::Null, TextArray::Null) => Ok(()),
+            (lhs, rhs) => Err(MinarrowError::TypeError {
+                from: "TextArray",
+                to: "TextArray",
+                message: Some(format!(
+                    "Cannot insert {} into {}: incompatible types",
+                    rhs, lhs
+                )),
+            }),
+        }
+    }
+
+    /// Splits the TextArray at the specified index, consuming self and returning two arrays.
+    pub fn split(self, index: usize) -> Result<(Self, Self), MinarrowError> {
+        use std::sync::Arc;
+
+        match self {
+            TextArray::String32(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    TextArray::String32(Arc::new(left)),
+                    TextArray::String32(Arc::new(right)),
+                ))
+            }
+            #[cfg(feature = "large_string")]
+            TextArray::String64(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    TextArray::String64(Arc::new(left)),
+                    TextArray::String64(Arc::new(right)),
+                ))
+            }
+            TextArray::Categorical32(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    TextArray::Categorical32(Arc::new(left)),
+                    TextArray::Categorical32(Arc::new(right)),
+                ))
+            }
+            #[cfg(feature = "extended_categorical")]
+            TextArray::Categorical8(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    TextArray::Categorical8(Arc::new(left)),
+                    TextArray::Categorical8(Arc::new(right)),
+                ))
+            }
+            #[cfg(feature = "extended_categorical")]
+            TextArray::Categorical16(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    TextArray::Categorical16(Arc::new(left)),
+                    TextArray::Categorical16(Arc::new(right)),
+                ))
+            }
+            #[cfg(feature = "extended_categorical")]
+            TextArray::Categorical64(a) => {
+                let (left, right) = Arc::try_unwrap(a)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .split(index)?;
+                Ok((
+                    TextArray::Categorical64(Arc::new(left)),
+                    TextArray::Categorical64(Arc::new(right)),
+                ))
+            }
+            TextArray::Null => Err(MinarrowError::IndexError(
+                "Cannot split Null array".to_string(),
+            )),
+        }
+    }
+
     /// Casts to StringArray<u32>
     ///
     /// - Converts via TryFrom,
