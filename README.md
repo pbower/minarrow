@@ -110,28 +110,6 @@ let view = table.r(10..20);
 let view = table.c(&["A", "B", "C"]).r(0..100);
 ```
 
-### Pandas-Like API (`.c()`, `.r()`, etc.)
-
-Unified across dimensions - works for Array, Table (*in future additional dimensions*):
-
-```rust
-use minarrow::*;
-use minarrow::traits::selection::Selection;  // Brings methods into scope
-
-let table = create_table();
-
-// Field (column) selection
-let view = table.c(&["name", "value"]);      // or .col()
-let view = table.y(&["A", "B"]);              // .y() for spatial thinking
-
-// Data (row) selection
-let view = table.r(10..20);                   // or .data()
-let view = table.x(&[1, 5, 10]);              // .x() for spatial thinking
-
-// Chained selection
-let view = table.f(&["A", "B"]).d(0..100);   // more short-hand .field() .data() prefs
-```
-
 ### Supported Selection Types
 
 All selection methods support:
@@ -165,7 +143,7 @@ including tuples.
 Minarrow uses enums for type dispatch instead of trait object downcasting, providing:
 
 - **Performance** – Enables aggressive compiler inlining and optimisation
-- **Maintainability** – Centralised, predictable dispatch logic
+- **Maintainability** – Centralised, clean dispatch logic
 - **Type Safety** – All types are statically known; no `Any` or runtime downcasts
 - **Ergonomics** – Direct, typed accessors such as `myarray.num().i64()`
 
@@ -267,7 +245,7 @@ _The construction delta is not included in the benchmark timings above._
 | Use Case                              | Description |
 |---------------------------------------|-------------|
 | Real-time Data Pipelines              | Zero-copy interchange for streaming and event-driven systems |
-| Embedded and Edge Computing           | Minimal deps, predictable memory layout, fast compile |
+| Embedded and Edge Computing           | Minimal deps, efficient memory layout, fast compile |
 | Systems-Level Integration             | 64-byte alignment and FFI-friendly representation |
 | High-Performance Analytics            | SIMD kernels and direct buffer access |
 | Rapid Prototyping and Development     | Simple type system, intuitive APIs |
