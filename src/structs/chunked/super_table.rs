@@ -32,6 +32,7 @@ use crate::structs::table::Table;
 #[cfg(feature = "size")]
 use crate::traits::byte_size::ByteSize;
 use crate::traits::concatenate::Concatenate;
+use crate::traits::consolidate::Consolidate;
 use crate::traits::shape::Shape;
 #[cfg(feature = "views")]
 use crate::{SuperTableV, TableV};
@@ -294,38 +295,6 @@ impl SuperTable {
         }
 
         Ok(())
-    }
-
-    /// Materialise a single `Table` containing all rows (concatenated).
-    ///
-    /// Uses arc data clones
-    pub fn to_table(&self, name: Option<&str>) -> Table {
-        assert!(!self.batches.is_empty(), "to_table() on empty BatchedTable");
-        let n_cols = self.schema.len();
-        let mut unified_cols = Vec::with_capacity(n_cols);
-
-        for col_idx in 0..n_cols {
-            let field = self.schema[col_idx].clone();
-            // Use first array as base
-            let mut arr = self.batches[0].cols[col_idx].array.clone();
-            for batch in self.batches.iter().skip(1) {
-                arr.concat_array(&batch.cols[col_idx].array);
-            }
-            let null_count = arr.null_count();
-            unified_cols.push(FieldArray {
-                field,
-                array: arr.clone(),
-                null_count,
-            });
-        }
-
-        Table {
-            cols: unified_cols,
-            n_rows: self.n_rows,
-            name: name
-                .map(str::to_owned)
-                .unwrap_or_else(|| "unified_table".to_string()),
-        }
     }
 
     // API
@@ -662,6 +631,49 @@ impl Shape for SuperTable {
     }
 }
 
+impl Consolidate for SuperTable {
+    type Output = Table;
+
+    /// Consolidates all batches into a single contiguous `Table`.
+    ///
+    /// Materialises all rows from all batches into one table.
+    /// Use this when you need contiguous memory for operations or
+    /// APIs that require single buffers.
+    ///
+    /// Uses `self.name` for the resulting table. Rename afterwards if needed.
+    ///
+    /// Pays a re-allocation cost per Array.
+    ///
+    /// # Panics
+    /// Panics if the SuperTable is empty.
+    fn consolidate(self) -> Table {
+        assert!(!self.batches.is_empty(), "consolidate() called on empty SuperTable");
+        let n_cols = self.schema.len();
+        let mut unified_cols = Vec::with_capacity(n_cols);
+
+        for col_idx in 0..n_cols {
+            let field = self.schema[col_idx].clone();
+            // Use first array as base
+            let mut arr = self.batches[0].cols[col_idx].array.clone();
+            for batch in self.batches.iter().skip(1) {
+                arr.concat_array(&batch.cols[col_idx].array);
+            }
+            let null_count = arr.null_count();
+            unified_cols.push(FieldArray {
+                field,
+                array: arr.clone(),
+                null_count,
+            });
+        }
+
+        Table {
+            cols: unified_cols,
+            n_rows: self.n_rows,
+            name: self.name,
+        }
+    }
+}
+
 impl Concatenate for SuperTable {
     /// Concatenates two SuperTables by appending all batches from `other` to `self`.
     ///
@@ -875,15 +887,16 @@ mod tests {
     }
 
     #[test]
-    fn test_push_and_to_table() {
+    fn test_push_and_consolidate() {
         let mut t = SuperTable::default();
         t.push(Arc::new(table(vec![fa("x", &[1, 2]), fa("y", &[3, 4])])));
         t.push(Arc::new(table(vec![fa("x", &[5]), fa("y", &[6])])));
         assert_eq!(t.n_cols(), 2);
         assert_eq!(t.n_batches(), 2);
         assert_eq!(t.len(), 3);
-        let tab = t.to_table(Some("joined"));
-        assert_eq!(tab.name, "joined");
+        let tab = t.consolidate();
+        // consolidate() uses self.name; default SuperTable name is "Unnamed"
+        assert_eq!(tab.name, "Unnamed");
         assert_eq!(tab.n_rows, 3);
         assert_eq!(tab.cols[0].field.name, "x");
         assert_eq!(tab.cols[1].field.name, "y");
@@ -909,7 +922,7 @@ mod tests {
         assert_eq!(slice.len, 3);
         assert_eq!(slice.slices.len(), 2);
 
-        let owned = slice.to_table(Some("part"));
+        let owned = slice.consolidate();
         assert_eq!(owned.name, "part");
         assert_eq!(owned.n_rows, 3);
         assert_eq!(owned.cols[0].field.name, "q");
@@ -971,11 +984,12 @@ mod tests {
         // Validate data for each column
         let expected_x = [1, 2, 5, 6];
         let expected_y = [3, 4, 7, 8];
+        let consolidated = rebuilt.consolidate();
         for (col_idx, expected) in [expected_x.as_slice(), expected_y.as_slice()]
             .iter()
             .enumerate()
         {
-            let arr = rebuilt.to_table(None).cols[col_idx].array.clone();
+            let arr = consolidated.cols[col_idx].array.clone();
             if let Array::NumericArray(NumericArray::Int32(ints)) = arr {
                 assert_eq!(ints.data.as_slice(), *expected);
             } else {
@@ -998,7 +1012,7 @@ mod tests {
         assert_eq!(st.n_rows(), 6);
         assert_eq!(st.n_batches(), 4);
 
-        let materialised = st.to_table(None);
+        let materialised = st.consolidate();
         match &materialised.cols[0].array {
             Array::NumericArray(NumericArray::Int32(arr)) => {
                 assert_eq!(arr.data.as_slice(), &[1, 99, 2, 3, 4, 5]);
@@ -1020,7 +1034,7 @@ mod tests {
 
         assert_eq!(st.n_rows(), 7);
 
-        let materialised = st.to_table(None);
+        let materialised = st.consolidate();
         match &materialised.cols[0].array {
             Array::NumericArray(NumericArray::Int32(arr)) => {
                 assert_eq!(arr.data.as_slice(), &[1, 2, 3, 99, 88, 4, 5]);
@@ -1041,7 +1055,7 @@ mod tests {
 
         assert_eq!(st.n_rows(), 4);
 
-        let materialised = st.to_table(None);
+        let materialised = st.consolidate();
         match &materialised.cols[0].array {
             Array::NumericArray(NumericArray::Int32(arr)) => {
                 assert_eq!(arr.data.as_slice(), &[99, 1, 2, 3]);
@@ -1063,7 +1077,7 @@ mod tests {
 
         assert_eq!(st.n_rows(), 5);
 
-        let materialised = st.to_table(None);
+        let materialised = st.consolidate();
         match &materialised.cols[0].array {
             Array::NumericArray(NumericArray::Int32(arr)) => {
                 assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4, 99]);
@@ -1168,7 +1182,7 @@ mod tests {
         assert_eq!(st.n_rows(), 8);
 
         // Verify data integrity after rechunking
-        let materialized = st.to_table(None);
+        let materialized = st.consolidate();
         assert_eq!(materialized.n_rows, 8);
     }
 
@@ -1215,7 +1229,7 @@ mod tests {
         st.rechunk(RechunkStrategy::Count(5)).unwrap();
 
         // Materialize to verify order is preserved
-        let materialized = st.to_table(None);
+        let materialized = st.consolidate();
         match &materialized.cols[0].array {
             Array::NumericArray(NumericArray::Int32(arr)) => {
                 assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4, 5, 6, 7, 8, 9]);

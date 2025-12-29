@@ -107,6 +107,70 @@ pub enum Value {
     Custom(Arc<dyn CustomValue>),
 }
 
+
+impl Value {
+    /// Computes the logical row/element count for the batch’s input `Value`.
+    ///
+    /// This normalises the various `Value` representations so callers can consistently pass a
+    /// `[start, len)` range to `execute_fn`.
+    #[inline]
+    pub fn len(&self) -> usize {
+        match self {
+            #[cfg(feature = "scalar_type")]
+            Value::Scalar(_) => 1,
+
+            Value::Table(t) => t.n_rows,
+
+            #[cfg(feature = "views")]
+            Value::TableView(tv) => tv.len,
+
+            Value::Array(a) => a.len(),
+
+            #[cfg(feature = "views")]
+            Value::ArrayView(av) => av.array.len(),
+
+            Value::FieldArray(fa) => fa.array.len(),
+
+            #[cfg(feature = "chunked")]
+            Value::SuperArray(sa) => sa.len(),
+
+            #[cfg(all(feature = "chunked", feature = "views"))]
+            Value::SuperArrayView(sav) => sav.len(),
+
+            #[cfg(feature = "chunked")]
+            Value::SuperTable(st) => st.len(),
+
+            #[cfg(all(feature = "chunked", feature = "views"))]
+            Value::SuperTableView(stv) => stv.len,
+
+            #[cfg(feature = "matrix")]
+            Value::Matrix(m) => m.len(),
+
+            #[cfg(feature = "cube")]
+            Value::Cube(c) => c.len(),
+
+            // A vector of `Value`s is treated as a logical concatenation.
+            Value::VecValue(vv) => vv.iter().map(|x| x.len()).sum(),
+
+            // Recursive wrappers: delegate to the inner `Value`.
+            Value::BoxValue(bv) => bv.len(),
+            Value::ArcValue(av) => av.len(),
+
+            // Tuples are treated as a logical concatenation of their elements.
+            Value::Tuple2(t2) => t2.0.len() + t2.1.len(),
+            Value::Tuple3(t3) => t3.0.len() + t3.1.len() + t3.2.len(),
+            Value::Tuple4(t4) => t4.0.len() + t4.1.len() + t4.2.len() + t4.3.len(),
+            Value::Tuple5(t5) => t5.0.len() + t5.1.len() + t5.2.len() + t5.3.len() + t5.4.len(),
+            Value::Tuple6(t6) => {
+                t6.0.len() + t6.1.len() + t6.2.len() + t6.3.len() + t6.4.len() + t6.5.len()
+            }
+
+            // Defer to the custom payload's notion of length (per `CustomValue` contract).
+            Value::Custom(cv) => panic!("Length is not implemented for custom value type."),
+        }
+    }
+}
+
 /// Implements `PartialEq` for `Value`
 ///
 /// This includes special handling for the `Custom` type.
@@ -189,6 +253,92 @@ macro_rules! impl_tryfrom_value {
 impl_value_from!(Scalar: Scalar);
 #[cfg(feature = "scalar_type")]
 impl_tryfrom_value!(Scalar: Scalar);
+
+// TryFrom<Value> for primitive numeric types
+//
+// Enables DataStream<T>::collect() -> Result<T, BlockError> for numeric types.
+// Extracts Value::Scalar variant and converts to the target numeric type.
+
+#[cfg(feature = "scalar_type")]
+macro_rules! impl_tryfrom_value_numeric {
+    ($t:ty, $method:ident) => {
+        impl TryFrom<Value> for $t {
+            type Error = MinarrowError;
+            #[inline]
+            fn try_from(v: Value) -> Result<Self, Self::Error> {
+                match v {
+                    Value::Scalar(s) => match s {
+                        Scalar::Null => Err(MinarrowError::TypeError {
+                            from: "Value::Scalar(Null)",
+                            to: stringify!($t),
+                            message: Some("Cannot convert Null to numeric type".to_owned()),
+                        }),
+                        _ => Ok(s.$method()),
+                    },
+                    _ => Err(MinarrowError::TypeError {
+                        from: "Value",
+                        to: stringify!($t),
+                        message: Some("Expected Value::Scalar variant".to_owned()),
+                    }),
+                }
+            }
+        }
+    };
+}
+
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_numeric!(f64, f64);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_numeric!(f32, f32);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_numeric!(i64, i64);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_numeric!(i32, i32);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_numeric!(u64, u64);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_numeric!(u32, u32);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_numeric!(bool, bool);
+
+// Option<T> for nullable results - Null becomes None
+#[cfg(feature = "scalar_type")]
+macro_rules! impl_tryfrom_value_option {
+    ($t:ty, $method:ident) => {
+        impl TryFrom<Value> for Option<$t> {
+            type Error = MinarrowError;
+            #[inline]
+            fn try_from(v: Value) -> Result<Self, Self::Error> {
+                match v {
+                    Value::Scalar(s) => match s {
+                        Scalar::Null => Ok(None),
+                        _ => Ok(Some(s.$method())),
+                    },
+                    _ => Err(MinarrowError::TypeError {
+                        from: "Value",
+                        to: concat!("Option<", stringify!($t), ">"),
+                        message: Some("Expected Value::Scalar variant".to_owned()),
+                    }),
+                }
+            }
+        }
+    };
+}
+
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_option!(f64, f64);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_option!(f32, f32);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_option!(i64, i64);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_option!(i32, i32);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_option!(u64, u64);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_option!(u32, u32);
+#[cfg(feature = "scalar_type")]
+impl_tryfrom_value_option!(bool, bool);
 
 // Array-like types - Arc-wrapped (large types)
 impl From<Array> for Value {

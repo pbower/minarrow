@@ -181,6 +181,8 @@ pub mod traits {
     #[cfg(feature = "size")]
     pub mod byte_size;
     pub mod concatenate;
+    #[cfg(feature = "chunked")]
+    pub mod consolidate;
     pub mod custom_value;
     pub mod masked_array;
     pub mod print;
@@ -242,7 +244,7 @@ pub use structs::column::{Column, column};
 #[cfg(feature = "cube")]
 pub use structs::cube::Cube;
 pub use structs::field::Field;
-pub use structs::field_array::FieldArray;
+pub use structs::field_array::{FieldArray, field_array};
 #[cfg(feature = "matrix")]
 pub use structs::matrix::Matrix;
 pub use structs::shared_buffer::SharedBuffer;
@@ -259,6 +261,8 @@ pub use structs::views::table_view::TableV;
 #[cfg(feature = "size")]
 pub use traits::byte_size::ByteSize;
 pub use traits::concatenate::Concatenate;
+#[cfg(feature = "chunked")]
+pub use traits::consolidate::Consolidate;
 pub use traits::masked_array::MaskedArray;
 pub use traits::print::Print;
 pub use traits::type_unions::{Float, Integer, Numeric, Primitive};

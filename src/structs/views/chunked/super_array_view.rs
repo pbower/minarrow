@@ -13,7 +13,7 @@
 //!
 //! ## Interop
 //! - Constructed by higher-level chunked containers (`SuperArray::slice`).
-//! - Can be materialised to a contiguous `Array` via [`SuperArrayV::copy_to_array`].
+//! - Can be materialised to a contiguous `Array` via [`SuperArrayV::consolidate`].
 //! - Preserves schema via an `Arc<Field>`; no schema cloning per row.
 //!
 //! ## Features
@@ -25,7 +25,7 @@
 //! ## Performance Notes
 //! - Iterating rows may touch non-contiguous memory if the window crosses chunk
 //!   boundaries. For hot loops, prefer contiguous runs or materialise with
-//!   `copy_to_array()`.
+//!   `consolidate()`.
 //!
 //! ## Invariants
 //! - `len` is the logical row count of this view.
@@ -35,10 +35,22 @@ use std::sync::Arc;
 
 use crate::{
     Array, ArrayV, ArrayVT, Field, SuperArray,
+    consolidate_int_variant, consolidate_float_variant, consolidate_string_variant,
     enums::error::MinarrowError,
+    enums::collections::numeric_array::NumericArray,
+    enums::collections::text_array::TextArray,
     enums::shape_dim::ShapeDim,
-    traits::{concatenate::Concatenate, shape::Shape},
+    structs::bitmask::Bitmask,
+    structs::variants::boolean::BooleanArray,
+    structs::variants::categorical::CategoricalArray,
+    traits::{concatenate::Concatenate, consolidate::Consolidate, shape::Shape},
+    traits::type_unions::Integer,
 };
+
+#[cfg(feature = "datetime")]
+use crate::consolidate_temporal_variant;
+#[cfg(feature = "datetime")]
+use crate::enums::collections::temporal_array::TemporalArray;
 
 /// # SuperArrayView
 ///
@@ -59,7 +71,7 @@ use crate::{
 /// - Use [`chunks`](Self::chunks) / [`iter`](Self::iter) to walk chunk pieces,
 ///   or [`iter_rows`](Self::iter_rows) to traverse row-by-row across chunks.
 /// - For hot paths, prefer contiguous (memory) windows; otherwise consider
-///   [`copy_to_array`](Self::copy_to_array) to materialise a single buffer.
+///   [`consolidate`](Self::consolidate) to materialise a single buffer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SuperArrayV {
     pub slices: Vec<ArrayV>,
@@ -76,11 +88,6 @@ impl SuperArrayV {
     #[inline]
     pub fn n_slices(&self) -> usize {
         self.slices.len()
-    }
-
-    /// Materialise one contiguous `Array`
-    pub fn copy_to_array(&self) -> Array {
-        SuperArray::from_slices(&self.slices, self.field.clone()).copy_to_array()
     }
 
     /// Iterator over the underlying `ArraySlice`s
@@ -190,6 +197,341 @@ impl Shape for SuperArrayV {
     }
 }
 
+impl Consolidate for SuperArrayV {
+    type Output = Array;
+
+    /// Consolidates all view chunks into a single contiguous `Array`.
+    ///
+    /// # Optimisations
+    /// 1. Single slice covering full array: returns cheap Arc clone (no copy).
+    /// 2. Multiple consecutive slices on same buffer covering full array: Arc clone.
+    /// 3. Otherwise: directly extends from source data slices (single copy per element).
+    fn consolidate(self) -> Array {
+        if self.slices.is_empty() {
+            panic!("consolidate() called on empty SuperArrayV");
+        }
+
+        // Single slice optimisation
+        if self.slices.len() == 1 {
+            let slice = &self.slices[0];
+            if slice.offset == 0 && slice.len() == slice.array.len() {
+                return slice.array.clone();
+            }
+        }
+
+        // Multiple slices - check if consecutive on same underlying buffer
+        let first = &self.slices[0];
+        let first_array_len = first.array.len();
+        let mut expected_offset = first.offset + first.len();
+        let mut all_same_buffer = true;
+        let mut is_consecutive = true;
+
+        for slice in self.slices.iter().skip(1) {
+            // Check same underlying array by comparing total length
+            if slice.array.len() != first_array_len {
+                all_same_buffer = false;
+                break;
+            }
+            if slice.offset != expected_offset {
+                is_consecutive = false;
+                break;
+            }
+            expected_offset = slice.offset + slice.len();
+        }
+
+        if all_same_buffer && is_consecutive && self.slices.len() > 1 {
+            let last_slice = &self.slices[self.slices.len() - 1];
+            let combined_end = last_slice.offset + last_slice.len();
+
+            if first.offset == 0 && combined_end == first_array_len {
+                return first.array.clone();
+            }
+        }
+
+        // Extend slices into a new contiguous array
+        consolidate_slices_extend(self.slices)
+    }
+}
+
+/// Consolidates array slices by extending data into a new contiguous array.
+/// Dispatches to variant-specific handlers that copy from source buffers.
+fn consolidate_slices_extend(slices: Vec<ArrayV>) -> Array {
+    let first = &slices[0];
+
+    match &first.array {
+        Array::NumericArray(num_arr) => consolidate_numeric_slices(&slices, num_arr),
+        Array::TextArray(text_arr) => consolidate_text_slices(&slices, text_arr),
+        Array::BooleanArray(_) => consolidate_boolean_slices(&slices),
+        #[cfg(feature = "datetime")]
+        Array::TemporalArray(temp_arr) => consolidate_temporal_slices(&slices, temp_arr),
+        Array::Null => Array::Null,
+    }
+}
+
+/// Consolidates text array slices by extending from raw data buffers.
+fn consolidate_text_slices(slices: &[ArrayV], first_text: &TextArray) -> Array {
+    match first_text {
+        TextArray::String32(_) => consolidate_string_variant!(slices, String32, u32),
+        #[cfg(feature = "large_string")]
+        TextArray::String64(_) => consolidate_string_variant!(slices, String64, u64),
+        TextArray::Categorical32(_) => consolidate_categorical_slices::<u32>(slices),
+        #[cfg(feature = "extended_categorical")]
+        TextArray::Categorical8(_) => consolidate_categorical_slices::<u8>(slices),
+        #[cfg(feature = "extended_categorical")]
+        TextArray::Categorical16(_) => consolidate_categorical_slices::<u16>(slices),
+        #[cfg(feature = "extended_categorical")]
+        TextArray::Categorical64(_) => consolidate_categorical_slices::<u64>(slices),
+        TextArray::Null => Array::Null,
+    }
+}
+
+/// Consolidates CategoricalArray slices by directly extending indices.
+/// Requires all slices to share the same dictionary (same Arc pointer).
+fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV]) -> Array {
+    use crate::traits::consolidate::extend_null_mask;
+    use crate::traits::masked_array::MaskedArray;
+    use crate::Vec64;
+
+    // Extract the dictionary from the first slice
+    let first_dict = match &slices[0].array {
+        Array::TextArray(TextArray::Categorical32(arr)) => &arr.unique_values,
+        #[cfg(feature = "extended_categorical")]
+        Array::TextArray(TextArray::Categorical8(arr)) => &arr.unique_values,
+        #[cfg(feature = "extended_categorical")]
+        Array::TextArray(TextArray::Categorical16(arr)) => &arr.unique_values,
+        #[cfg(feature = "extended_categorical")]
+        Array::TextArray(TextArray::Categorical64(arr)) => &arr.unique_values,
+        _ => panic!("Expected CategoricalArray"),
+    };
+
+    // Verify all slices share the same dictionary (via pointer comparison)
+    let all_same_dict = slices.iter().all(|s| {
+        let dict = match &s.array {
+            Array::TextArray(TextArray::Categorical32(arr)) => &arr.unique_values,
+            #[cfg(feature = "extended_categorical")]
+            Array::TextArray(TextArray::Categorical8(arr)) => &arr.unique_values,
+            #[cfg(feature = "extended_categorical")]
+            Array::TextArray(TextArray::Categorical16(arr)) => &arr.unique_values,
+            #[cfg(feature = "extended_categorical")]
+            Array::TextArray(TextArray::Categorical64(arr)) => &arr.unique_values,
+            _ => return false,
+        };
+        std::ptr::eq(dict.as_ptr(), first_dict.as_ptr())
+    });
+
+    if !all_same_dict {
+        // Different dictionaries - fall back to standard concat which handles dictionary merging
+        let mut iter = slices.iter().cloned();
+        let first_slice = iter.next().unwrap();
+        let mut result = first_slice.array.slice_clone(first_slice.offset, first_slice.len());
+        for slice in iter {
+            let arr = slice.array.slice_clone(slice.offset, slice.len());
+            result = result.concat(arr).expect("Failed to concatenate arrays");
+        }
+        return result;
+    }
+
+    // Same dictionary - consolidate indices
+    let total_len: usize = slices.iter().map(|s| s.len()).sum();
+
+    let has_nulls = slices.iter().any(|s| match &s.array {
+        Array::TextArray(TextArray::Categorical32(arr)) => arr.null_mask().is_some(),
+        #[cfg(feature = "extended_categorical")]
+        Array::TextArray(TextArray::Categorical8(arr)) => arr.null_mask().is_some(),
+        #[cfg(feature = "extended_categorical")]
+        Array::TextArray(TextArray::Categorical16(arr)) => arr.null_mask().is_some(),
+        #[cfg(feature = "extended_categorical")]
+        Array::TextArray(TextArray::Categorical64(arr)) => arr.null_mask().is_some(),
+        _ => false,
+    });
+
+    let mut result_data: Vec64<T> = Vec64::with_capacity(total_len);
+    let mut result_mask: Option<Bitmask> = if has_nulls {
+        Some(Bitmask::default())
+    } else {
+        None
+    };
+    let mut current_len = 0;
+
+    for slice in slices {
+        let (data, null_mask) = match &slice.array {
+            Array::TextArray(TextArray::Categorical32(arr)) => {
+                // Type-punning since we know T matches
+                let data_slice: &[T] = unsafe {
+                    std::slice::from_raw_parts(
+                        arr.data.as_slice().as_ptr() as *const T,
+                        arr.data.len(),
+                    )
+                };
+                (&data_slice[slice.offset..slice.offset + slice.len()], arr.null_mask())
+            }
+            #[cfg(feature = "extended_categorical")]
+            Array::TextArray(TextArray::Categorical8(arr)) => {
+                let data_slice: &[T] = unsafe {
+                    std::slice::from_raw_parts(
+                        arr.data.as_slice().as_ptr() as *const T,
+                        arr.data.len(),
+                    )
+                };
+                (&data_slice[slice.offset..slice.offset + slice.len()], arr.null_mask())
+            }
+            #[cfg(feature = "extended_categorical")]
+            Array::TextArray(TextArray::Categorical16(arr)) => {
+                let data_slice: &[T] = unsafe {
+                    std::slice::from_raw_parts(
+                        arr.data.as_slice().as_ptr() as *const T,
+                        arr.data.len(),
+                    )
+                };
+                (&data_slice[slice.offset..slice.offset + slice.len()], arr.null_mask())
+            }
+            #[cfg(feature = "extended_categorical")]
+            Array::TextArray(TextArray::Categorical64(arr)) => {
+                let data_slice: &[T] = unsafe {
+                    std::slice::from_raw_parts(
+                        arr.data.as_slice().as_ptr() as *const T,
+                        arr.data.len(),
+                    )
+                };
+                (&data_slice[slice.offset..slice.offset + slice.len()], arr.null_mask())
+            }
+            _ => continue,
+        };
+
+        result_data.extend_from_slice(data);
+        extend_null_mask(&mut result_mask, current_len, null_mask, slice.offset, slice.len());
+        current_len += slice.len();
+    }
+
+    // Create result CategoricalArray with shared dictionary
+    let result = CategoricalArray::<T>::new(result_data, first_dict.clone(), result_mask);
+
+    // Wrap in appropriate variant
+    if std::mem::size_of::<T>() == 4 {
+        Array::TextArray(TextArray::Categorical32(Arc::new(unsafe {
+            std::mem::transmute::<CategoricalArray<T>, CategoricalArray<u32>>(result)
+        })))
+    } else if std::mem::size_of::<T>() == 8 {
+        #[cfg(feature = "extended_categorical")]
+        {
+            Array::TextArray(TextArray::Categorical64(Arc::new(unsafe {
+                std::mem::transmute::<CategoricalArray<T>, CategoricalArray<u64>>(result)
+            })))
+        }
+        #[cfg(not(feature = "extended_categorical"))]
+        panic!("Categorical64 not enabled")
+    } else if std::mem::size_of::<T>() == 2 {
+        #[cfg(feature = "extended_categorical")]
+        {
+            Array::TextArray(TextArray::Categorical16(Arc::new(unsafe {
+                std::mem::transmute::<CategoricalArray<T>, CategoricalArray<u16>>(result)
+            })))
+        }
+        #[cfg(not(feature = "extended_categorical"))]
+        panic!("Categorical16 not enabled")
+    } else {
+        #[cfg(feature = "extended_categorical")]
+        {
+            Array::TextArray(TextArray::Categorical8(Arc::new(unsafe {
+                std::mem::transmute::<CategoricalArray<T>, CategoricalArray<u8>>(result)
+            })))
+        }
+        #[cfg(not(feature = "extended_categorical"))]
+        panic!("Categorical8 not enabled")
+    }
+}
+
+/// Consolidates BooleanArray slices by directly copying bit-packed data.
+/// Uses unchecked access since bounds are known.
+fn consolidate_boolean_slices(slices: &[ArrayV]) -> Array {
+    use crate::traits::consolidate::extend_null_mask;
+    use crate::traits::masked_array::MaskedArray;
+
+    let total_len: usize = slices.iter().map(|s| s.len()).sum();
+
+    let has_nulls = slices.iter().any(|s| {
+        if let Array::BooleanArray(arr) = &s.array {
+            arr.null_mask().is_some()
+        } else {
+            false
+        }
+    });
+
+    // Create result bitmask with full length (all false initially)
+    let mut result_data = Bitmask::new_set_all(total_len, false);
+
+    let mut result_mask: Option<Bitmask> = if has_nulls {
+        Some(Bitmask::new_set_all(total_len, true))
+    } else {
+        None
+    };
+
+    let mut current_pos = 0;
+
+    for slice in slices {
+        if let Array::BooleanArray(arr) = &slice.array {
+            let start = slice.offset;
+            let len = slice.len();
+
+            // Copy data bits using get_unchecked since bounds are verified
+            for i in 0..len {
+                let bit = unsafe { arr.data.get_unchecked(start + i) };
+                unsafe { result_data.set_unchecked(current_pos + i, bit) };
+            }
+
+            // Handle null mask
+            extend_null_mask(
+                &mut result_mask,
+                current_pos,
+                arr.null_mask(),
+                slice.offset,
+                len,
+            );
+
+            current_pos += len;
+        }
+    }
+
+    result_data.mask_trailing_bits();
+    if let Some(mask) = &mut result_mask {
+        mask.mask_trailing_bits();
+    }
+
+    let result = BooleanArray::new(result_data, result_mask);
+    Array::BooleanArray(Arc::new(result))
+}
+
+/// Consolidates numeric array slices by directly extending from raw data buffers.
+fn consolidate_numeric_slices(slices: &[ArrayV], first_num: &NumericArray) -> Array {
+    match first_num {
+        NumericArray::Int32(_) => consolidate_int_variant!(slices, Int32, i32),
+        NumericArray::Int64(_) => consolidate_int_variant!(slices, Int64, i64),
+        NumericArray::UInt32(_) => consolidate_int_variant!(slices, UInt32, u32),
+        NumericArray::UInt64(_) => consolidate_int_variant!(slices, UInt64, u64),
+        NumericArray::Float32(_) => consolidate_float_variant!(slices, Float32, f32),
+        NumericArray::Float64(_) => consolidate_float_variant!(slices, Float64, f64),
+        #[cfg(feature = "extended_numeric_types")]
+        NumericArray::Int8(_) => consolidate_int_variant!(slices, Int8, i8),
+        #[cfg(feature = "extended_numeric_types")]
+        NumericArray::Int16(_) => consolidate_int_variant!(slices, Int16, i16),
+        #[cfg(feature = "extended_numeric_types")]
+        NumericArray::UInt8(_) => consolidate_int_variant!(slices, UInt8, u8),
+        #[cfg(feature = "extended_numeric_types")]
+        NumericArray::UInt16(_) => consolidate_int_variant!(slices, UInt16, u16),
+        NumericArray::Null => Array::Null,
+    }
+}
+
+/// Consolidates temporal array slices by directly extending from raw data buffers.
+#[cfg(feature = "datetime")]
+fn consolidate_temporal_slices(slices: &[ArrayV], first_temp: &TemporalArray) -> Array {
+    match first_temp {
+        TemporalArray::Datetime32(_) => consolidate_temporal_variant!(slices, Datetime32, i32),
+        TemporalArray::Datetime64(_) => consolidate_temporal_variant!(slices, Datetime64, i64),
+        TemporalArray::Null => Array::Null,
+    }
+}
+
 impl Concatenate for SuperArrayV {
     /// Concatenates two super array views by materialising both to owned arrays,
     /// concatenating them, and wrapping the result back in a view.
@@ -199,9 +541,12 @@ impl Concatenate for SuperArrayV {
     /// - The resulting view contains a single slice wrapping the concatenated array.
     /// - The field metadata from the first view is preserved.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
+        // Preserve field before consuming self
+        let field = self.field.clone();
+
         // Materialise both views to owned arrays
-        let self_array = self.copy_to_array();
-        let other_array = other.copy_to_array();
+        let self_array = self.consolidate();
+        let other_array = other.consolidate();
 
         // Concatenate the owned arrays
         let concatenated = self_array.concat(other_array)?;
@@ -211,7 +556,7 @@ impl Concatenate for SuperArrayV {
         Ok(SuperArrayV {
             slices: vec![ArrayV::from(concatenated)],
             len,
-            field: self.field,
+            field,
         })
     }
 }
@@ -257,7 +602,7 @@ mod tests {
         let ca = SuperArray::from_chunks(Vec::from(vec![fa1.clone(), fa2.clone()]));
         let slice = ca.slice(0, 5);
 
-        let arr = slice.copy_to_array();
+        let arr = slice.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ints)) = arr {
             assert_eq!(ints.data.as_slice(), &[1, 2, 3, 4, 5]);
         } else {
@@ -272,7 +617,7 @@ mod tests {
         let ca = SuperArray::from_chunks(Vec::from(vec![fa1.clone(), fa2.clone()]));
         let slice = ca.slice(1, 5); // [2,3,4,5,6]
         let sub = slice.slice(1, 3); // [3,4,5]
-        let arr = sub.copy_to_array();
+        let arr = sub.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ints)) = arr {
             assert_eq!(ints.data.as_slice(), &[3, 4, 5]);
         } else {
@@ -371,9 +716,456 @@ mod tests {
         let subslice = slice.slice(1, 2);
         assert_eq!(subslice.field.name, "field");
     }
-}
 
-// From implementations for conversion between SuperArray and SuperArrayV
+    // Boolean Array Consolidation Tests
+
+    fn fa_bool(name: &str, vals: &[bool]) -> FieldArray {
+        let arr = Array::BooleanArray(Arc::new(crate::BooleanArray::from_slice(vals)));
+        let field = Field::new(name, ArrowType::Boolean, false, None);
+        FieldArray::new(field, arr)
+    }
+
+    #[test]
+    fn test_consolidate_boolean_single_chunk() {
+        let fa1 = fa_bool("b", &[true, false, true, false]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(0, 4);
+        let arr = slice.consolidate();
+
+        // Use arr.len() which correctly returns logical element count
+        assert_eq!(arr.len(), 4);
+        if let Array::BooleanArray(bools) = arr {
+            // Note: bools.len() returns byte count due to Deref<Target=[u8]>
+            // Use bools.data.len() for logical bit count
+            assert_eq!(bools.data.len(), 4);
+            assert_eq!(bools.data.get(0), true);
+            assert_eq!(bools.data.get(1), false);
+            assert_eq!(bools.data.get(2), true);
+            assert_eq!(bools.data.get(3), false);
+        } else {
+            panic!("Expected BooleanArray");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_boolean_multiple_chunks() {
+        let fa1 = fa_bool("b", &[true, true]);
+        let fa2 = fa_bool("b", &[false, false, true]);
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        let slice = ca.slice(0, 5);
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 5);
+        if let Array::BooleanArray(bools) = arr {
+            assert_eq!(bools.data.len(), 5);
+            assert_eq!(bools.data.get(0), true);
+            assert_eq!(bools.data.get(1), true);
+            assert_eq!(bools.data.get(2), false);
+            assert_eq!(bools.data.get(3), false);
+            assert_eq!(bools.data.get(4), true);
+        } else {
+            panic!("Expected BooleanArray");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_boolean_with_offset() {
+        let fa1 = fa_bool("b", &[true, false, true, false, true]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(1, 3); // [false, true, false]
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 3);
+        if let Array::BooleanArray(bools) = arr {
+            assert_eq!(bools.data.len(), 3);
+            assert_eq!(bools.data.get(0), false);
+            assert_eq!(bools.data.get(1), true);
+            assert_eq!(bools.data.get(2), false);
+        } else {
+            panic!("Expected BooleanArray");
+        }
+    }
+
+    // String Array Consolidation Tests
+
+    fn fa_string(name: &str, vals: &[&str]) -> FieldArray {
+        let arr = Array::from_string32(crate::StringArray::<u32>::from_slice(vals));
+        let field = Field::new(name, ArrowType::String, false, None);
+        FieldArray::new(field, arr)
+    }
+
+    #[test]
+    fn test_consolidate_string_single_chunk() {
+        let fa1 = fa_string("s", &["hello", "world", "test"]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(0, 3);
+        let arr = slice.consolidate();
+
+        // Use arr.len() which correctly returns string count
+        assert_eq!(arr.len(), 3);
+        if let Array::TextArray(crate::TextArray::String32(strings)) = arr {
+            // Note: strings.len() returns data buffer length due to Deref<Target=[u8]>
+            // Use offsets.len()-1 for actual string count
+            assert_eq!(strings.offsets.len() - 1, 3);
+            assert_eq!(strings.get_str(0), Some("hello"));
+            assert_eq!(strings.get_str(1), Some("world"));
+            assert_eq!(strings.get_str(2), Some("test"));
+        } else {
+            panic!("Expected String32 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_string_multiple_chunks() {
+        let fa1 = fa_string("s", &["alpha", "beta"]);
+        let fa2 = fa_string("s", &["gamma", "delta"]);
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        let slice = ca.slice(0, 4);
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 4);
+        if let Array::TextArray(crate::TextArray::String32(strings)) = arr {
+            assert_eq!(strings.offsets.len() - 1, 4);
+            assert_eq!(strings.get_str(0), Some("alpha"));
+            assert_eq!(strings.get_str(1), Some("beta"));
+            assert_eq!(strings.get_str(2), Some("gamma"));
+            assert_eq!(strings.get_str(3), Some("delta"));
+        } else {
+            panic!("Expected String32 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_string_with_offset() {
+        let fa1 = fa_string("s", &["one", "two", "three", "four"]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(1, 2); // ["two", "three"]
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 2);
+        if let Array::TextArray(crate::TextArray::String32(strings)) = arr {
+            assert_eq!(strings.offsets.len() - 1, 2);
+            assert_eq!(strings.get_str(0), Some("two"));
+            assert_eq!(strings.get_str(1), Some("three"));
+        } else {
+            panic!("Expected String32 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_string_cross_chunk_slice() {
+        let fa1 = fa_string("s", &["a", "bb"]);
+        let fa2 = fa_string("s", &["ccc", "dddd"]);
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        let slice = ca.slice(1, 2); // ["bb", "ccc"] spanning chunks
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 2);
+        if let Array::TextArray(crate::TextArray::String32(strings)) = arr {
+            assert_eq!(strings.offsets.len() - 1, 2);
+            assert_eq!(strings.get_str(0), Some("bb"));
+            assert_eq!(strings.get_str(1), Some("ccc"));
+        } else {
+            panic!("Expected String32 Array");
+        }
+    }
+
+    // Numeric Array Consolidation Tests (Int32, Int64, Float32, Float64)
+
+    fn fa_i64(name: &str, vals: &[i64]) -> FieldArray {
+        let arr = Array::from_int64(crate::IntegerArray::<i64>::from_slice(vals));
+        let field = Field::new(name, ArrowType::Int64, false, None);
+        FieldArray::new(field, arr)
+    }
+
+    fn fa_f32(name: &str, vals: &[f32]) -> FieldArray {
+        let arr = Array::from_float32(crate::FloatArray::<f32>::from_slice(vals));
+        let field = Field::new(name, ArrowType::Float32, false, None);
+        FieldArray::new(field, arr)
+    }
+
+    fn fa_f64(name: &str, vals: &[f64]) -> FieldArray {
+        let arr = Array::from_float64(crate::FloatArray::<f64>::from_slice(vals));
+        let field = Field::new(name, ArrowType::Float64, false, None);
+        FieldArray::new(field, arr)
+    }
+
+    #[test]
+    fn test_consolidate_int32_single_chunk() {
+        let fa1 = fa("i", &[10, 20, 30, 40]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(0, 4);
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 4);
+        if let Array::NumericArray(NumericArray::Int32(ints)) = arr {
+            assert_eq!(ints.data.as_slice(), &[10, 20, 30, 40]);
+        } else {
+            panic!("Expected Int32 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_int32_multiple_chunks() {
+        let fa1 = fa("i", &[1, 2]);
+        let fa2 = fa("i", &[3, 4, 5]);
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        let slice = ca.slice(0, 5);
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 5);
+        if let Array::NumericArray(NumericArray::Int32(ints)) = arr {
+            assert_eq!(ints.data.as_slice(), &[1, 2, 3, 4, 5]);
+        } else {
+            panic!("Expected Int32 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_int32_with_offset() {
+        let fa1 = fa("i", &[100, 200, 300, 400, 500]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(1, 3); // [200, 300, 400]
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 3);
+        if let Array::NumericArray(NumericArray::Int32(ints)) = arr {
+            assert_eq!(ints.data.as_slice(), &[200, 300, 400]);
+        } else {
+            panic!("Expected Int32 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_int64_multiple_chunks() {
+        let fa1 = fa_i64("i", &[1_000_000_000i64, 2_000_000_000]);
+        let fa2 = fa_i64("i", &[3_000_000_000i64]);
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        let slice = ca.slice(0, 3);
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 3);
+        if let Array::NumericArray(NumericArray::Int64(ints)) = arr {
+            assert_eq!(
+                ints.data.as_slice(),
+                &[1_000_000_000i64, 2_000_000_000, 3_000_000_000]
+            );
+        } else {
+            panic!("Expected Int64 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_float32_multiple_chunks() {
+        let fa1 = fa_f32("f", &[1.5f32, 2.5]);
+        let fa2 = fa_f32("f", &[3.5f32, 4.5]);
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        let slice = ca.slice(0, 4);
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 4);
+        if let Array::NumericArray(NumericArray::Float32(floats)) = arr {
+            assert_eq!(floats.data.as_slice(), &[1.5f32, 2.5, 3.5, 4.5]);
+        } else {
+            panic!("Expected Float32 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_float64_with_offset() {
+        let fa1 = fa_f64("f", &[0.1, 0.2, 0.3, 0.4, 0.5]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(2, 2); // [0.3, 0.4]
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 2);
+        if let Array::NumericArray(NumericArray::Float64(floats)) = arr {
+            assert_eq!(floats.data.as_slice(), &[0.3, 0.4]);
+        } else {
+            panic!("Expected Float64 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_float64_cross_chunk_slice() {
+        let fa1 = fa_f64("f", &[1.1, 2.2]);
+        let fa2 = fa_f64("f", &[3.3, 4.4]);
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        let slice = ca.slice(1, 2); // [2.2, 3.3] spanning chunks
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 2);
+        if let Array::NumericArray(NumericArray::Float64(floats)) = arr {
+            assert_eq!(floats.data.as_slice(), &[2.2, 3.3]);
+        } else {
+            panic!("Expected Float64 Array");
+        }
+    }
+
+    // Temporal Array Consolidation Tests
+
+    #[cfg(feature = "datetime")]
+    fn fa_datetime64(name: &str, vals: &[i64]) -> FieldArray {
+        use crate::enums::time_units::TimeUnit;
+        use crate::traits::masked_array::MaskedArray;
+        let mut arr = crate::DatetimeArray::<i64>::with_capacity(vals.len(), false, Some(TimeUnit::Milliseconds));
+        for &v in vals {
+            arr.push(v);
+        }
+        let arr = Array::from_datetime_i64(arr);
+        let field = Field::new(name, ArrowType::Timestamp(TimeUnit::Milliseconds, None), false, None);
+        FieldArray::new(field, arr)
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_consolidate_datetime64_single_chunk() {
+        let fa1 = fa_datetime64("ts", &[1000, 2000, 3000, 4000]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(0, 4);
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 4);
+        if let Array::TemporalArray(crate::TemporalArray::Datetime64(dt)) = arr {
+            assert_eq!(dt.data.as_slice(), &[1000i64, 2000, 3000, 4000]);
+        } else {
+            panic!("Expected Datetime64 Array");
+        }
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_consolidate_datetime64_multiple_chunks() {
+        let fa1 = fa_datetime64("ts", &[100, 200]);
+        let fa2 = fa_datetime64("ts", &[300, 400, 500]);
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        let slice = ca.slice(0, 5);
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 5);
+        if let Array::TemporalArray(crate::TemporalArray::Datetime64(dt)) = arr {
+            assert_eq!(dt.data.as_slice(), &[100i64, 200, 300, 400, 500]);
+        } else {
+            panic!("Expected Datetime64 Array");
+        }
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_consolidate_datetime64_with_offset() {
+        let fa1 = fa_datetime64("ts", &[10, 20, 30, 40, 50]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(1, 3); // [20, 30, 40]
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 3);
+        if let Array::TemporalArray(crate::TemporalArray::Datetime64(dt)) = arr {
+            assert_eq!(dt.data.as_slice(), &[20i64, 30, 40]);
+        } else {
+            panic!("Expected Datetime64 Array");
+        }
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_consolidate_datetime64_cross_chunk_slice() {
+        let fa1 = fa_datetime64("ts", &[1, 2]);
+        let fa2 = fa_datetime64("ts", &[3, 4]);
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        let slice = ca.slice(1, 2); // [2, 3] spanning chunks
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 2);
+        if let Array::TemporalArray(crate::TemporalArray::Datetime64(dt)) = arr {
+            assert_eq!(dt.data.as_slice(), &[2i64, 3]);
+        } else {
+            panic!("Expected Datetime64 Array");
+        }
+    }
+
+    // Categorical Array Consolidation Tests
+
+    fn fa_categorical(name: &str, vals: &[&str]) -> FieldArray {
+        use crate::ffi::arrow_dtype::CategoricalIndexType;
+        let string_arr = crate::StringArray::<u32>::from_slice(vals);
+        let cat_arr = string_arr.to_categorical_array();
+        let arr = Array::from_categorical32(cat_arr);
+        let field = Field::new(name, ArrowType::Dictionary(CategoricalIndexType::UInt32), false, None);
+        FieldArray::new(field, arr)
+    }
+
+    #[test]
+    fn test_consolidate_categorical_single_chunk() {
+        let fa1 = fa_categorical("cat", &["a", "b", "a", "c"]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(0, 4);
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 4);
+        if let Array::TextArray(crate::TextArray::Categorical32(cat)) = arr {
+            assert_eq!(cat.len(), 4);
+            // Values should decode correctly
+            assert_eq!(cat.get_str(0), Some("a"));
+            assert_eq!(cat.get_str(1), Some("b"));
+            assert_eq!(cat.get_str(2), Some("a"));
+            assert_eq!(cat.get_str(3), Some("c"));
+        } else {
+            panic!("Expected Categorical32 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_categorical_with_offset() {
+        let fa1 = fa_categorical("cat", &["x", "y", "z", "w", "v"]);
+        let ca = SuperArray::from_chunks(vec![fa1]);
+        let slice = ca.slice(1, 3); // ["y", "z", "w"]
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 3);
+        if let Array::TextArray(crate::TextArray::Categorical32(cat)) = arr {
+            assert_eq!(cat.len(), 3);
+            assert_eq!(cat.get_str(0), Some("y"));
+            assert_eq!(cat.get_str(1), Some("z"));
+            assert_eq!(cat.get_str(2), Some("w"));
+        } else {
+            panic!("Expected Categorical32 Array");
+        }
+    }
+
+    #[test]
+    fn test_consolidate_categorical_same_dict_multiple_chunks() {
+        use crate::ffi::arrow_dtype::CategoricalIndexType;
+        // Create two chunks from the same source so they share dictionary
+        let string_arr = crate::StringArray::<u32>::from_slice(&["red", "green", "blue", "red"]);
+        let cat_arr = Arc::new(string_arr.to_categorical_array());
+
+        // Create two FieldArrays pointing to slices of the same categorical
+        let field = Field::new("color", ArrowType::Dictionary(CategoricalIndexType::UInt32), false, None);
+
+        // First chunk: first 2 elements
+        let arr1 = Array::TextArray(crate::TextArray::Categorical32(cat_arr.clone()));
+        let fa1 = FieldArray::new(field.clone(), arr1);
+
+        // Second chunk: last 2 elements (same array, will be sliced)
+        let arr2 = Array::TextArray(crate::TextArray::Categorical32(cat_arr.clone()));
+        let fa2 = FieldArray::new(field.clone(), arr2);
+
+        let ca = SuperArray::from_chunks(vec![fa1, fa2]);
+        // Slice spanning both chunks
+        let slice = ca.slice(1, 4); // ["green", "blue", "red", "red"]
+        let arr = slice.consolidate();
+
+        assert_eq!(arr.len(), 4);
+        if let Array::TextArray(crate::TextArray::Categorical32(cat)) = arr {
+            assert_eq!(cat.get_str(0), Some("green"));
+            assert_eq!(cat.get_str(1), Some("blue"));
+            assert_eq!(cat.get_str(2), Some("red"));
+            assert_eq!(cat.get_str(3), Some("red"));
+        } else {
+            panic!("Expected Categorical32 Array");
+        }
+    }
+}
 
 /// SuperArray -> SuperArrayV conversion
 impl From<SuperArray> for SuperArrayV {

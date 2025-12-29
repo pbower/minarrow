@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.4.5"
+version = "0.4.6"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"

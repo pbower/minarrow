@@ -18,6 +18,7 @@ use crate::ArrayV;
 #[cfg(feature = "views")]
 use crate::SuperArrayV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
+use crate::traits::consolidate::Consolidate;
 use crate::ffi::arrow_dtype::ArrowType;
 #[cfg(feature = "size")]
 use crate::traits::byte_size::ByteSize;
@@ -171,26 +172,6 @@ impl SuperArray {
             len,
             field: field.into(),
         }
-    }
-
-    // Concatenation
-
-    /// Materialises a contiguous `Array` holding all rows.
-    pub fn copy_to_array(&self) -> Array {
-        assert!(
-            !self.arrays.is_empty(),
-            "to_array() called on empty ChunkedArray"
-        );
-
-        // Use the Concatenate trait to combine all FieldArrays
-        let result = self
-            .arrays
-            .iter()
-            .cloned()
-            .reduce(|acc, arr| acc.concat(arr).expect("Failed to concatenate arrays"))
-            .expect("Expected at least one array");
-
-        result.array
     }
 
     // Metadata
@@ -664,6 +645,36 @@ impl Shape for SuperArray {
     }
 }
 
+impl Consolidate for SuperArray {
+    type Output = Array;
+
+    /// Consolidates all chunks into a single contiguous `Array`.
+    ///
+    /// Materialises all rows from all chunks into one contiguous buffer.
+    /// Use this when you need contiguous memory for operations or
+    /// APIs that require single buffers.
+    ///
+    /// Pays a memory re-allocation cost.
+    ///
+    /// # Panics
+    /// Panics if the SuperArray is empty.
+    fn consolidate(self) -> Array {
+        assert!(
+            !self.arrays.is_empty(),
+            "consolidate() called on empty SuperArray"
+        );
+
+        // Use the Concatenate trait to combine all FieldArrays
+        let result = self
+            .arrays
+            .into_iter()
+            .reduce(|acc, arr| acc.concat(arr).expect("Failed to concatenate arrays"))
+            .expect("Expected at least one array");
+
+        result.array
+    }
+}
+
 impl Concatenate for SuperArray {
     /// Concatenates two SuperArrays by appending all chunks from `other` to `self`.
     ///
@@ -858,7 +869,7 @@ mod tests {
         let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()].into());
         let sl = ca.slice(2, 3);
         assert_eq!(sl.len, 3);
-        let arr = sl.copy_to_array();
+        let arr = sl.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ia)) = arr {
             assert_eq!(&*ia.data, &[30, 40, 50]);
         } else {
@@ -910,7 +921,7 @@ mod tests {
         assert_eq!(ca.len(), 7);
         assert_eq!(ca.n_chunks(), 4);
 
-        let result = ca.copy_to_array();
+        let result = ca.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ia)) = result {
             assert_eq!(&*ia.data, &[1, 99, 88, 2, 3, 4, 5]);
         } else {
@@ -930,7 +941,7 @@ mod tests {
         assert_eq!(ca.len(), 6);
         assert_eq!(ca.n_chunks(), 4);
 
-        let result = ca.copy_to_array();
+        let result = ca.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ia)) = result {
             assert_eq!(&*ia.data, &[1, 2, 3, 99, 4, 5]);
         } else {
@@ -949,7 +960,7 @@ mod tests {
 
         assert_eq!(ca.len(), 4);
 
-        let result = ca.copy_to_array();
+        let result = ca.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ia)) = result {
             assert_eq!(&*ia.data, &[99, 1, 2, 3]);
         } else {
@@ -968,7 +979,7 @@ mod tests {
 
         assert_eq!(ca.len(), 4);
 
-        let result = ca.copy_to_array();
+        let result = ca.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ia)) = result {
             assert_eq!(&*ia.data, &[1, 2, 3, 99]);
         } else {
@@ -1016,7 +1027,7 @@ mod tests {
         assert_eq!(ca.arrays[1].len(), 3);
         assert_eq!(ca.arrays[2].len(), 3);
 
-        let result = ca.copy_to_array();
+        let result = ca.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ia)) = result {
             assert_eq!(&*ia.data, &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
         } else {
@@ -1048,7 +1059,7 @@ mod tests {
         assert_eq!(ca.len(), 12);
         assert!(ca.n_chunks() >= 3);
 
-        let result = ca.copy_to_array();
+        let result = ca.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ia)) = result {
             assert_eq!(&*ia.data, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
         } else {
@@ -1081,7 +1092,7 @@ mod tests {
 
         ca.rechunk(RechunkStrategy::Count(2)).unwrap();
 
-        let result = ca.copy_to_array();
+        let result = ca.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ia)) = result {
             assert_eq!(&*ia.data, &[10, 20, 30, 40, 50, 60]);
         } else {

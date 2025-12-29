@@ -38,6 +38,7 @@ use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
 use crate::structs::chunked::super_table::SuperTable;
 use crate::traits::concatenate::Concatenate;
+use crate::traits::consolidate::Consolidate;
 use crate::traits::shape::Shape;
 use crate::{Field, Table, TableV};
 
@@ -93,10 +94,6 @@ impl SuperTableV {
         self.slices.iter()
     }
 
-    /// Copy-owning materialisation into one contiguous `Table`.
-    pub fn to_table(&self, name: Option<&str>) -> Table {
-        SuperTable::from_views(&self.slices, "".to_string()).to_table(name)
-    }
 
     /// Returns a sub-window of this chunked slice object as a new ChunkedTableSlice.
     #[inline]
@@ -192,6 +189,21 @@ impl Shape for SuperTableV {
     }
 }
 
+impl Consolidate for SuperTableV {
+    type Output = Table;
+
+    /// Consolidates all view slices into a single contiguous `Table`.
+    ///
+    /// Creates a SuperTable from the views and consolidates it.
+    /// The result table is named "part" to indicate it's a partial/consolidated view.
+    fn consolidate(self) -> Table {
+        if self.slices.is_empty() {
+            return Table::default();
+        }
+        SuperTable::from_views(&self.slices, "part".to_string()).consolidate()
+    }
+}
+
 impl Concatenate for SuperTableV {
     /// Concatenates two super table views by materialising both to owned tables,
     /// concatenating them, and wrapping the result back in a view.
@@ -201,8 +213,8 @@ impl Concatenate for SuperTableV {
     /// - The resulting view contains a single slice wrapping the concatenated table.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
         // Materialise both views to owned tables
-        let self_table = self.to_table(None);
-        let other_table = other.to_table(None);
+        let self_table = self.consolidate();
+        let other_table = other.consolidate();
 
         // Concatenate the owned tables
         let concatenated = self_table.concat(other_table)?;
@@ -276,7 +288,7 @@ mod tests {
         assert_eq!(big_slice.len, 5);
 
         // materialise
-        let tbl = big_slice.to_table(Some("merged"));
+        let tbl = big_slice.consolidate();
         assert_eq!(tbl.n_rows, 5);
         assert_eq!(col_vals(&tbl), vec![1, 2, 3, 4, 5]);
     }
@@ -292,8 +304,6 @@ mod tests {
         // Sub-slice  [1 .. 4)  =>  rows 11,12,13
         let sub = full.slice(1, 3);
         assert_eq!(sub.len, 3); // The slice window length, not parent len
-        let sub_tbl = sub.to_table(None);
-        assert_eq!(col_vals(&sub_tbl), vec![11, 12, 13]);
 
         // row() — convert row TableSlice to Table, then inspect row 0
         let row_ts = sub.row(1);
@@ -306,6 +316,10 @@ mod tests {
         assert_eq!(single.len, 1);
         let single_tbl = single.to_table();
         assert_eq!(col_vals(&single_tbl)[0], 13);
+
+        // Now consolidate (consumes sub)
+        let sub_tbl = sub.consolidate();
+        assert_eq!(col_vals(&sub_tbl), vec![11, 12, 13]);
     }
 
     #[test]

@@ -3860,6 +3860,43 @@ fn array_category_name(arr: &Array) -> &'static str {
     }
 }
 
+// =============================================================================
+// RowSelection Implementation
+// =============================================================================
+
+#[cfg(all(feature = "select", feature = "views"))]
+impl crate::traits::selection::RowSelection for Array {
+    type View = ArrayV;
+
+    /// Select rows by index or range, returning an ArrayV (view)
+    ///
+    /// For contiguous selections (ranges), creates a zero-copy view.
+    /// For non-contiguous selections (index arrays), gathers into a new array.
+    fn r<S: crate::traits::selection::DataSelector>(&self, selection: S) -> ArrayV {
+        if selection.is_contiguous() {
+            // Contiguous selection (ranges): create a view
+            let indices = selection.resolve_indices(self.len());
+            if indices.is_empty() {
+                return ArrayV::new(self.clone(), 0, 0);
+            }
+            let offset = indices[0];
+            let len = indices.len();
+            ArrayV::new(self.clone(), offset, len)
+        } else {
+            // Non-contiguous selection (index arrays): gather into new array
+            // For now, create a view over the whole array and use its gather
+            let full_view = ArrayV::new(self.clone(), 0, self.len());
+            let indices = selection.resolve_indices(self.len());
+            let gathered = full_view.gather_indices(&indices);
+            ArrayV::new(gathered, 0, indices.len())
+        }
+    }
+
+    fn get_row_count(&self) -> usize {
+        self.len()
+    }
+}
+
 #[cfg(test)]
 mod concat_tests {
     use super::*;
