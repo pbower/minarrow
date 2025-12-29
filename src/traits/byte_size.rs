@@ -260,6 +260,54 @@ impl ByteSize for Table {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// View Type Implementations
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[cfg(feature = "views")]
+use crate::{ArrayV, TableV};
+
+/// ByteSize for ArrayV - proportional estimate from underlying array
+#[cfg(feature = "views")]
+impl ByteSize for ArrayV {
+    fn est_bytes(&self) -> usize {
+        let full_len = self.array.len();
+        let full_bytes = self.array.est_bytes();
+        if full_len > 0 {
+            (full_bytes * self.len()) / full_len
+        } else {
+            0
+        }
+    }
+}
+
+/// ByteSize for TableV - sum of column view estimates
+#[cfg(feature = "views")]
+impl ByteSize for TableV {
+    fn est_bytes(&self) -> usize {
+        self.cols.iter().map(|col| col.est_bytes()).sum()
+    }
+}
+
+#[cfg(all(feature = "chunked", feature = "views"))]
+use crate::{SuperArrayV, SuperTableV};
+
+/// ByteSize for SuperArrayV - sum of slice estimates
+#[cfg(all(feature = "chunked", feature = "views"))]
+impl ByteSize for SuperArrayV {
+    fn est_bytes(&self) -> usize {
+        self.slices.iter().map(|slice| slice.est_bytes()).sum()
+    }
+}
+
+/// ByteSize for SuperTableV - sum of slice estimates
+#[cfg(all(feature = "chunked", feature = "views"))]
+impl ByteSize for SuperTableV {
+    fn est_bytes(&self) -> usize {
+        self.slices.iter().map(|slice| slice.est_bytes()).sum()
+    }
+}
+
 /// ByteSize for Matrix (when matrix feature is enabled)
 #[cfg(feature = "matrix")]
 use crate::Matrix;
@@ -345,21 +393,18 @@ impl ByteSize for Value {
             Value::Scalar(s) => s.est_bytes(),
             Value::Array(arr) => arr.est_bytes(),
             #[cfg(feature = "views")]
-            Value::ArrayView(_) => {
-                // Views contain Arc + offset + len metadata
-                size_of::<crate::ArrayV>() // Arc<T> + usize + usize
-            }
+            Value::ArrayView(av) => av.est_bytes(),
             Value::Table(tbl) => tbl.est_bytes(),
             #[cfg(feature = "views")]
-            Value::TableView(_) => size_of::<crate::TableV>(), // Arc<T> + usize + usize
+            Value::TableView(tv) => tv.est_bytes(),
             #[cfg(feature = "chunked")]
             Value::SuperArray(sa) => sa.est_bytes(),
             #[cfg(all(feature = "chunked", feature = "views"))]
-            Value::SuperArrayView(_) => size_of::<crate::SuperArrayV>(), // Arc<T> + usize + usize
+            Value::SuperArrayView(sav) => sav.est_bytes(),
             #[cfg(feature = "chunked")]
             Value::SuperTable(st) => st.est_bytes(),
             #[cfg(all(feature = "chunked", feature = "views"))]
-            Value::SuperTableView(_) => size_of::<crate::SuperTableV>(), // Arc<T> + usize + usize
+            Value::SuperTableView(stv) => stv.est_bytes(),
             Value::FieldArray(fa) => fa.est_bytes(),
             #[cfg(feature = "matrix")]
             Value::Matrix(m) => m.est_bytes(),

@@ -40,6 +40,8 @@ use std::ffi::{CString, c_void};
 use std::sync::Arc;
 use std::{ptr, slice};
 
+use crate::structs::buffer::Buffer;
+use crate::structs::shared_buffer::SharedBuffer;
 use crate::ffi::arrow_dtype::ArrowType;
 use crate::ffi::arrow_dtype::CategoricalIndexType;
 use crate::ffi::schema::Schema;
@@ -63,6 +65,11 @@ use crate::{DatetimeArray, IntervalUnit, TemporalArray, TimeUnit};
 // instances or once to transmit a single array—depending on the use case.
 
 /// ArrowArray as per the Arrow C spec
+/// 
+/// 1. Box::new(ArrowArray::empty()) - allocates ~80 bytes for the metadata struct
+/// 2. PyArrow's _export_to_c fills in the struct, setting buffers to point to PyArrow's memory
+/// 3. ForeignBuffer stores this Box and uses the buffers pointer for zero-copy access
+/// 4. The data never moves - we just hold a pointer to it
 #[repr(C)]
 pub struct ArrowArray {
     pub length: i64,
@@ -75,6 +82,25 @@ pub struct ArrowArray {
     pub dictionary: *mut ArrowArray,
     pub release: Option<unsafe extern "C" fn(*mut ArrowArray)>,
     pub private_data: *mut c_void,
+}
+
+impl ArrowArray {
+    /// Creates an empty ArrowArray for receiving FFI data.
+    /// Used when importing from external sources (e.g., PyArrow).
+    pub fn empty() -> Self {
+        Self {
+            length: 0,
+            null_count: 0,
+            offset: 0,
+            n_buffers: 0,
+            n_children: 0,
+            buffers: ptr::null_mut(),
+            children: ptr::null_mut(),
+            dictionary: ptr::null_mut(),
+            release: None,
+            private_data: ptr::null_mut(),
+        }
+    }
 }
 
 /// ArrowSchema as per the Arrow C spec
@@ -92,6 +118,24 @@ pub struct ArrowSchema {
     pub private_data: *mut c_void,
 }
 
+impl ArrowSchema {
+    /// Creates an empty ArrowSchema for receiving FFI data.
+    /// Used when importing from external sources (e.g., PyArrow).
+    pub fn empty() -> Self {
+        Self {
+            format: ptr::null(),
+            name: ptr::null(),
+            metadata: ptr::null(),
+            flags: 0,
+            n_children: 0,
+            children: ptr::null_mut(),
+            dictionary: ptr::null_mut(),
+            release: None,
+            private_data: ptr::null_mut(),
+        }
+    }
+}
+
 /// Keep buffers and data alive for the C Data Interface.
 /// Ensures backing data and all pointers while referenced by ArrowArray.private_data.
 struct Holder {
@@ -107,6 +151,46 @@ struct Holder {
     #[allow(dead_code)]
     metadata_cstr: Option<CString>,
 }
+
+/// Wrapper that owns a foreign ArrowArray's buffer memory and calls release on drop.
+/// Implements `AsRef<[u8]>` for use with `SharedBuffer::from_owner()`.
+///
+/// This enables zero-copy FFI by:
+/// 1. Holding the ArrowArray (with its release callback) alive
+/// 2. Providing access to the buffer data as a byte slice
+/// 3. Calling the release callback when dropped, freeing the foreign memory
+struct ForeignBuffer {
+    /// Raw pointer to the buffer data
+    ptr: *const u8,
+    /// Length in bytes
+    len: usize,
+    /// The ArrowArray we need to release when done.
+    /// Only one ForeignBuffer per ArrowArray should hold this.
+    array: Option<Box<ArrowArray>>,
+}
+
+impl AsRef<[u8]> for ForeignBuffer {
+    fn as_ref(&self) -> &[u8] {
+        if self.len == 0 || self.ptr.is_null() {
+            return &[];
+        }
+        unsafe { slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+impl Drop for ForeignBuffer {
+    fn drop(&mut self) {
+        if let Some(mut arr_box) = self.array.take() {
+            if let Some(release) = arr_box.release {
+                unsafe { release(arr_box.as_mut() as *mut ArrowArray) };
+            }
+        }
+    }
+}
+
+// Required for SharedBuffer::from_owner()
+unsafe impl Send for ForeignBuffer {}
+unsafe impl Sync for ForeignBuffer {}
 
 /// Releases memory for ArrowArray by deallocating Holder and zeroing the structure.
 /// # Safety
@@ -350,7 +434,7 @@ pub fn export_to_c(array: Arc<Array>, schema: Schema) -> (*mut ArrowArray, *mut 
                 .unwrap_or((ptr::null(), 0));
             let mut buf_ptrs = vec64![mask_ptr, data_ptr];
             let name_cstr = CString::new(schema.fields[0].name.clone()).unwrap();
-            check_alignment(&mut buf_ptrs);
+            check_alignment(&mut buf_ptrs, len as i64);
             create_arrow_export(array, schema, buf_ptrs, 2, len as i64, name_cstr)
         }
     }
@@ -363,14 +447,16 @@ fn export_string_array_to_c(
     len: i64,
 ) -> (*mut ArrowArray, *mut ArrowSchema) {
     let (offsets_ptr, _) = array.offsets_ptr_and_len().unwrap();
-    let (values_ptr, _, _) = array.data_ptr_and_byte_len();
+    let (values_ptr, values_len, _) = array.data_ptr_and_byte_len();
     let (null_ptr, _) = array
         .null_mask_ptr_and_byte_len()
         .unwrap_or((ptr::null(), 0));
     // Arrow expects: [null, offsets, values]
-    let mut buf_ptrs = vec64![null_ptr, offsets_ptr, values_ptr];
+    // For values buffer, only use it if non-empty; otherwise use null to avoid sentinel pointers
+    let values_buf_ptr = if values_len > 0 { values_ptr } else { ptr::null() };
+    let mut buf_ptrs = vec64![null_ptr, offsets_ptr, values_buf_ptr];
     let name_cstr = CString::new(schema.fields[0].name.clone()).unwrap();
-    check_alignment(&mut buf_ptrs);
+    check_alignment(&mut buf_ptrs, len);
     create_arrow_export(array.clone(), schema, buf_ptrs, 3, len, name_cstr)
 }
 
@@ -388,7 +474,7 @@ fn export_categorical_array_to_c(
         .map_or(ptr::null(), |(p, _)| p);
 
     let mut buf_ptrs = vec64![null_ptr, codes_ptr];
-    check_alignment(&mut buf_ptrs);
+    check_alignment(&mut buf_ptrs, codes_len);
 
     // Export dictionary as string array with correct buffer order
     let dict_offsets: Vec64<u32> = {
@@ -624,41 +710,46 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
             )
         }
     } else {
+        // Pass None for ownership - this function copies data because it's used for:
+        // 1. Recursive imports of dictionary arrays inside categoricals (the parent
+        //    ArrowArray's release callback frees the nested dictionary's memory)
+        // 2. Legacy callers that don't transfer ownership
+        // For zero-copy top-level imports, use import_from_c_owned instead.
         match dtype {
-            ArrowType::Boolean => unsafe { import_boolean(arr) },
+            ArrowType::Boolean => unsafe { import_boolean(arr, None) },
             #[cfg(feature = "extended_numeric_types")]
-            ArrowType::Int8 => unsafe { import_integer::<i8>(arr, Array::from_int8) },
+            ArrowType::Int8 => unsafe { import_integer::<i8>(arr, None, Array::from_int8) },
             #[cfg(feature = "extended_numeric_types")]
-            ArrowType::UInt8 => unsafe { import_integer::<u8>(arr, Array::from_uint8) },
+            ArrowType::UInt8 => unsafe { import_integer::<u8>(arr, None, Array::from_uint8) },
             #[cfg(feature = "extended_numeric_types")]
-            ArrowType::Int16 => unsafe { import_integer::<i16>(arr, Array::from_int16) },
+            ArrowType::Int16 => unsafe { import_integer::<i16>(arr, None, Array::from_int16) },
             #[cfg(feature = "extended_numeric_types")]
-            ArrowType::UInt16 => unsafe { import_integer::<u16>(arr, Array::from_uint16) },
-            ArrowType::Int32 => unsafe { import_integer::<i32>(arr, Array::from_int32) },
-            ArrowType::UInt32 => unsafe { import_integer::<u32>(arr, Array::from_uint32) },
-            ArrowType::Int64 => unsafe { import_integer::<i64>(arr, Array::from_int64) },
-            ArrowType::UInt64 => unsafe { import_integer::<u64>(arr, Array::from_uint64) },
-            ArrowType::Float32 => unsafe { import_float::<f32>(arr, Array::from_float32) },
-            ArrowType::Float64 => unsafe { import_float::<f64>(arr, Array::from_float64) },
-            ArrowType::String => unsafe { import_utf8::<u32>(arr) },
+            ArrowType::UInt16 => unsafe { import_integer::<u16>(arr, None, Array::from_uint16) },
+            ArrowType::Int32 => unsafe { import_integer::<i32>(arr, None, Array::from_int32) },
+            ArrowType::UInt32 => unsafe { import_integer::<u32>(arr, None, Array::from_uint32) },
+            ArrowType::Int64 => unsafe { import_integer::<i64>(arr, None, Array::from_int64) },
+            ArrowType::UInt64 => unsafe { import_integer::<u64>(arr, None, Array::from_uint64) },
+            ArrowType::Float32 => unsafe { import_float::<f32>(arr, None, Array::from_float32) },
+            ArrowType::Float64 => unsafe { import_float::<f64>(arr, None, Array::from_float64) },
+            ArrowType::String => unsafe { import_utf8::<u32>(arr, None) },
             #[cfg(feature = "large_string")]
-            ArrowType::LargeString => unsafe { import_utf8::<u64>(arr) },
+            ArrowType::LargeString => unsafe { import_utf8::<u64>(arr, None) },
             #[cfg(feature = "datetime")]
-            ArrowType::Date32 => unsafe { import_datetime::<i32>(arr, crate::TimeUnit::Days) },
+            ArrowType::Date32 => unsafe { import_datetime::<i32>(arr, None, crate::TimeUnit::Days) },
             #[cfg(feature = "datetime")]
             ArrowType::Date64 => unsafe {
-                import_datetime::<i64>(arr, crate::TimeUnit::Milliseconds)
+                import_datetime::<i64>(arr, None, crate::TimeUnit::Milliseconds)
             },
             #[cfg(feature = "datetime")]
-            ArrowType::Time32(u) => unsafe { import_datetime::<i32>(arr, u) },
+            ArrowType::Time32(u) => unsafe { import_datetime::<i32>(arr, None, u) },
             #[cfg(feature = "datetime")]
-            ArrowType::Time64(u) => unsafe { import_datetime::<i64>(arr, u) },
+            ArrowType::Time64(u) => unsafe { import_datetime::<i64>(arr, None, u) },
             #[cfg(feature = "datetime")]
-            ArrowType::Timestamp(u, _tz) => unsafe { import_datetime::<i64>(arr, u) },
+            ArrowType::Timestamp(u, _tz) => unsafe { import_datetime::<i64>(arr, None, u) },
             #[cfg(feature = "datetime")]
-            ArrowType::Duration32(u) => unsafe { import_datetime::<i32>(arr, u) },
+            ArrowType::Duration32(u) => unsafe { import_datetime::<i32>(arr, None, u) },
             #[cfg(feature = "datetime")]
-            ArrowType::Duration64(u) => unsafe { import_datetime::<i64>(arr, u) },
+            ArrowType::Duration64(u) => unsafe { import_datetime::<i64>(arr, None, u) },
             #[cfg(feature = "datetime")]
             ArrowType::Interval(_u) => {
                 panic!("FFI import_from_c: Arrow Interval types are not yet supported");
@@ -678,82 +769,426 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
     }
 }
 
+/// Imports a Minarrow array from owned ArrowArray and ArrowSchema C pointers.
+///
+/// This is the zero-copy version that takes ownership of the ArrowArray.
+/// The release callback will be called when the imported array is dropped.
+///
+/// Returns both the Array and its Field metadata, preserving the exact Arrow type
+/// (e.g., Timestamp vs Date64) from the schema format string.
+///
+/// # Safety
+/// Both boxes must contain valid Arrow C Data Interface structures.
+/// After this call, ownership is transferred - do not access the boxes again.
+pub unsafe fn import_from_c_owned(
+    arr_box: Box<ArrowArray>,
+    sch_box: Box<ArrowSchema>,
+) -> (Arc<Array>, crate::Field) {
+    // Get raw pointers for reading metadata.
+    // This is safe because:
+    // 1. For non-dict types: arr_box is passed to import functions which store it in ForeignBuffer
+    // 2. The ForeignBuffer keeps the ArrowArray alive, so the pointer remains valid
+    // 3. For dict types: we explicitly release after import_categorical completes
+    let arr_ptr = &*arr_box as *const ArrowArray;
+    let sch_ptr = &*sch_box as *const ArrowSchema;
+    let arr = unsafe { &*arr_ptr };
+    let sch = unsafe { &*sch_ptr };
+
+    if arr.release.is_none() {
+        panic!("FFI import_from_c_owned: ArrowArray has no release callback");
+    }
+
+    // Extract field name from schema
+    let name = if sch.name.is_null() {
+        String::new()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(sch.name) }
+            .to_string_lossy()
+            .into_owned()
+    };
+
+    // Check nullability from schema flags (ARROW_FLAG_NULLABLE = 2)
+    let nullable = (sch.flags & 2) != 0;
+
+    let fmt = unsafe { std::ffi::CStr::from_ptr(sch.format) }.to_bytes();
+    let is_dict = !arr.dictionary.is_null() || !sch.dictionary.is_null();
+
+    let dtype = match fmt {
+        b"n" => ArrowType::Null,
+        b"b" => ArrowType::Boolean,
+        #[cfg(feature = "extended_numeric_types")]
+        b"c" => ArrowType::Int8,
+        #[cfg(feature = "extended_numeric_types")]
+        b"C" => ArrowType::UInt8,
+        #[cfg(feature = "extended_numeric_types")]
+        b"s" => ArrowType::Int16,
+        #[cfg(feature = "extended_numeric_types")]
+        b"S" => ArrowType::UInt16,
+        b"i" => ArrowType::Int32,
+        b"I" => ArrowType::UInt32,
+        b"l" => ArrowType::Int64,
+        b"L" => ArrowType::UInt64,
+        b"f" => ArrowType::Float32,
+        b"g" => ArrowType::Float64,
+        b"u" => ArrowType::String,
+        #[cfg(feature = "large_string")]
+        b"U" => ArrowType::LargeString,
+        #[cfg(feature = "datetime")]
+        b"tdD" => ArrowType::Date32,
+        #[cfg(feature = "datetime")]
+        b"tdm" => ArrowType::Date64,
+        #[cfg(feature = "datetime")]
+        b"tts" => ArrowType::Time32(crate::TimeUnit::Seconds),
+        #[cfg(feature = "datetime")]
+        b"ttm" => ArrowType::Time32(crate::TimeUnit::Milliseconds),
+        #[cfg(feature = "datetime")]
+        b"ttu" => ArrowType::Time64(crate::TimeUnit::Microseconds),
+        #[cfg(feature = "datetime")]
+        b"ttn" => ArrowType::Time64(crate::TimeUnit::Nanoseconds),
+        #[cfg(feature = "datetime")]
+        b"tDs" => ArrowType::Duration32(crate::TimeUnit::Seconds),
+        #[cfg(feature = "datetime")]
+        b"tDm" => ArrowType::Duration32(crate::TimeUnit::Milliseconds),
+        #[cfg(feature = "datetime")]
+        b"tDu" => ArrowType::Duration64(crate::TimeUnit::Microseconds),
+        #[cfg(feature = "datetime")]
+        b"tDn" => ArrowType::Duration64(crate::TimeUnit::Nanoseconds),
+        #[cfg(feature = "datetime")]
+        b"tiM" => ArrowType::Interval(IntervalUnit::YearMonth),
+        #[cfg(feature = "datetime")]
+        b"tiD" => ArrowType::Interval(IntervalUnit::DaysTime),
+        #[cfg(feature = "datetime")]
+        b"tin" => ArrowType::Interval(IntervalUnit::MonthDaysNs),
+        #[cfg(feature = "datetime")]
+        _ if fmt.starts_with(b"tss")
+            || fmt.starts_with(b"tsm")
+            || fmt.starts_with(b"tsu")
+            || fmt.starts_with(b"tsn") =>
+        {
+            let unit = match &fmt[..3] {
+                b"tss" => crate::TimeUnit::Seconds,
+                b"tsm" => crate::TimeUnit::Milliseconds,
+                b"tsu" => crate::TimeUnit::Microseconds,
+                b"tsn" => crate::TimeUnit::Nanoseconds,
+                _ => unreachable!(),
+            };
+            let tz = if fmt.len() > 4 {
+                let tz_bytes = &fmt[4..];
+                let tz_str = String::from_utf8_lossy(tz_bytes).into_owned();
+                if tz_str.is_empty() { None } else { Some(tz_str) }
+            } else {
+                None
+            };
+            ArrowType::Timestamp(unit, tz)
+        }
+        o => panic!("unsupported format {:?}", o),
+    };
+
+    // For categorical (dictionary-encoded) types, the nested dictionary array is owned
+    // by the parent's release callback. We can't take ownership of child arrays separately,
+    // so the dictionary import copies its data. After copying, we call release on the parent.
+    if is_dict {
+        // Release the schema box (we don't need it for copying)
+        drop(sch_box);
+        let result = unsafe {
+            import_categorical(arr, sch, match &dtype {
+                ArrowType::Dictionary(i) => i.clone(),
+                #[cfg(feature = "extended_numeric_types")]
+                ArrowType::Int8 | ArrowType::UInt8 => {
+                    #[cfg(feature = "extended_categorical")]
+                    { CategoricalIndexType::UInt8 }
+                    #[cfg(not(feature = "extended_categorical"))]
+                    panic!("Extended categorical not enabled")
+                }
+                #[cfg(feature = "extended_numeric_types")]
+                ArrowType::Int16 | ArrowType::UInt16 => {
+                    #[cfg(feature = "extended_categorical")]
+                    { CategoricalIndexType::UInt16 }
+                    #[cfg(not(feature = "extended_categorical"))]
+                    panic!("Extended categorical not enabled")
+                }
+                ArrowType::Int32 | ArrowType::UInt32 => CategoricalIndexType::UInt32,
+                #[cfg(feature = "extended_numeric_types")]
+                ArrowType::Int64 | ArrowType::UInt64 => {
+                    #[cfg(feature = "extended_categorical")]
+                    { CategoricalIndexType::UInt64 }
+                    #[cfg(not(feature = "extended_categorical"))]
+                    panic!("Extended categorical not enabled")
+                }
+                _ => panic!("FFI: unsupported dictionary index type {:?}", dtype),
+            })
+        };
+        // Release the array after copying
+        if let Some(release) = arr_box.release {
+            let arr_ptr = Box::into_raw(arr_box);
+            unsafe {
+                release(arr_ptr);
+                let _ = Box::from_raw(arr_ptr);
+            }
+        }
+        let field = crate::Field::new(name, dtype, nullable, None);
+        return (result, field);
+    }
+
+    // Drop schema box - we've extracted what we need
+    drop(sch_box);
+
+    // Pass ownership for zero-copy import
+    // SAFETY: All import_* functions are unsafe and we're in an unsafe fn
+    let array = unsafe {
+        match dtype {
+            ArrowType::Boolean => import_boolean(arr, Some(arr_box)),
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::Int8 => import_integer::<i8>(arr, Some(arr_box), Array::from_int8),
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::UInt8 => import_integer::<u8>(arr, Some(arr_box), Array::from_uint8),
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::Int16 => import_integer::<i16>(arr, Some(arr_box), Array::from_int16),
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::UInt16 => import_integer::<u16>(arr, Some(arr_box), Array::from_uint16),
+            ArrowType::Int32 => import_integer::<i32>(arr, Some(arr_box), Array::from_int32),
+            ArrowType::UInt32 => import_integer::<u32>(arr, Some(arr_box), Array::from_uint32),
+            ArrowType::Int64 => import_integer::<i64>(arr, Some(arr_box), Array::from_int64),
+            ArrowType::UInt64 => import_integer::<u64>(arr, Some(arr_box), Array::from_uint64),
+            ArrowType::Float32 => import_float::<f32>(arr, Some(arr_box), Array::from_float32),
+            ArrowType::Float64 => import_float::<f64>(arr, Some(arr_box), Array::from_float64),
+            ArrowType::String => import_utf8::<u32>(arr, Some(arr_box)),
+            #[cfg(feature = "large_string")]
+            ArrowType::LargeString => import_utf8::<u64>(arr, Some(arr_box)),
+            #[cfg(feature = "datetime")]
+            ArrowType::Date32 => import_datetime::<i32>(arr, Some(arr_box), crate::TimeUnit::Days),
+            #[cfg(feature = "datetime")]
+            ArrowType::Date64 => {
+                import_datetime::<i64>(arr, Some(arr_box), crate::TimeUnit::Milliseconds)
+            }
+            #[cfg(feature = "datetime")]
+            ArrowType::Time32(u) => import_datetime::<i32>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Time64(u) => import_datetime::<i64>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Timestamp(u, ref _tz) => import_datetime::<i64>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Duration32(u) => import_datetime::<i32>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Duration64(u) => import_datetime::<i64>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Interval(_u) => {
+                panic!("FFI import_from_c_owned: Arrow Interval types are not yet supported");
+            }
+            ArrowType::Null => {
+                panic!("FFI import_from_c_owned: Arrow Null arrays types are not yet supported")
+            }
+            ArrowType::Dictionary(_) => unreachable!("Dictionary handled above"),
+        }
+    };
+
+    let field = crate::Field::new(name, dtype, nullable, None);
+    (array, field)
+}
+
 /// Imports an integer array from Arrow C format using the given constructor.
+///
+/// # Arguments
+/// * `arr` - Reference to the ArrowArray containing the data
+/// * `ownership` - If `Some(box)`, takes ownership and does zero-copy via ForeignBuffer.
+///                 If `None`, copies the data. This is needed for dictionary arrays inside
+///                 categoricals, where the parent's release callback owns the child memory.
+/// * `tag` - Constructor function to wrap the array
+///
 /// # Safety
 /// `arr` must contain valid buffers of expected length and type.
 unsafe fn import_integer<T: Integer>(
     arr: &ArrowArray,
+    ownership: Option<Box<ArrowArray>>,
     tag: fn(IntegerArray<T>) -> Array,
 ) -> Arc<Array> {
     let len = arr.length as usize;
     let buffers = unsafe { slice::from_raw_parts(arr.buffers, 2) };
-    let data = unsafe { slice::from_raw_parts(buffers[1] as *const T, len) };
+    let data_ptr = buffers[1] as *const T;
+    let data_len_bytes = len * std::mem::size_of::<T>();
+
+    // Null mask is always copied (small overhead)
     let null_mask = if !buffers[0].is_null() {
         Some(unsafe { Bitmask::from_raw_slice(buffers[0], len) })
     } else {
         None
     };
-    let arr = IntegerArray::<T>::new(Vec64::from(data), null_mask);
-    Arc::new(tag(arr))
+
+    // For empty arrays, create an empty buffer directly rather than using sentinel pointers
+    let buffer: Buffer<T> = if len == 0 {
+        Buffer::default()
+    } else if let Some(arr_box) = ownership {
+        // Zero-copy: wrap foreign buffer
+        let foreign = ForeignBuffer {
+            ptr: data_ptr as *const u8,
+            len: data_len_bytes,
+            array: Some(arr_box),
+        };
+        let shared = SharedBuffer::from_owner(foreign);
+        Buffer::from_shared(shared)
+    } else {
+        // Copy: dictionary arrays inside categoricals have their memory owned by the
+        // parent ArrowArray's release callback, so we can't take ownership of them
+        let data = unsafe { slice::from_raw_parts(data_ptr, len) };
+        Vec64::from(data).into()
+    };
+
+    let int_arr = IntegerArray::<T>::new(buffer, null_mask);
+    Arc::new(tag(int_arr))
 }
 
 /// Imports a floating-point array from Arrow C format using the given constructor.
+///
+/// # Arguments
+/// * `arr` - Reference to the ArrowArray containing the data
+/// * `ownership` - If `Some(box)`, takes ownership and does zero-copy via ForeignBuffer.
+///                 If `None`, copies the data. This is needed for dictionary arrays inside
+///                 categoricals, where the parent's release callback owns the child memory.
+/// * `tag` - Constructor function to wrap the array
+///
 /// # Safety
 /// `arr` must contain valid buffers of expected length and type.
-unsafe fn import_float<T>(arr: &ArrowArray, tag: fn(FloatArray<T>) -> Array) -> Arc<Array>
+unsafe fn import_float<T>(
+    arr: &ArrowArray,
+    ownership: Option<Box<ArrowArray>>,
+    tag: fn(FloatArray<T>) -> Array,
+) -> Arc<Array>
 where
     T: Float,
     FloatArray<T>: 'static,
 {
     let len = arr.length as usize;
     let buffers = unsafe { slice::from_raw_parts(arr.buffers, 2) };
-    let data = unsafe { slice::from_raw_parts(buffers[1] as *const T, len) };
+    let data_ptr = buffers[1] as *const T;
+    let data_len_bytes = len * std::mem::size_of::<T>();
+
+    // Null mask is always copied (small overhead)
     let null_mask = if !buffers[0].is_null() {
         Some(unsafe { Bitmask::from_raw_slice(buffers[0], len) })
     } else {
         None
     };
-    let arr = FloatArray::<T>::new(Vec64::from(data), null_mask);
-    Arc::new(tag(arr))
+
+    // For empty arrays, create an empty buffer directly rather than using sentinel pointers
+    let buffer: Buffer<T> = if len == 0 {
+        Buffer::default()
+    } else if let Some(arr_box) = ownership {
+        // Zero-copy: wrap foreign buffer
+        let foreign = ForeignBuffer {
+            ptr: data_ptr as *const u8,
+            len: data_len_bytes,
+            array: Some(arr_box),
+        };
+        let shared = SharedBuffer::from_owner(foreign);
+        Buffer::from_shared(shared)
+    } else {
+        // Copy: dictionary arrays inside categoricals have their memory owned by the
+        // parent ArrowArray's release callback, so we can't take ownership of them
+        let data = unsafe { slice::from_raw_parts(data_ptr, len) };
+        Vec64::from(data).into()
+    };
+
+    let float_arr = FloatArray::<T>::new(buffer, null_mask);
+    Arc::new(tag(float_arr))
 }
 
 /// Imports a boolean array from Arrow C format.
+///
+/// # Arguments
+/// * `arr` - Reference to the ArrowArray containing the data
+/// * `ownership` - If `Some(box)`, takes ownership and does zero-copy via ForeignBuffer.
+///                 If `None`, copies the data. This is needed for dictionary arrays inside
+///                 categoricals, where the parent's release callback owns the child memory.
+///
 /// # Safety
 /// Buffers must be correctly aligned and sized for the declared length.
-unsafe fn import_boolean(arr: &ArrowArray) -> Arc<Array> {
+unsafe fn import_boolean(arr: &ArrowArray, ownership: Option<Box<ArrowArray>>) -> Arc<Array> {
     let len = arr.length as usize;
     let buffers = unsafe { slice::from_raw_parts(arr.buffers, 2) };
     let data_ptr = buffers[1];
-    let data_len = (len + 7) / 8;
-    let data_vec = unsafe { Vec64::from_raw_parts(data_ptr as *mut u8, data_len, data_len) };
-    let bool_mask = Bitmask::new(data_vec, len);
+    let data_len = (len + 7) / 8; // bytes needed for bit-packed data
+
+    // Null mask is always copied (small overhead)
     let null_mask = if !buffers[0].is_null() {
         Some(unsafe { Bitmask::from_raw_slice(buffers[0], len) })
     } else {
         None
     };
-    let arr = BooleanArray::new(bool_mask, null_mask);
-    Arc::new(Array::BooleanArray(arr.into()))
+
+    // For empty arrays, create an empty buffer directly rather than using sentinel pointers
+    let buffer: Buffer<u8> = if len == 0 {
+        Buffer::default()
+    } else if let Some(arr_box) = ownership {
+        // Zero-copy: wrap foreign buffer
+        let foreign = ForeignBuffer {
+            ptr: data_ptr as *const u8,
+            len: data_len,
+            array: Some(arr_box),
+        };
+        let shared = SharedBuffer::from_owner(foreign);
+        Buffer::from_shared(shared)
+    } else {
+        // Copy: dictionary arrays inside categoricals have their memory owned by the
+        // parent ArrowArray's release callback, so we can't take ownership of them
+        let data = unsafe { slice::from_raw_parts(data_ptr, data_len) };
+        Vec64::from(data).into()
+    };
+
+    let bool_mask = Bitmask::new(buffer, len);
+    let bool_arr = BooleanArray::new(bool_mask, null_mask);
+    Arc::new(Array::BooleanArray(bool_arr.into()))
 }
 
 /// Imports a Utf8 or LargeUtf8 string array from Arrow C format.
+///
+/// # Arguments
+/// * `arr` - Reference to the ArrowArray containing the data
+/// * `ownership` - If `Some(box)`, takes ownership and does zero-copy for values buffer.
+///                 Offsets are always copied (small overhead).
+///                 If `None`, copies all data. This is needed for dictionary arrays inside
+///                 categoricals, where the parent's release callback owns the child memory.
+///
 /// # Safety
 /// Expects three buffers: [nulls, offsets, values].
-unsafe fn import_utf8<T: Integer>(arr: &ArrowArray) -> Arc<Array> {
+unsafe fn import_utf8<T: Integer>(
+    arr: &ArrowArray,
+    ownership: Option<Box<ArrowArray>>,
+) -> Arc<Array> {
     let len = arr.length as usize;
+
+    // For empty arrays, return an empty StringArray directly without touching sentinel pointers
+    if len == 0 {
+        return Arc::new(if std::mem::size_of::<T>() == 4 {
+            Array::from_string32(StringArray::<u32>::default())
+        } else {
+            #[cfg(feature = "large_string")]
+            {
+                Array::from_string64(StringArray::<u64>::default())
+            }
+            #[cfg(not(feature = "large_string"))]
+            {
+                panic!("LargeUtf8 (u64 offsets) requires the 'large_string' feature")
+            }
+        });
+    }
+
     let buffers = unsafe { std::slice::from_raw_parts(arr.buffers, 3) };
     let null_ptr = buffers[0];
     let offsets_ptr = buffers[1];
     let values_ptr = buffers[2];
 
-    // Offsets
-    let offsets = unsafe { std::slice::from_raw_parts(offsets_ptr as *const T, len + 1) };
+    // Offsets - always read as slice for validation
+    let offsets_slice = unsafe { std::slice::from_raw_parts(offsets_ptr as *const T, len + 1) };
 
     // --- BF-05: validate offsets monotonicity & bounds
-    assert_eq!(offsets.len(), len + 1, "UTF8: offsets length must be len+1");
-    assert_eq!(offsets[0].to_usize(), 0, "UTF8: first offset must be 0");
+    assert_eq!(
+        offsets_slice.len(),
+        len + 1,
+        "UTF8: offsets length must be len+1"
+    );
+    assert_eq!(offsets_slice[0].to_usize(), 0, "UTF8: first offset must be 0");
     let mut prev = 0usize;
-    for (i, off) in offsets.iter().enumerate().take(len + 1) {
+    for (i, off) in offsets_slice.iter().enumerate().take(len + 1) {
         let cur = off.to_usize().expect("Error: could not unwrap usize");
         assert!(
             cur >= prev,
@@ -761,29 +1196,49 @@ unsafe fn import_utf8<T: Integer>(arr: &ArrowArray) -> Arc<Array> {
         );
         prev = cur;
     }
-    let data_len = if len == 0 { 0 } else { offsets[len].to_usize() };
+    let data_len = offsets_slice[len].to_usize();
 
-    // Values
-    let data = unsafe { std::slice::from_raw_parts(values_ptr, data_len) };
-
-    // Null mask
+    // Null mask - always copied (small overhead)
     let null_mask = if !null_ptr.is_null() {
         Some(unsafe { Bitmask::from_raw_slice(null_ptr, len) })
     } else {
         None
     };
 
-    let arr = StringArray::<T>::new(Vec64::from(data), null_mask, Vec64::from(offsets));
+    // Offsets - always copied (small: 4-8 bytes per string)
+    let offsets = Vec64::from(offsets_slice);
+
+    // Values - zero-copy if we own the ArrowArray, otherwise copy
+    let values_buffer: Buffer<u8> = if data_len == 0 {
+        // Empty values buffer - don't use sentinel pointer
+        Buffer::default()
+    } else if let Some(arr_box) = ownership {
+        // Zero-copy: wrap foreign buffer for the values
+        let foreign = ForeignBuffer {
+            ptr: values_ptr as *const u8,
+            len: data_len,
+            array: Some(arr_box),
+        };
+        let shared = SharedBuffer::from_owner(foreign);
+        Buffer::from_shared(shared)
+    } else {
+        // Copy: dictionary arrays inside categoricals have their memory owned by the
+        // parent ArrowArray's release callback, so we can't take ownership of them
+        let data = unsafe { std::slice::from_raw_parts(values_ptr, data_len) };
+        Vec64::from(data).into()
+    };
+
+    let str_arr = StringArray::<T>::new(values_buffer, null_mask, offsets);
 
     #[cfg(feature = "large_string")]
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
         return Arc::new(Array::TextArray(TextArray::String64(Arc::new(unsafe {
-            std::mem::transmute::<StringArray<T>, StringArray<u64>>(arr)
+            std::mem::transmute::<StringArray<T>, StringArray<u64>>(str_arr)
         }))));
     }
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
         Arc::new(Array::TextArray(TextArray::String32(Arc::new(unsafe {
-            std::mem::transmute::<StringArray<T>, StringArray<u32>>(arr)
+            std::mem::transmute::<StringArray<T>, StringArray<u32>>(str_arr)
         }))))
     } else {
         panic!("Unsupported offset type for StringArray (expected u32 or u64)");
@@ -855,31 +1310,63 @@ unsafe fn import_categorical(
 }
 
 /// Imports a datetime array from Arrow C format.
+///
+/// # Arguments
+/// * `arr` - Reference to the ArrowArray containing the data
+/// * `ownership` - If `Some(box)`, takes ownership and does zero-copy via ForeignBuffer.
+///                 If `None`, copies the data. This is needed for dictionary arrays inside
+///                 categoricals, where the parent's release callback owns the child memory.
+/// * `unit` - The time unit for the datetime values
+///
 /// # Safety
 /// `arr` must contain valid time values and optional null mask.
 #[cfg(feature = "datetime")]
-unsafe fn import_datetime<T: Integer>(arr: &ArrowArray, unit: crate::TimeUnit) -> Arc<Array> {
+unsafe fn import_datetime<T: Integer>(
+    arr: &ArrowArray,
+    ownership: Option<Box<ArrowArray>>,
+    unit: crate::TimeUnit,
+) -> Arc<Array> {
     let len = arr.length as usize;
     let buffers = unsafe { std::slice::from_raw_parts(arr.buffers, 2) };
-    let data = unsafe { std::slice::from_raw_parts(buffers[1] as *const T, len) };
+    let data_ptr = buffers[1] as *const T;
+    let data_len_bytes = len * std::mem::size_of::<T>();
+
+    // Null mask is always copied (small overhead)
     let null_mask = if !buffers[0].is_null() {
         Some(unsafe { Bitmask::from_raw_slice(buffers[0], len) })
     } else {
         None
     };
-    let arr = DatetimeArray::<T> {
-        data: Vec64::from(data).into(),
+
+    let buffer: Buffer<T> = if let Some(arr_box) = ownership {
+        // Zero-copy: wrap foreign buffer
+        let foreign = ForeignBuffer {
+            ptr: data_ptr as *const u8,
+            len: data_len_bytes,
+            array: Some(arr_box),
+        };
+        let shared = SharedBuffer::from_owner(foreign);
+        Buffer::from_shared(shared)
+    } else {
+        // Copy: dictionary arrays inside categoricals have their memory owned by the
+        // parent ArrowArray's release callback, so we can't take ownership of them
+        let data = unsafe { std::slice::from_raw_parts(data_ptr, len) };
+        Vec64::from(data).into()
+    };
+
+    let dt_arr = DatetimeArray::<T> {
+        data: buffer,
         null_mask,
         time_unit: unit,
     };
 
     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
         Arc::new(Array::TemporalArray(TemporalArray::Datetime64(Arc::new(
-            unsafe { std::mem::transmute::<DatetimeArray<T>, DatetimeArray<i64>>(arr) },
+            unsafe { std::mem::transmute::<DatetimeArray<T>, DatetimeArray<i64>>(dt_arr) },
         ))))
     } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
         Arc::new(Array::TemporalArray(TemporalArray::Datetime32(Arc::new(
-            unsafe { std::mem::transmute::<DatetimeArray<T>, DatetimeArray<i32>>(arr) },
+            unsafe { std::mem::transmute::<DatetimeArray<T>, DatetimeArray<i32>>(dt_arr) },
         ))))
     } else {
         panic!("Unsupported DatetimeArray type (expected i32 or i64)");
@@ -889,7 +1376,15 @@ unsafe fn import_datetime<T: Integer>(arr: &ArrowArray, unit: crate::TimeUnit) -
 /// Verifies that all buffer pointers are 64-byte aligned.
 /// This happens automatically when creating `Minarrow` buffers
 /// so shouldn't be an issue.
-fn check_alignment(buf_ptrs: &mut Vec64<*const u8>) {
+///
+/// Note: For empty arrays (length=0), we skip alignment checks because PyArrow
+/// may return sentinel pointers (e.g., 0x4) for empty buffers that aren't
+/// 64-byte aligned but also aren't actually dereferenced.
+fn check_alignment(buf_ptrs: &mut Vec64<*const u8>, length: i64) {
+    // Skip alignment check for empty arrays - buffer pointers may be invalid/sentinel values
+    if length == 0 {
+        return;
+    }
     for &p in buf_ptrs.iter().take(3) {
         if !p.is_null() {
             assert_eq!(

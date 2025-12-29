@@ -167,6 +167,13 @@ impl Cube {
         self.tables.len()
     }
 
+    /// Returns the number of tables.
+    /// 
+    /// Alias for n_tables
+    pub fn len(&self) -> usize {
+        self.n_tables()
+    }
+
     /// Returns the number of rows
     pub fn n_rows(&self) -> Vec<usize> {
         self.n_rows.clone()
