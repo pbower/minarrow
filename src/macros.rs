@@ -310,7 +310,7 @@ macro_rules! impl_masked_array {
                         (Some(self_mask), Some(other_mask)) => {
                             self_mask.extend_from_bitmask(other_mask);
                         }
-                        // caller had a mask but `other` didn’t → explicitly set each new bit true
+                        // caller had a mask but `other` didn’t -> explicitly set each new bit true
                         (Some(self_mask), None) => {
                             for i in orig_len..(orig_len + other_len) {
                                 self_mask.set(i, true);
@@ -722,7 +722,7 @@ macro_rules! impl_usize_conversions {
         impl Integer for $t {
             #[inline] fn to_usize(self) -> usize { self as usize }
             #[inline] fn from_usize(v: usize) -> Self {
-                v.try_into().expect("overflow casting usize → offset type")
+                v.try_into().expect("overflow casting usize -> offset type")
             }
         }
     )*};

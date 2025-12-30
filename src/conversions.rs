@@ -12,9 +12,9 @@
 //!   - `TryFrom<&FloatArray<F>> for IntegerArray<I>` with strict checks (finite + exact truncation);
 ////!     returns [`MinarrowError::LossyCast`] if fidelity is lost.
 //! - **Booleans <-> Primitives**
-//!   - `From<&BooleanArray<u8>>` to integer/float (true→1/1.0, false→0/0.0).
-//!   - `From<&IntegerArray<T>>` / `From<&FloatArray<T>>` to `BooleanArray<u8>` (non-zero → true).
-//! - **Numerics/Booleans → Strings**
+//!   - `From<&BooleanArray<u8>>` to integer/float (true->1/1.0, false->0/0.0).
+//!   - `From<&IntegerArray<T>>` / `From<&FloatArray<T>>` to `BooleanArray<u8>` (non-zero -> true).
+//! - **Numerics/Booleans -> Strings**
 //!   - `From<&IntegerArray<T>>`, `From<&FloatArray<T>>`, and `From<&BooleanArray<u8>>` to
 //!     `StringArray<u32>` (UTF-8), preserving null masks.
 //! - **Strings <-> Categoricals**
@@ -33,7 +33,7 @@
 //!
 //! ## Null masks & semantics
 //! Unless noted, conversions **preserve the source null mask**. Errors are explicit:
-//! overflows use [`MinarrowError::Overflow`]; inexact float→int casts use [`MinarrowError::LossyCast`].
+//! overflows use [`MinarrowError::Overflow`]; inexact float->int casts use [`MinarrowError::LossyCast`].
 //!
 //! ## Feature gates
 //! Some conversions are available only with `extended_numeric_types`, `extended_categorical`,
@@ -466,7 +466,7 @@ impl From<&BooleanArray<u8>> for StringArray<u32> {
 
 // Categorical <-> String
 
-// ---------- String<Idx>  →  Categorical<Idx> ----------
+// ---------- String<Idx>  ->  Categorical<Idx> ----------
 macro_rules! string_to_cat {
     ($off:ty, $idx:ty) => {
         impl TryFrom<&StringArray<$off>> for CategoricalArray<$idx> {

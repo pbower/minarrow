@@ -1666,7 +1666,7 @@ mod tests {
             null_mask: Some(null_mask),
         };
         let result = min_categorical_array((&cat, 0, indices.len()));
-        assert_eq!(result, Some("dog".to_string())); // Only positions 0 and 2 valid: "zebra", "dog" → "dog" is smaller
+        assert_eq!(result, Some("dog".to_string())); // Only positions 0 and 2 valid: "zebra", "dog" -> "dog" is smaller
     }
 
     #[test]
@@ -1683,6 +1683,6 @@ mod tests {
             null_mask: Some(null_mask),
         };
         let result = max_categorical_array((&cat, 0, indices.len()));
-        assert_eq!(result, Some("zebra".to_string())); // Only positions 0 and 2 valid: "zebra", "dog" → "zebra" is larger
+        assert_eq!(result, Some("zebra".to_string())); // Only positions 0 and 2 valid: "zebra", "dog" -> "zebra" is larger
     }
 }

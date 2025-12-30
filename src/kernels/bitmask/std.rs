@@ -158,13 +158,13 @@ pub fn in_mask(lhs: BitmaskVT<'_>, rhs: BitmaskVT<'_>) -> Bitmask {
         }
     }
     match (has_true, has_false) {
-        // mixed → every lhs bit (true/false) is present in rhs → all true
+        // mixed -> every lhs bit (true/false) is present in rhs -> all true
         (true, true) => Bitmask::new_set_all(len, true),
-        // only true in rhs → pass through lhs true bits
+        // only true in rhs -> pass through lhs true bits
         (true, false) => lhs_mask.slice_clone(lhs_off, len),
-        // only false in rhs → pass through lhs false bits (invert lhs)
+        // only false in rhs -> pass through lhs false bits (invert lhs)
         (false, true) => not_mask((lhs_mask, lhs_off, len)),
-        // rhs empty → nothing matches → all false
+        // rhs empty -> nothing matches -> all false
         (false, false) => Bitmask::new_set_all(len, false),
     }
 }

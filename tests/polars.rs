@@ -92,7 +92,7 @@ fn test_array_to_polars_datetime_infer_date64_or_ts() {
         },
     )));
     let s_ns = a_ns.to_polars("ts_ns");
-    // Arrow Timestamp(ns) → Polars Datetime(ns)
+    // Arrow Timestamp(ns) -> Polars Datetime(ns)
     assert_eq!(s_ns.len(), 3);
 }
 

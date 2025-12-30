@@ -443,7 +443,7 @@ pub fn split_at_first_align64(ptr: *const u8, len_bytes: usize) -> Option<(usize
     }
     let head = 64 - misalign;
     if head >= len_bytes {
-        // whole slice fits before next boundary → cannot split
+        // whole slice fits before next boundary -> cannot split
         return None;
     }
     Some((head, len_bytes - head))

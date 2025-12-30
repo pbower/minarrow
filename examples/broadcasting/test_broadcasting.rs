@@ -7,7 +7,7 @@
 //! ## Broadcasting Rules
 //! - Arrays with matching lengths operate element-wise
 //! - Single-element arrays broadcast to match the length of the other operand
-//! - Type promotion occurs automatically (e.g., Int32 + Float32 → Float32)
+//! - Type promotion occurs automatically (e.g., Int32 + Float32 -> Float32)
 //! - Complex types (Table, Cube, SuperArray) support element-wise broadcasting
 
 use minarrow::{Array, FloatArray, IntegerArray, NumericArray, Table, Value, vec64};

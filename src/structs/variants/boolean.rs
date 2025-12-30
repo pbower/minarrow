@@ -283,7 +283,7 @@ impl DerefMut for BooleanArray<()> {
     }
 }
 
-/// Single‐index → logical bit
+/// Single‐index -> logical bit
 impl Index<usize> for BooleanArray<()> {
     type Output = bool;
     #[inline]

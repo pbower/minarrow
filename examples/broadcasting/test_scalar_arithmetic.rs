@@ -6,7 +6,7 @@
 //!
 //! ## Key Features
 //! - Scalar + Scalar = Scalar (no array conversion)
-//! - Automatic type promotion (Int + Float → Float)
+//! - Automatic type promotion (Int + Float -> Float)
 //! - String concatenation support
 //! - All standard arithmetic operations: +, -, *, /
 

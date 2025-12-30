@@ -17,7 +17,7 @@ use minarrow::{Array as MArray, ArrowType, Field, FieldArray, NumericArray, Tabl
 use minarrow::{TemporalArray, TimeUnit};
 
 // -------------------------------
-// Array → Arrow (numeric)
+// Array -> Arrow (numeric)
 // -------------------------------
 #[test]
 fn test_array_to_arrow_numeric() {
@@ -35,7 +35,7 @@ fn test_array_to_arrow_numeric() {
 }
 
 // -------------------------------
-// Array → Arrow (utf8)
+// Array -> Arrow (utf8)
 // -------------------------------
 #[test]
 fn test_array_to_arrow_string() {

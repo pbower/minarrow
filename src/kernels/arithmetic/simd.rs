@@ -239,7 +239,7 @@ pub fn int_masked_body_simd<T, const LANES: usize>(
             ArithmeticOperator::Subtract => a - b,
             ArithmeticOperator::Multiply => a * b,
             ArithmeticOperator::Divide => {
-                let safe_b = div_zero.select(Simd::splat(T::one()), b); // 0 → 1
+                let safe_b = div_zero.select(Simd::splat(T::one()), b); // 0 -> 1
                 let q = a / safe_b;
                 div_zero.select(Simd::splat(T::zero()), q) // restore 0
             }

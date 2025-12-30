@@ -1,4 +1,4 @@
-//! End-to-end tests for  Rust → Arrow C FFI → C inspectors
+//! End-to-end tests for  Rust -> Arrow C FFI -> C inspectors
 //! Run with:
 //!     cargo test arrow_c_integration --features c_ffi_tests
 #[cfg(all(feature = "c_ffi_tests", test))]

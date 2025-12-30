@@ -7,10 +7,10 @@
 //! contiguous buffer, enabling efficient operations and compatibility
 //! with APIs that require contiguous memory.
 //!
-//! - **SuperArray** → **Array**: Merges all chunks into one contiguous array
-//! - **SuperTable** → **Table**: Merges all batches into one contiguous table
-//! - **SuperArrayView** → **Array**: Copies view chunks into owned array
-//! - **SuperTableView** → **Table**: Copies view batches into owned table
+//! - **SuperArray** -> **Array**: Merges all chunks into one contiguous array
+//! - **SuperTable** -> **Table**: Merges all batches into one contiguous table
+//! - **SuperArrayView** -> **Array**: Copies view chunks into owned array
+//! - **SuperTableView** -> **Table**: Copies view batches into owned table
 //!
 //! ## Use Case
 //! Sometimes processing returns chunked results to retain zero-copy and/or avoid buffer thrashing.

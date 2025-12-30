@@ -1,289 +1,204 @@
-# Minarrow - *Apache Arrow tuned for HPC, Live, and Embedded*
+# Minarrow
 
-## Intro
+**A fast, minimal columnar data library for Rust with Arrow compatibility.**
 
-Minarrow is a from-scratch columnar library built for real-time and systems workloads in Rust.
-It keeps the surface small, gives you IDE types, compiles fast, and aligns data for fast SIMD performance.
-It speaks Arrow when you need to talk interchange — but the core stays lean and mean.
+Minarrow gives you typed columnar arrays that compile in 1.5 seconds, run with SIMD alignment, and convert to Arrow when you need interop. No trait object downcasting, no 200+ transitive dependencies, no waiting for builds.
 
-Minarrow is the base layer of several epic projects that expand on it to deliver a full set of SIMD-accelerated Kernels, Tokio streamable buffers, and a full-scale engine.
+## Why Minarrow?
 
-## Design Focus
+**The problem:** Arrow-rs is powerful but heavy. Build times stretch to minutes. Working with arrays means downcasting `dyn Array` and hoping you got the type right. For real-time systems, embedded devices, or rapid iteration, this friction adds up.
 
-- **Typed, direct access** – No downcasting horror.
-- **High performance** – 64-byte SIMD-compatible alignment by default
-- **Fast iteration** – Minimal dependencies, sub-1.5 s clean builds, <0.15 s rebuilds
-- **Interoperability on demand** – Convert to and from Arrow at the boundary
+**The solution:** Minarrow keeps concrete types throughout. An `IntegerArray<i64>` stays an `IntegerArray<i64>`. You get direct access, IDE autocomplete, and fast compilation. When you need to talk to Arrow, Polars, or PyArrow, zero-copy conversion is one method call away.
 
-## Why I built Minarrow
+## Quick Start
 
-- The **Arrow** format is a powerful standard for columnar data. ***Apache Arrow*** has driven an entire ecosystem forward, with zero-copy interchange, multi-language support, and extensive integration.
-- ***Minarrow*** complements that ecosystem by focusing on Rust-first ergonomics, predictable SIMD behaviour, and extremely low build-time friction.
-- **Easy, fast, and simple** — delivers extreme performance without sacrificing ergonomics.
+```rust
+use minarrow::{arr_i32, arr_f64, arr_str32, arr_bool};
 
-## Key Features
+// Create arrays with macros
+let ids = arr_i32![1, 2, 3, 4];
+let prices = arr_f64![10.5, 20.0, 15.75];
+let names = arr_str32!["alice", "bob", "charlie"];
+let flags = arr_bool![true, false, true];
+
+// Direct typed access - no downcasting
+assert_eq!(ids.len(), 4);
+assert_eq!(prices.get(0), Some(10.5));
+```
+
+```rust
+use minarrow::{FieldArray, Table, arr_i32, arr_str32, Print};
+
+// Build tables from columns
+let table = Table::new(
+    "users".into(),
+    vec![
+        FieldArray::from_arr("id", arr_i32![1, 2, 3]),
+        FieldArray::from_arr("name", arr_str32!["alice", "bob", "charlie"]),
+    ].into(),
+);
+table.print();
+```
+
+## Core Features
+
+### Typed Arrays
+
+Six array types cover standard workloads:
+
+| Type | Description |
+|------|-------------|
+| `IntegerArray<T>` | i8 through u64 |
+| `FloatArray<T>` | f32, f64 |
+| `StringArray<T>` | UTF-8 with u32 or u64 offsets |
+| `BooleanArray` | Bit-packed with validity mask |
+| `CategoricalArray<T>` | Dictionary-encoded |
+| `DatetimeArray<T>` | Timestamps, dates, durations |
+
+Semantic groupings (`NumericArray`, `TextArray`, `TemporalArray`) let you write generic functions while keeping static dispatch.
 
 ### Fast Compilation
 
-Minarrow compiles in under 1.5 seconds with default features, minimising development iteration time with < 0.15s rebuilds. This is achieved through minimal dependencies - primarily `num-traits` with optional `rayon` for parallelism.
+| Metric | Time |
+|--------|------|
+| Clean build | < 1.5s |
+| Incremental rebuild | < 0.15s |
 
-### Data access
+Achieved through minimal dependencies: primarily `num-traits`, with optional `rayon` for parallelism.
 
-Minarrow provides direct, typed access to array values. Unlike other Rust implementations that unify all array types as untyped byte buffers *(requiring downcasting and dynamic checks)*, Minarrow retains concrete types throughout the API. This enables developers to inspect and manipulate data without downcasting or additional indirection, retaining safe and ergonomic access at all times.
+### SIMD Alignment
 
-**Outcome**: *You get a data library feel in Rust. These data building blocks are capable of powering some of the most demanding and high-performance apps.*
+All buffers use 64-byte alignment via `Vec64`. No reallocation step to fix alignment—data is ready for vectorised operations from the moment it's created.
 
-## Type System
+### Zero-Copy Views
 
-Six concrete array types cover common workloads:
-
-- BooleanArray<u8>
-- CategoricalArray<T>
-- DatetimeArray<T>
-- FloatArray<T>
-- IntegerArray<T>
-- StringArray<T>
-
-Unified views:
-
-- NumericArray<T>
-- TextArray<T>
-- TemporalArray<T>
-
-And a single top-level Array for mixed tables.
-
-The inner arrays match the Arrow IPC memory layout.
-
-## Example: Create Arrays
-
-```rust
-use std::sync::Arc;
-use minarrow::{Array, IntegerArray, NumericArray, arr_bool, arr_cat32, arr_f64, arr_i32, arr_i64, arr_str32, vec64};
-
-let int_arr = arr_i32![1, 2, 3, 4];
-let float_arr = arr_f64![0.5, 1.5, 2.5];
-let bool_arr = arr_bool![true, false, true];
-let str_arr = arr_str32!["a", "b", "c"];
-let cat_arr = arr_cat32!["x", "y", "x", "z"];
-
-assert_eq!(int_arr.len(), 4);
-assert_eq!(str_arr.len(), 3);
-
-let int = IntegerArray::<i64>::from_slice(&[100, 200]);
-let wrapped: NumericArray = NumericArray::Int64(Arc::new(int));
-let array = Array::NumericArray(wrapped);
-```
-
-## Example: Build Table
-
-```rust
-use minarrow::{FieldArray, Print, Table, arr_i32, arr_str32, vec64};
-
-let col1 = FieldArray::from_arr("numbers", arr_i32![1, 2, 3]);
-let col2 = FieldArray::from_arr("letters", arr_str32!["x", "y", "z"]);
-
-let mut tbl = Table::new("Demo".into(), vec![col1, col2].into());
-tbl.print();
-
-See _examples/_ for more.
-```
-
-When working with arrays, remember to import the `MaskedArray` trait,
-which ensures all required methods are available.
-
-## Pandas-Style Selection
-
-Minarrow supports intuitive pandas-style selection for `Table` and `TableV` via simple and compact API's familiar to SQL and pandas users:
+Select columns and rows without copying data:
 
 ```rust
 use minarrow::*;
 
 let table = create_table();
 
-// Column selection
-let view = table.c(&["name", "value"]);
+// Pandas-style selection
+let view = table.c(&["name", "value"]);  // columns
+let view = table.r(10..20);               // rows
+let view = table.c(&["A", "B"]).r(0..100); // both
 
-// Row selection
-let view = table.r(10..20);
-
-// Chained selection
-let view = table.c(&["A", "B", "C"]).r(0..100);
+// Materialise only when needed
+let owned = view.to_table();
 ```
 
-### Supported Selection Types
+### Streaming with SuperArrays
 
-All selection methods support:
-- **Names**: `&str`, `&[&str]`, `&[&str; N]`, `Vec<&str>`
-- **Indices**: `usize`, `&[usize]`, `&[usize; N]`, `Vec<usize>`
-- **Ranges**: `0..10`, `0..=10`, `5..`, `..10`, `..`
-
-### Zero-Copy Views
-
-Selections create lightweight views without copying data:
+For streaming workloads, `SuperArray` and `SuperTable` hold multiple chunks with consistent schema:
 
 ```rust
-let view = table.c(&["A", "B", "C"]).r(0..100);
+// Append chunks as they arrive
+let mut super_table = SuperTable::new();
+super_table.push_table(batch1);
+super_table.push_table(batch2);
 
-// Materialise owned copies when needed
-let materialised = view.to_table();
+// Consolidate to single table when ready
+let table = super_table.consolidate();
 ```
 
-## Broadcasting
-Broadcasting is built-in via the `broadcasting` feature. You can add, subtract, divide or multiply all `Value` types,
-including tuples.
+### Arrow Interop
 
-## SIMD by Default
+Convert at the boundary, stay native internally:
 
-- All buffers use 64-byte-aligned allocation from ingestion through processing. No reallocation step to fix alignment.
-- Stable vectorised behaviour on modern CPUs via `Vec64` with a custom allocator.
-- The companion `Lightstream-IO` crate provides IPC readers and writers that maintain this alignment, avoiding reallocation overhead during data ingestion.
+```rust
+// To Arrow (feature: cast_arrow)
+let arrow_array = minarrow_array.to_apache_arrow();
 
-### Enum-Based Architecture
+// To Polars (feature: cast_polars)
+let series = minarrow_array.to_polars();
 
-Minarrow uses enums for type dispatch instead of trait object downcasting, providing:
+// FFI via Arrow C Data Interface
+let (array_ptr, schema_ptr) = minarrow_array.export_to_c();
+```
 
-- **Performance** – Enables aggressive compiler inlining and optimisation
-- **Maintainability** – Centralised, clean dispatch logic
-- **Type Safety** – All types are statically known; no `Any` or runtime downcasts
-- **Ergonomics** – Direct, typed accessors such as `myarray.num().i64()`
+## Architecture
 
-The structure is layered:
+Minarrow uses enums for type dispatch instead of trait objects:
 
-1. **Top-level `Array` enum** – Arc-wrapped for zero-copy sharing
-2. **Semantic groupings**:
-   - `NumericArray` – All numeric types in one variant set
-   - `TextArray` – String and categorical data
-   - `TemporalArray` – All date/time variants
-   - `BooleanArray` – Boolean data
+```rust
+// Static dispatch, full inlining
+match array {
+    Array::NumericArray(num) => match num {
+        NumericArray::Int64(arr) => process(arr),
+        NumericArray::Float64(arr) => process(arr),
+        // ...
+    },
+    // ...
+}
+```
 
-This design supports flexible function signatures like `impl Into<NumericArray>` while preserving static typing.
-Because dispatch is static, the compiler retains full knowledge of types across calls, enabling inlining and eliminating virtual call overhead.
-
-### Flexible
-- **Apache Arrow** compatibility via `.to_apache_arrow()`.
-- **Polars** compatibility via `.to_polars()`.
-- **Datetime support** – Minarrow supports optionally beefing up Datetimes via the *time* crate, for compatible dt-aware time and ops support.
-- **Async support** through the companion Lightstream crate
-- **Zero-copy** views for windowed operations *(see Views and Windowing below)*
-- **Memory-mapped** file support with maintained SIMD alignment
-- **FFI Support** for cross-language compatibility.
-
-## Partner Crates:
-- `lightstream` enables IPC streaming in Tokio async contexts with composable encoder/decoder traits, both sync and async, without losing SIMD alignment.
-- `simd-kernels` a very large set of simd-kernels **including 60+ distributions (poisson etc.)** ***reconciled to Scipy***.
-- `vec64` Vec wrapper with a custom 64-byte allocator that enforces optimal SIMD pointer-alignment.
-- `minarrow-pyo3` PyO3 bindings for zero-copy interop with PyArrow via the Arrow C Data Interface. See [pyo3/README.md](pyo3/README.md). 
-
-## Views and Windowing
-
-- Optional view variants provide zero-copy windowed access to arrays, and encode offset and length for efficient subset operations without copying.
-- For extreme performance needs, minimal tuple aliases `(&InnerArrayVariant, offset, len)` are available.
+This gives you:
+- **Performance** — Compiler inlines through the dispatch
+- **Type safety** — No `Any`, no runtime downcasts
+- **Ergonomics** — Direct accessors like `array.num().i64()`
 
 ## Benchmarks
 
-Intel(R) Core(TM) Ultra 7 155H | x86_64 | 22 CPUs
+Sum of 1,000 integers, averaged over 1,000 runs (Intel Ultra 7 155H):
 
-***Sum of 1,000 sequential integers starting at 0.***
-Averaged over 1,000 runs (release).
+| Implementation | Time |
+|----------------|------|
+| Raw `Vec<i64>` | 85 ns |
+| Minarrow `IntegerArray` (direct) | 88 ns |
+| Minarrow `IntegerArray` (via enum) | 124 ns |
+| Arrow-rs `Int64Array` (struct) | 147 ns |
+| Arrow-rs `Int64Array` (dyn) | 181 ns |
 
-### No SIMD
+Minarrow's direct access matches raw Vec performance. Even through enum dispatch, it outperforms arrow-rs.
 
-***(n=1000, lanes=4, iters=1000)***
+With SIMD + Rayon, summing 1 billion integers takes ~114ms.
 
-| Case                               | Avg time  |
-|------------------------------------|-----------|
-| **Integer (i64)**                  |           |
-| raw vec: `Vec<i64>`                | 85 ns     |
-| minarrow direct: `IntegerArray`    | 88 ns     |
-| arrow-rs struct: `Int64Array`      | 147 ns    |
-| minarrow enum: `IntegerArray`      | 124 ns    |
-| arrow-rs dyn: `Int64Array`         | 181 ns    |
-| **Float (f64)**                    |           |
-| raw vec: `Vec<f64>`                | 475 ns    |
-| minarrow direct: `FloatArray`      | 476 ns    |
-| arrow-rs struct: `Float64Array`    | 527 ns    |
-| minarrow enum: `FloatArray`        | 507 ns    |
-| arrow-rs dyn: `Float64Array`       | 1.952 µs  |
+## Feature Flags
 
-### SIMD
+Enable what you need:
 
-***(n=1000, lanes=4, iters=1000)***
+| Feature | Description |
+|---------|-------------|
+| `views` | Zero-copy windowed access (default) |
+| `chunked` | SuperArray/SuperTable for streaming (default) |
+| `datetime` | Temporal types |
+| `cast_arrow` | Arrow-rs conversion |
+| `cast_polars` | Polars conversion |
+| `parallel_proc` | Rayon parallel iterators |
+| `select` | Pandas-style `.c()` / `.r()` selection |
+| `broadcast` | Arithmetic broadcasting |
 
-| Case                                  | Avg (ns) |
-|---------------------------------------|---------:|
-| raw vec: `Vec<i64>`                   | 64       |
-| raw vec64: `Vec64<i64>`               | 55       |
-| minarrow direct: `IntegerArray`       | 88       |
-| arrow-rs struct: `Int64Array`         | 162      |
-| minarrow enum: `IntegerArray`         | 170      |
-| arrow-rs dyn: `Int64Array`            | 173      |
-| raw vec: `Vec<f64>`                   | 57       |
-| raw vec64: `Vec64<f64>`               | 58       |
-| minarrow direct: `FloatArray`         | 91       |
-| arrow-rs struct: `Float64Array`       | 181      |
-| minarrow enum: `FloatArray`           | 180      |
-| arrow-rs dyn: `Float64Array`          | 196      |
+## Ecosystem
 
-### SIMD + Rayon
+| Crate | Purpose |
+|-------|---------|
+| `minarrow-pyo3` | Zero-copy Python interop via PyArrow. See [pyo3/README.md](pyo3/README.md) |
+| `lightstream` | Tokio async IPC with maintained SIMD alignment |
+| `simd-kernels` | 60+ SIMD kernels including statistical distributions |
+| `vec64` | 64-byte aligned Vec for optimal SIMD |
 
-***Sum of 1 billion sequential integers starting at 0.***
+## Limitations
 
-***(n=1,000,000,000, lanes=4)***
-
-| Case                                    | Time (ms)   |
-|-----------------------------------------|-------------|
-| SIMD + Rayon `IntegerArray<i64>`        | 113.874     |
-| SIMD + Rayon `FloatArray<f64>`          | 114.095     |
-
-### Other factors (SIMD + No SIMD Benchmarks)
-Vec<i64> construction (generating + allocating 1000 elements - avg): 87 ns
-Vec64<i64> construction (avg): 84 ns
-
-_The construction delta is not included in the benchmark timings above._
-
-## Ideal Use Cases
-
-| Use Case                              | Description |
-|---------------------------------------|-------------|
-| Real-time Data Pipelines              | Zero-copy interchange for streaming and event-driven systems |
-| Embedded and Edge Computing           | Minimal deps, efficient memory layout, fast compile |
-| Systems-Level Integration             | 64-byte alignment and FFI-friendly representation |
-| High-Performance Analytics            | SIMD kernels and direct buffer access |
-| Rapid Prototyping and Development     | Simple type system, intuitive APIs |
-| Data-Intensive Rust Applications      | Rust-native data structures with no runtime abstraction penalty |
-| Extreme Latency Scenarios             | Inner types for trading, defence, and other nanosecond-sensitive systems |
-
-## Design Philosophy
-
-- **Composable** opt-up to your required abstraction-level. 
-- **Ergonomic** never lose access to easily seeing your data.
-- **Dev Speed** simple intuitive APIs
-- **Performant** SIMD as a first-class citizen
-- **Interoperable** whilst maintaining identity
-
-This approach trades some features (like deeply nested types) for a more streamlined experience in common data processing scenarios.
+Minarrow focuses on flat columnar data and 80/20. Nested types (List, Struct) are not currently supported. If you need deeply nested schemas, arrow-rs is the better choice.
 
 ## Contributing
 
-We welcome contributions! Areas of focus include:
+Contributions welcome:
 
-1. **Connectors** - Connectors to data sources and sinks
-2. **Optimisations** - Performance improvements that maintain API simplicity
-3. **Bug Fixes** - Bug fixes and improvements
-4. **PyO3 Integration** - Python bindings and interoperability
-5. **List and Struct Types** - Support for nested types (PRs welcome)
+1. **Connectors** — Data source/sink integrations
+2. **Optimisations** — Performance improvements
+3. **Nested types** — List and Struct support (PRs welcome)
+4. **Bug fixes**
 
-
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for contributing guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-This project is licensed under the `MIT License`. See _LICENSE_ for details.
+MIT. See [LICENSE](LICENSE) for details.
 
-## Acknowledgments
+## Acknowledgements
 
-Special thanks to the `Apache Arrow` community and all contributors to the Arrow ecosystem. Special call out also to `Arrow2` and `Polars`. Minarrow is inspired by the consistently great work and standards driven by these projects.
+Minarrow is a from-scratch implementation of the Apache Arrow memory layout inspired by the standards pioneered by Apache Arrow, Arrow2, and Polars.
 
-## Feedback
-
-We value community input and would appreciate your thoughts and feedback. Please don't hesitate to reach out with questions, suggestions, or contributions.
+Minarrow is not affiliated with Apache Arrow.

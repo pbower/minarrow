@@ -19,7 +19,7 @@
 //! 4. On the receiving side, reconstruct a Minarrow array with [`import_from_c`].
 //!
 //! ## Examples
-//! - Rust → Arrow: `cargo run --example apache-ffi`
+//! - Rust -> Arrow: `cargo run --example apache-ffi`
 //! - Planned: Python, C++, and other language bindings.
 //!
 //! ## Notes
