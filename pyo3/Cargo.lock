@@ -46,7 +46,9 @@ dependencies = [
 
 [[package]]
 name = "minarrow"
-version = "0.4.6"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f600f4ca5c7958c7d698d630900a0a50c1625ac6e9e2cc3c1b073abb94d65312"
 dependencies = [
  "num-traits",
  "vec64",

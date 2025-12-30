@@ -170,8 +170,9 @@ Because dispatch is static, the compiler retains full knowledge of types across 
 
 ## Partner Crates:
 - `lightstream` enables IPC streaming in Tokio async contexts with composable encoder/decoder traits, both sync and async, without losing SIMD alignment.
-- `simd-kernels` a very large set of simd-kernels **including 60+ distributions (poisson etc.)** ***reconciled to Scipy***. 
-- `vec64` Vec wrapper with a custom 64-byte allocator that enforces optimal SIMD pointer-alignment. 
+- `simd-kernels` a very large set of simd-kernels **including 60+ distributions (poisson etc.)** ***reconciled to Scipy***.
+- `vec64` Vec wrapper with a custom 64-byte allocator that enforces optimal SIMD pointer-alignment.
+- `minarrow-pyo3` PyO3 bindings for zero-copy interop with PyArrow via the Arrow C Data Interface. See [pyo3/README.md](pyo3/README.md). 
 
 ## Views and Windowing
 
