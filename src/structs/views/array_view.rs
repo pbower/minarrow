@@ -590,17 +590,19 @@ impl ArrayV {
     }
 }
 
+
 /// Array -> ArrayView
 ///
 /// Uses Offset 0 and length self.len()
 impl From<Array> for ArrayV {
     fn from(array: Array) -> Self {
         let len = array.len();
+        let null_count = array.null_count();
         ArrayV {
             array,
             offset: 0,
             len,
-            null_count: OnceLock::new(),
+            null_count: null_count.into(),
         }
     }
 }
@@ -611,11 +613,28 @@ impl From<Array> for ArrayV {
 impl From<FieldArray> for ArrayV {
     fn from(field_array: FieldArray) -> Self {
         let len = field_array.len();
+        let null_count = field_array.null_count();
         ArrayV {
             array: field_array.array,
             offset: 0,
             len,
-            null_count: OnceLock::new(),
+            null_count: null_count.into(),
+        }
+    }
+}
+
+/// &FieldArray -> ArrayView
+///
+/// Arc bumps inner array with offset 0, length self.len().
+impl From<&FieldArray> for ArrayV {
+    fn from(field_array: &FieldArray) -> Self {
+        let len = field_array.len();
+        let null_count = field_array.null_count();
+        ArrayV {
+            array: field_array.array.clone(),
+            offset: 0,
+            len,
+            null_count: null_count.into(),
         }
     }
 }

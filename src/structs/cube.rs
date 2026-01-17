@@ -36,6 +36,8 @@ use crate::aliases::CubeV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
 use crate::ffi::arrow_dtype::ArrowType;
 use crate::traits::{concatenate::Concatenate, shape::Shape};
+#[cfg(all(feature = "views", feature = "select"))]
+use crate::traits::selection::ColumnSelection;
 use crate::{Field, Table};
 
 // Global counter for unnamed cube instances
@@ -273,11 +275,11 @@ impl Cube {
     }
 
     /// Returns the index of a column by name (from the first table).
-    pub fn col_index(&self, name: &str) -> Option<usize> {
+    pub fn col_name_index(&self, name: &str) -> Option<usize> {
         if self.tables.is_empty() {
             None
         } else {
-            self.tables[0].col_index(name)
+            self.tables[0].col_name_index(name)
         }
     }
 
@@ -287,11 +289,16 @@ impl Cube {
     }
 
     /// Returns all columns (FieldArrays) with the given index across all tables.
-    pub fn col(&self, idx: usize) -> Option<Vec<&FieldArray>> {
+    pub fn col_ix(&self, idx: usize) -> Option<Vec<&FieldArray>> {
         if self.tables.is_empty() || idx >= self.n_cols() {
             None
         } else {
-            Some(self.tables.iter().map(|t| t.col(idx).unwrap()).collect())
+            Some(
+                self.tables
+                    .iter()
+                    .filter_map(|t| t.cols().get(idx))
+                    .collect(),
+            )
         }
     }
 
@@ -303,14 +310,16 @@ impl Cube {
             Some(
                 self.tables
                     .iter()
-                    .map(|t| t.col_by_name(name).unwrap())
+                    .filter_map(|t| {
+                        t.col_name_index(name).and_then(|idx| t.cols().get(idx))
+                    })
                     .collect(),
             )
         }
     }
 
     /// Returns all columns for all tables as Vec<Vec<&FieldArray>>.
-    pub fn cols(&self) -> Vec<Vec<&FieldArray>> {
+    pub fn col_vec(&self) -> Vec<Vec<&FieldArray>> {
         self.tables
             .iter()
             .map(|t| t.cols().iter().collect())
@@ -350,7 +359,11 @@ impl Cube {
     #[inline]
     pub fn iter_cols(&self, col_idx: usize) -> Option<impl Iterator<Item = &FieldArray>> {
         if col_idx < self.n_cols() {
-            Some(self.tables.iter().map(move |t| t.col(col_idx).unwrap()))
+            Some(
+                self.tables
+                    .iter()
+                    .filter_map(move |t| t.cols().get(col_idx)),
+            )
         } else {
             None
         }
@@ -363,11 +376,9 @@ impl Cube {
         name: &'a str,
     ) -> Option<impl Iterator<Item = &'a FieldArray> + 'a> {
         if self.has_col(name) {
-            Some(
-                self.tables
-                    .iter()
-                    .map(move |t| t.col_by_name(name).unwrap()),
-            )
+            Some(self.tables.iter().filter_map(move |t| {
+                t.col_name_index(name).and_then(|idx| t.cols().get(idx))
+            }))
         } else {
             None
         }
@@ -646,7 +657,7 @@ mod tests {
         assert!(c.has_col("ints"));
         assert!(!c.has_col("nonexistent"));
 
-        let cols_by_idx = c.col(0).unwrap();
+        let cols_by_idx = c.col_ix(0).unwrap();
         assert_eq!(cols_by_idx.len(), 2);
         assert_eq!(cols_by_idx[0].field.name, "ints");
         assert_eq!(cols_by_idx[1].field.name, "ints");
@@ -753,14 +764,14 @@ mod tests {
     }
 
     #[test]
-    fn test_cols_method_and_schema() {
+    fn test_col_vec_method_and_schema() {
         let mut c = Cube::new_empty();
         let t1 = build_test_table("t1", &[1, 2], &[true, false]);
         let t2 = build_test_table("t2", &[3, 4], &[false, true]);
         c.add_table(t1);
         c.add_table(t2);
 
-        let cols = c.cols();
+        let cols = c.col_vec();
         assert_eq!(cols.len(), 2); // Two tables
         assert_eq!(cols[0].len(), 2); // Each has two columns
 
@@ -864,8 +875,8 @@ mod tests {
         assert_eq!(view[0].n_rows(), 2); // First table window length is 2
         assert_eq!(view[1].n_rows(), 2); // Second table window length is 2
 
-        assert_eq!(view[0].col_by_name("bools").unwrap().len(), 2); // arrayview length is 2
-        assert_eq!(view[1].col_by_name("bools").unwrap().len(), 2); // arrayview length is 2
+        assert_eq!(view[0].col("bools").col_ix(0).unwrap().len(), 2); // arrayview length is 2
+        assert_eq!(view[1].col("bools").col_ix(0).unwrap().len(), 2); // arrayview length is 2
     }
 
     #[cfg(feature = "parallel_proc")]

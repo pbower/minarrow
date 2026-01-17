@@ -218,6 +218,28 @@ impl Array {
         Array::BooleanArray(Arc::new(arr))
     }
 
+    /// Wraps this Array in a FieldArray with the given name.
+    ///
+    /// Infers the Arrow type and nullability from the array itself.
+    ///
+    /// # Example
+    /// ```rust
+    /// use minarrow::{Array, IntegerArray, MaskedArray};
+    ///
+    /// let mut arr = IntegerArray::<i32>::default();
+    /// arr.push(1);
+    /// arr.push(2);
+    /// let array = Array::from_int32(arr);
+    /// let field_array = array.fa("my_column");
+    /// assert_eq!(field_array.field.name, "my_column");
+    /// ```
+    pub fn fa(self, name: impl Into<String>) -> FieldArray {
+        let dtype = self.arrow_type();
+        let nullable = self.is_nullable();
+        let field = Field::new(name, dtype, nullable, None);
+        FieldArray::new(field, self)
+    }
+
     // The below provides common accessors that reformat the data into the given type.
     // Because this library leans on enums, it makes for essential ergonomics once operating
     // in the top layer and one needs to match for e.g., to `T: Numeric` etc., as one can

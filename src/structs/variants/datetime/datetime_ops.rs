@@ -424,14 +424,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the month component (1-12) from all datetime values.
-    pub fn month(&self) -> IntegerArray<u8> {
+    pub fn month(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                result.push(dt.month() as u8);
+                result.push(dt.month() as i32);
             } else {
                 result.push_null();
             }
@@ -441,14 +441,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the day of month (1-31) from all datetime values.
-    pub fn day(&self) -> IntegerArray<u8> {
+    pub fn day(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                result.push(dt.day());
+                result.push(dt.day() as i32);
             } else {
                 result.push_null();
             }
@@ -458,14 +458,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the hour component (0-23) from all datetime values.
-    pub fn hour(&self) -> IntegerArray<u8> {
+    pub fn hour(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                result.push(dt.hour());
+                result.push(dt.hour() as i32);
             } else {
                 result.push_null();
             }
@@ -475,14 +475,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the minute component (0-59) from all datetime values.
-    pub fn minute(&self) -> IntegerArray<u8> {
+    pub fn minute(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                result.push(dt.minute());
+                result.push(dt.minute() as i32);
             } else {
                 result.push_null();
             }
@@ -492,14 +492,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the second component (0-59) from all datetime values.
-    pub fn second(&self) -> IntegerArray<u8> {
+    pub fn second(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                result.push(dt.second());
+                result.push(dt.second() as i32);
             } else {
                 result.push_null();
             }
@@ -509,14 +509,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the weekday (1=Sunday, 2=Monday, ..., 7=Saturday) from all datetime values.
-    pub fn weekday(&self) -> IntegerArray<u8> {
+    pub fn weekday(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                result.push(dt.weekday().number_from_sunday());
+                result.push(dt.weekday().number_from_sunday() as i32);
             } else {
                 result.push_null();
             }
@@ -526,14 +526,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the day of year (1-366) from all datetime values.
-    pub fn day_of_year(&self) -> IntegerArray<u16> {
+    pub fn day_of_year(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                result.push(dt.ordinal());
+                result.push(dt.ordinal() as i32);
             } else {
                 result.push_null();
             }
@@ -543,14 +543,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the ISO week number (1-53) from all datetime values.
-    pub fn iso_week(&self) -> IntegerArray<u8> {
+    pub fn iso_week(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                result.push(dt.iso_week());
+                result.push(dt.iso_week() as i32);
             } else {
                 result.push_null();
             }
@@ -560,14 +560,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the quarter (1-4) from all datetime values.
-    pub fn quarter(&self) -> IntegerArray<u8> {
+    pub fn quarter(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                let month = dt.month() as u8;
+                let month = dt.month() as i32;
                 let quarter = ((month - 1) / 3) + 1;
                 result.push(quarter);
             } else {
@@ -580,17 +580,17 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
 
     /// Extracts the week of year (0-53) from all datetime values.
     /// Week 0 contains days before the first Sunday.
-    pub fn week_of_year(&self) -> IntegerArray<u8> {
+    pub fn week_of_year(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
             if self.is_null(i) {
                 result.push_null();
             } else if let Some(dt) = self.value_to_datetime(i) {
-                let day_of_year = dt.ordinal();
-                let weekday = dt.weekday().number_from_sunday();
+                let day_of_year = dt.ordinal() as i32;
+                let weekday = dt.weekday().number_from_sunday() as i32;
                 // Calculate week based on day of year and weekday (Sunday = 1)
-                let week = ((day_of_year + 7 - weekday as u16) / 7) as u8;
+                let week = (day_of_year + 7 - weekday) / 7;
                 result.push(week);
             } else {
                 result.push_null();

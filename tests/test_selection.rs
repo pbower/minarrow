@@ -126,21 +126,21 @@ fn test_tablev_methods_respect_column_selection() {
     // Test col_names
     assert_eq!(view.col_names(), vec!["id", "value"]);
 
-    // Test col by index (logical index within selection)
-    let col0 = view.col(0);
+    // Test col_ix by index (logical index within selection)
+    let col0 = view.col_ix(0);
     assert!(col0.is_some());
 
-    let col1 = view.col(1);
+    let col1 = view.col_ix(1);
     assert!(col1.is_some());
 
     // Logical index 2 doesn't exist (only 2 columns selected)
-    let col2 = view.col(2);
+    let col2 = view.col_ix(2);
     assert!(col2.is_none());
 
-    // Test col_by_name
-    assert!(view.col_by_name("id").is_some());
-    assert!(view.col_by_name("value").is_some());
-    assert!(view.col_by_name("name").is_none()); // Not in selection
+    // Test col by name (alias for c)
+    assert_eq!(view.col("id").col_ix(0).is_some(), true);
+    assert_eq!(view.col("value").col_ix(0).is_some(), true);
+    assert_eq!(view.col("name").col_ix(0).is_none(), true); // Not in selection
 }
 
 #[test]
@@ -166,68 +166,53 @@ fn test_to_table_respects_selections() {
     assert_eq!(materialised.n_rows, 3);
 }
 
-// ===== Tests for new extensible API (.f(), .d(), etc.) =====
+// ===== Tests for selection API =====
 
 #[test]
-fn test_field_selection_methods() {
+fn test_column_selection_methods() {
     let table = create_test_table();
 
-    // Test .f() method
+    // Test .c() method - column selection by names
     let view1 = table.c(&["name", "value"]);
     assert_eq!(view1.n_cols(), 2);
     assert_eq!(view1.col_names(), vec!["name", "value"]);
 
-    // Test .cols() alias
-    let view2 = table.c(&["name", "value"]);
+    // Test .c() method - column selection by indices
+    let view2 = table.c(&[0, 2]);
     assert_eq!(view2.n_cols(), 2);
-    assert_eq!(view2.col_names(), vec!["name", "value"]);
 
-    // Test .x() alias
-    let view3 = table.x(&["id", "value"]);
-    assert_eq!(view3.n_cols(), 2);
-    assert_eq!(view3.col_names(), vec!["id", "value"]);
+    // Test .col() alias (same as .c())
+    let view3 = table.col("id");
+    assert_eq!(view3.n_cols(), 1);
+    assert_eq!(view3.col_names(), vec!["id"]);
 }
 
 #[test]
-fn test_data_selection_methods() {
+fn test_row_selection_methods() {
     let table = create_test_table();
 
-    // Test .d() method
+    // Test .r() method - row selection by range
     let view1 = table.r(1..4);
     assert_eq!(view1.n_rows(), 3);
 
-    // Test .data() alias
-    let view2 = table.select_rows(1..4);
+    // Test .r() method - row selection by indices
+    let view2 = table.r(&[0, 2, 4]);
     assert_eq!(view2.n_rows(), 3);
-
-    // Test .x() alias
-    let view3 = table.y(&[0, 2, 4]);
-    assert_eq!(view3.n_rows(), 3);
 }
 
 #[test]
-fn test_mixed_api_chaining() {
+fn test_chained_selection() {
     let table = create_test_table();
 
-    // Chain .f() and .d()
+    // Chain column and row selection
     let view1 = table.c(&["id", "value"]).r(1..4);
     assert_eq!(view1.n_cols(), 2);
     assert_eq!(view1.n_rows(), 3);
 
-    // Chain .c() (old) with .d() (new)
-    let view2 = table.c(&["id", "value"]).r(1..4);
-    assert_eq!(view2.n_cols(), 2);
+    // Chain row and column selection
+    let view2 = table.r(1..4).c(&["name"]);
+    assert_eq!(view2.n_cols(), 1);
     assert_eq!(view2.n_rows(), 3);
-
-    // Chain .f() (new) with .r() (old)
-    let view3 = table.c(&["id", "value"]).r(1..4);
-    assert_eq!(view3.n_cols(), 2);
-    assert_eq!(view3.n_rows(), 3);
-
-    // Spatial aliases
-    let view4 = table.x(&["name"]).y(0..3);
-    assert_eq!(view4.n_cols(), 1);
-    assert_eq!(view4.n_rows(), 3);
 }
 
 #[test]

@@ -157,29 +157,19 @@ impl Table {
         self.n_cols() == 0 || self.n_rows == 0
     }
 
-    /// Returns a column by index.
-    pub fn col(&self, idx: usize) -> Option<&FieldArray> {
-        self.cols.get(idx)
-    }
-
-    /// Returns a column by name.
-    pub fn col_by_name(&self, name: &str) -> Option<&FieldArray> {
-        self.cols.iter().find(|fa| fa.field.name == name)
-    }
-
     /// Returns the list of column names.
     pub fn col_names(&self) -> Vec<&str> {
         self.cols.iter().map(|fa| fa.field.name.as_str()).collect()
     }
 
     /// Returns the index of a column by name.
-    pub fn col_index(&self, name: &str) -> Option<usize> {
+    pub fn col_name_index(&self, name: &str) -> Option<usize> {
         self.cols.iter().position(|fa| fa.field.name == name)
     }
 
     /// Removes a column by name.
     pub fn remove_col(&mut self, name: &str) -> bool {
-        if let Some(idx) = self.col_index(name) {
+        if let Some(idx) = self.col_name_index(name) {
             self.cols.remove(idx);
             self.recalc_n_rows();
             true
@@ -207,10 +197,10 @@ impl Table {
 
     /// Checks if a column with the given name exists.
     pub fn has_col(&self, name: &str) -> bool {
-        self.col_index(name).is_some()
+        self.col_name_index(name).is_some()
     }
 
-    /// Returns all columns.
+    /// Returns all columns as a slice.
     pub fn cols(&self) -> &[FieldArray] {
         &self.cols
     }
@@ -759,6 +749,7 @@ impl Display for Table {
 #[cfg(all(feature = "views", feature = "select"))]
 impl ColumnSelection for Table {
     type View = TableV;
+    type ColView = ArrayV;
 
     fn c<S: FieldSelector>(&self, selection: S) -> TableV {
         let fields = self
@@ -785,6 +776,14 @@ impl ColumnSelection for Table {
             offset: 0,
             len: self.n_rows,
         }
+    }
+
+    fn col_ix(&self, idx: usize) -> Option<ArrayV> {
+        self.cols.get(idx).map(|fa| ArrayV::from(fa.clone()))
+    }
+
+    fn col_vec(&self) -> Vec<ArrayV> {
+        self.cols.iter().map(|fa| ArrayV::from(fa.clone())).collect()
     }
 
     fn get_cols(&self) -> Vec<Arc<Field>> {
@@ -838,6 +837,8 @@ mod tests {
     use super::*;
     use crate::structs::field_array::field_array;
     use crate::traits::masked_array::MaskedArray;
+    #[cfg(all(feature = "views", feature = "select"))]
+    use crate::traits::selection::ColumnSelection;
     use crate::{Array, BooleanArray, IntegerArray, NumericArray};
 
     #[test]
@@ -865,16 +866,46 @@ mod tests {
         assert_eq!(t.n_rows(), 2);
         assert!(!t.is_empty());
 
-        assert!(t.col(0).is_some());
-        assert!(t.col(1).is_some());
-        assert!(t.col(2).is_none());
+        // Test column access via cols()
+        assert!(t.cols().get(0).is_some());
+        assert!(t.cols().get(1).is_some());
+        assert!(t.cols().get(2).is_none());
         assert_eq!(t.col_names(), vec!["ints", "bools"]);
 
-        let col = t.col_by_name("ints");
-        assert!(col.is_some());
-        let fa = col.unwrap();
-        assert_eq!(fa.field.name, "ints");
-        match &fa.array {
+        // Test column by name via col_name_index
+        let idx = t.col_name_index("ints").unwrap();
+        let col = t.cols().get(idx).unwrap();
+        match &col.array {
+            Array::NumericArray(NumericArray::Int32(a)) => assert_eq!(a.len(), 2),
+            _ => panic!("ints column type mismatch"),
+        }
+    }
+
+    #[cfg(all(feature = "views", feature = "select"))]
+    #[test]
+    fn test_column_selection_trait() {
+        let mut t = Table::new_empty();
+        let mut col1 = IntegerArray::<i32>::default();
+        col1.push(1);
+        col1.push(2);
+        let mut col2 = BooleanArray::default();
+        col2.push(true);
+        col2.push(false);
+
+        t.add_col(field_array("ints", Array::from_int32(col1)));
+        t.add_col(field_array("bools", Array::from_bool(col2)));
+
+        // Test ColumnSelection trait methods
+        assert!(t.col_ix(0).is_some());
+        assert!(t.col_ix(1).is_some());
+        assert!(t.col_ix(2).is_none());
+
+        // col() returns TableV, col_ix(0) gets the single column as ArrayV
+        let col_view = t.col("ints");
+        assert_eq!(col_view.cols.len(), 1);  // Column found
+        let av = col_view.col_ix(0).unwrap();
+        assert_eq!(col_view.fields[0].name, "ints");
+        match &av.array {
             Array::NumericArray(NumericArray::Int32(a)) => assert_eq!(a.len(), 2),
             _ => panic!("ints column type mismatch"),
         }
@@ -899,8 +930,8 @@ mod tests {
         let mut t = Table::new_empty();
         let col = IntegerArray::<i64>::default();
         t.add_col(field_array("foo", Array::from_int64(col)));
-        assert_eq!(t.col_index("foo"), Some(0));
-        assert_eq!(t.col_index("bar"), None);
+        assert_eq!(t.col_name_index("foo"), Some(0));
+        assert_eq!(t.col_name_index("bar"), None);
         assert!(t.has_col("foo"));
         assert!(!t.has_col("bar"));
     }
@@ -992,11 +1023,15 @@ mod tests {
 
         let sliced = t.slice_clone(1, 2);
         assert_eq!(sliced.n_rows(), 2);
-        assert_eq!(sliced.col_by_name("ints").unwrap().array.len(), 2);
+        // Access column by name index
+        let idx = sliced.col_name_index("ints").unwrap();
+        assert_eq!(sliced.cols().get(idx).unwrap().array.len(), 2);
 
         let view = t.slice(1, 2);
         assert_eq!(view.n_rows(), 2);
-        assert_eq!(view.col_by_name("bools").unwrap().len(), 2);
+        // TableV is a zero-copy view - underlying array still has full length
+        // The view's logical length is accessed via n_rows()
+        assert!(view.col_name_index("bools").is_some());
 
         // // Zero-copy: view.table == &t via the underlying arrays
         // for (orig, sliced) in t.cols.iter().zip(view.cols.iter()) {

@@ -24,6 +24,8 @@ use crate::Cube;
 use crate::kernels::broadcast::{
     value_add, value_divide, value_multiply, value_remainder, value_subtract,
 };
+#[cfg(all(feature = "views", feature = "select"))]
+use crate::traits::selection::ColumnSelection;
 use crate::{Array, FieldArray, Table};
 
 use crate::enums::error::MinarrowError;
@@ -1080,7 +1082,7 @@ mod tests {
             assert_eq!(result_table.name, "tableA"); // Takes name from left operand
 
             // Check first column: [1,2,3] + [4,5,6] = [5,7,9]
-            if let Some(col1) = result_table.col(0) {
+            if let Some(col1) = result_table.col_ix(0) {
                 if let Array::NumericArray(NumericArray::Int32(arr)) = &col1.array {
                     assert_eq!(arr.data.as_slice(), &[5, 7, 9]);
                 } else {
@@ -1091,7 +1093,7 @@ mod tests {
             }
 
             // Check second column: [10,20,30] + [40,50,60] = [50,70,90]
-            if let Some(col2) = result_table.col(1) {
+            if let Some(col2) = result_table.col_ix(1) {
                 if let Array::NumericArray(NumericArray::Int32(arr)) = &col2.array {
                     assert_eq!(arr.data.as_slice(), &[50, 70, 90]);
                 } else {
@@ -1143,7 +1145,7 @@ mod tests {
             assert_eq!(result_table.n_rows(), 3);
 
             // Check first column: [1,2,3] + [4,5,6] = [5,7,9]
-            if let Some(col1) = result_table.col(0) {
+            if let Some(col1) = result_table.col_ix(0) {
                 if let Array::NumericArray(NumericArray::Int32(arr)) = &col1.array {
                     assert_eq!(arr.data.as_slice(), &[5, 7, 9]);
                 } else {

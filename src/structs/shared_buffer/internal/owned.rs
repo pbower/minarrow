@@ -74,4 +74,6 @@ pub(crate) static OWNED_VT: Vtable = Vtable {
         }
         v
     },
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    memfd_fd: |_| None,
 };

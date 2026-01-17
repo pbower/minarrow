@@ -22,8 +22,10 @@
 //!
 //! ## Example
 //! ```rust
-//! # use minarrow::{Table, TableV, Array, IntegerArray, FieldArray};
-//! # use std::sync::Arc;
+//! use minarrow::{Table, TableV, Array, IntegerArray, FieldArray};
+//! use minarrow::ColumnSelection;  // Re-exported at crate root
+//! use std::sync::Arc;
+//!
 //! // Build a simple 2-column table
 //! let a = FieldArray::from_arr("a", Array::from_int32(IntegerArray::<i32>::from_slice(&[1,2,3,4,5])));
 //! let b = FieldArray::from_arr("b", Array::from_int32(IntegerArray::<i32>::from_slice(&[10,20,30,40,50])));
@@ -33,8 +35,8 @@
 //! let tv = TableV::from_table(tbl, 1, 3);
 //! assert_eq!(tv.n_rows(), 3);
 //! assert_eq!(tv.n_cols(), 2);
-//! // Access a column window
-//! let col0 = tv.col(0).unwrap();
+//! // Access a column window via ColumnSelection trait
+//! let col0 = tv.col_ix(0).unwrap();
 //! assert_eq!(col0.get::<minarrow::IntegerArray<i32>>(0), Some(2));
 //!
 //! // Materialise the window as an owned Table copy
@@ -77,7 +79,7 @@ use crate::{Field, FieldArray, Table};
 /// - Construction from a `Table`/`Arc<Table>` is zero-copy for column data.
 /// - Use `from_self` to take sub-windows cheaply.
 /// - Use `to_table()` to materialise an owned copy of just this window.
-/// - Column helpers (`col`, `col_by_name`, `col_window`) provide ergonomic access.
+/// - Column helpers (`col`, `col_ix`, `col_vec`) provide ergonomic access.
 /// - Active selections are transparently applied to all access methods.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableV {
@@ -202,18 +204,6 @@ impl TableV {
         &self.name
     }
 
-    /// Returns a reference to the column window at the given index.
-    #[inline]
-    pub fn col(&self, idx: usize) -> Option<&ArrayV> {
-        self.cols.get(idx)
-    }
-
-    /// Returns a slice of all column windows.
-    #[inline]
-    pub fn cols(&self) -> Vec<&ArrayV> {
-        self.cols.iter().collect()
-    }
-
     /// Returns an iterator over all column names.
     #[inline]
     pub fn col_names(&self) -> Vec<&str> {
@@ -222,7 +212,7 @@ impl TableV {
 
     /// Returns the index of a column by name.
     #[inline]
-    pub fn col_index(&self, name: &str) -> Option<usize> {
+    pub fn col_name_index(&self, name: &str) -> Option<usize> {
         self.fields.iter().position(|f| f.name == name)
     }
 
@@ -243,14 +233,8 @@ impl TableV {
 
     /// Returns a `Vec<bool>` indicating which columns are nullable.
     #[inline]
-    pub fn cols_nullable(&self) -> Vec<bool> {
+    pub fn nullable_cols(&self) -> Vec<bool> {
         self.fields.iter().map(|f| f.nullable).collect()
-    }
-
-    /// Returns a reference to the column window by column name.
-    #[inline]
-    pub fn col_by_name(&self, name: &str) -> Option<&ArrayV> {
-        self.col_index(name).and_then(|idx| self.col(idx))
     }
 
     /// Consumes the TableView, producing an owned Table with the sliced data.
@@ -697,7 +681,7 @@ impl Display for TableV {
         let mut widths: Vec<usize> = Vec::with_capacity(n_cols);
 
         for col_idx in 0..n_cols {
-            if let Some(_col_view) = self.col(col_idx) {
+            if let Some(_col_view) = self.cols.get(col_idx) {
                 let hdr = if let Some(f) = self.fields.get(col_idx) {
                     format!("{}:{:?}", f.name, f.dtype)
                 } else {
@@ -715,7 +699,7 @@ impl Display for TableV {
             let mut row: Vec<String> = Vec::with_capacity(n_cols);
 
             for col_idx in 0..n_cols {
-                if let Some(col_view) = self.col(col_idx) {
+                if let Some(col_view) = self.cols.get(col_idx) {
                     let val = value_to_string(&col_view.array, row_idx);
                     widths[col_idx] = widths[col_idx].max(val.len());
                     row.push(val);
@@ -847,6 +831,7 @@ impl From<TableV> for Table {
 #[cfg(feature = "select")]
 impl ColumnSelection for TableV {
     type View = TableV;
+    type ColView = ArrayV;
 
     fn c<S: FieldSelector>(&self, selection: S) -> TableV {
         // Resolve selector to field indices
@@ -869,6 +854,14 @@ impl ColumnSelection for TableV {
             offset: self.offset,
             len: self.len,
         }
+    }
+
+    fn col_ix(&self, idx: usize) -> Option<ArrayV> {
+        self.cols.get(idx).cloned()
+    }
+
+    fn col_vec(&self) -> Vec<ArrayV> {
+        self.cols.clone()
     }
 
     fn get_cols(&self) -> Vec<Arc<Field>> {
@@ -923,6 +916,8 @@ mod tests {
     use crate::structs::field_array::FieldArray;
     use crate::structs::table::Table;
     use crate::{Array, IntegerArray};
+    #[cfg(feature = "select")]
+    use crate::traits::selection::ColumnSelection;
 
     #[test]
     fn test_table_slice_from_table_and_access() {
@@ -950,11 +945,26 @@ mod tests {
         assert_eq!(slice.fields[0].name, "a");
         assert_eq!(slice.fields[1].name, "b");
         assert_eq!(slice.col_names(), vec!["a", "b"]);
-        assert_eq!(slice.col_index("b"), Some(1));
-        assert!(slice.col_by_name("a").is_some());
-        assert!(slice.col_by_name("nonexistent").is_none());
+        assert_eq!(slice.col_name_index("b"), Some(1));
         assert!(!slice.is_empty());
         assert_eq!(slice.end(), 4);
+    }
+
+    #[cfg(feature = "select")]
+    #[test]
+    fn test_table_view_selection_trait() {
+        let field_a = Field::new("a", ArrowType::Int32, false, None);
+        let arr_a = Array::from_int32(IntegerArray::from_slice(&[1, 2, 3, 4, 5]));
+        let fa_a = FieldArray::new(field_a, arr_a);
+
+        let mut tbl = Table::new_empty();
+        tbl.add_col(fa_a);
+
+        let slice = TableV::from_table(tbl, 0, 5);
+
+        // Test ColumnSelection trait methods
+        assert_eq!(slice.col("a").cols.len(), 1); // col returns TableV, check it has 1 column
+        assert_eq!(slice.col("nonexistent").cols.len(), 0); // Not found = 0 columns
     }
 
     #[test]

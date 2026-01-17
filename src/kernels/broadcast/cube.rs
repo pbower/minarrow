@@ -6,6 +6,8 @@ use std::sync::Arc;
 use crate::Bitmask;
 #[cfg(feature = "cube")]
 use crate::Cube;
+#[cfg(all(feature = "cube", feature = "views", feature = "select"))]
+use crate::traits::selection::ColumnSelection;
 use crate::enums::error::KernelError;
 use crate::kernels::broadcast::table::broadcast_table_add;
 
@@ -1115,7 +1117,7 @@ mod tests {
         let first_table = &result.tables[0];
 
         // Check first column of first table: [1,2] + [5,6] = [6,8]
-        if let Some(col1) = first_table.col(0) {
+        if let Some(col1) = first_table.col_ix(0) {
             if let crate::Array::NumericArray(crate::NumericArray::Int32(arr)) = &col1.array {
                 assert_eq!(arr.data.as_slice(), &[6, 8]);
             } else {
@@ -1126,7 +1128,7 @@ mod tests {
         }
 
         // Check second column of first table: [10,20] + [50,60] = [60,80]
-        if let Some(col2) = first_table.col(1) {
+        if let Some(col2) = first_table.col_ix(1) {
             if let crate::Array::NumericArray(crate::NumericArray::Int32(arr)) = &col2.array {
                 assert_eq!(arr.data.as_slice(), &[60, 80]);
             } else {

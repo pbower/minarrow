@@ -18,6 +18,8 @@
 
 #[cfg(feature = "cube")]
 use crate::Cube;
+#[cfg(feature = "datetime")]
+use crate::DatetimeArray;
 #[cfg(feature = "matrix")]
 use crate::Matrix;
 #[cfg(feature = "scalar_type")]
@@ -27,9 +29,6 @@ use crate::{
     enums::error::MinarrowError, enums::shape_dim::ShapeDim, traits::concatenate::Concatenate,
     traits::custom_value::CustomValue, traits::shape::Shape,
 };
-
-#[cfg(feature = "datetime")]
-use crate::DatetimeArray;
 use std::convert::TryFrom;
 use std::{convert::From, sync::Arc};
 
@@ -107,7 +106,6 @@ pub enum Value {
     Custom(Arc<dyn CustomValue>),
 }
 
-
 impl Value {
     /// Computes the logical row/element count for the batch’s input `Value`.
     ///
@@ -166,8 +164,14 @@ impl Value {
             }
 
             // Defer to the custom payload's notion of length (per `CustomValue` contract).
-            Value::Custom(cv) => panic!("Length is not implemented for custom value type."),
+            Value::Custom(_cv) => panic!("Length is not implemented for custom value type."),
         }
+    }
+
+    /// Returns true if the value is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

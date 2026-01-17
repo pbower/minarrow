@@ -1505,12 +1505,13 @@ dependencies = [
 
 [[package]]
 name = "minarrow"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ahash",
  "arrow",
  "arrow-schema",
  "cc",
+ "libc",
  "memchr",
  "num-traits",
  "phf 0.11.3",

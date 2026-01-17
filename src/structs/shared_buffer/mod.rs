@@ -27,32 +27,41 @@ mod internal {
     pub(crate) mod vtable;
 }
 
-// # SharedBuffer
-//
-// Zero-copy, reference-counted byte buffer with SIMD alignment support.
-//
-// ## Purpose
-// This is an internal type that usually should not to be used directly.
-// It's primary purpose is to support the `Buffer` type in zero-copy IO cases,
-// enabling efficient reuse of bytes from network, memory-mapped files, and IPC
-// without copying data, whilst maintaining 64-byte SIMD alignment during operations.
-//
-// ## Features
-// - O(1) pointer-based cloning and slicing
-// - Multiple backend sources: `Vec<u8>`, `Vec64<u8>`, MMAP, `Arc<[u8]>`, static slices
-// - Zero-copy extraction to owned types when unique
-// - Thread-safe reference counting via compact vtables
-//
-// ## Usage
-// ```rust
-// let sb = SharedBuffer::from_vec(vec![1,2,3,4,5]);
-// let slice = sb.slice(0..2);        // Zero-copy slice
-// let clone = sb.clone();            // O(1) reference increment
-// let owned = clone.into_vec();      // Extract to Vec<u8>
-// ```
-//
-// Supports `from_vec64()` for SIMD-aligned buffers, `from_owner()` for arbitrary
-// containers, and `from_static()` for constant data.
+/// Memfd-backed buffer for zero-copy cross-process sharing
+///
+/// Works on Linux only
+#[cfg(all(target_os = "linux", feature = "memfd"))]
+mod memfd;
+#[cfg(all(target_os = "linux", feature = "memfd"))]
+pub use memfd::MemfdBuffer;
+
+/// # SharedBuffer
+///
+/// Zero-copy, reference-counted byte buffer with SIMD alignment support.
+///
+/// ## Purpose
+/// This is an internal type that usually should not to be used directly.
+/// It's primary purpose is to support the `Buffer` type in zero-copy IO cases,
+/// enabling efficient reuse of bytes from network, memory-mapped files, and IPC
+/// without copying data, whilst maintaining 64-byte SIMD alignment during operations.
+///
+/// ## Features
+/// - O(1) pointer-based cloning and slicing
+/// - Multiple backend sources: `Vec<u8>`, `Vec64<u8>`, MMAP, `Arc<[u8]>`, static slices
+/// - Zero-copy extraction to owned types when unique
+/// - Thread-safe reference counting via compact vtables
+///
+/// ## Usage
+/// ```rust
+/// use minarrow::SharedBuffer;
+/// let sb = SharedBuffer::from_vec(vec![1,2,3,4,5]);
+/// let slice = sb.slice(0..2);        // Zero-copy slice
+/// let clone = sb.clone();            // O(1) reference increment
+/// let owned = clone.into_vec();      // Extract to Vec<u8>
+/// ```
+///
+/// Supports `from_vec64()` for SIMD-aligned buffers, `from_owner()` for arbitrary
+/// containers, and `from_static()` for constant data.
 #[repr(C)]
 pub struct SharedBuffer {
     ptr: *const u8,

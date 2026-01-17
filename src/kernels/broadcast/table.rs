@@ -12,6 +12,8 @@ use crate::kernels::broadcast::broadcast_value;
 use crate::kernels::broadcast::table_view::broadcast_tableview_to_arrayview;
 use crate::kernels::routing::arithmetic::resolve_binary_arithmetic;
 use crate::structs::field_array::create_field_for_array;
+#[cfg(feature = "select")]
+use crate::traits::selection::ColumnSelection;
 use crate::{Array, ArrayV, Bitmask, Field, FieldArray, Table, TableV, Value};
 #[cfg(feature = "chunked")]
 use crate::{SuperArray, SuperArrayV, SuperTable, SuperTableV};
@@ -407,7 +409,7 @@ mod tests {
         assert_eq!(result.name, "table1"); // Takes name from left table
 
         // Check first column: [1,2,3] + [4,5,6] = [5,7,9]
-        if let Some(col1) = result.col(0) {
+        if let Some(col1) = result.col_ix(0) {
             if let crate::Array::NumericArray(crate::NumericArray::Int32(arr)) = &col1.array {
                 assert_eq!(arr.data.as_slice(), &[5, 7, 9]);
             } else {
@@ -418,7 +420,7 @@ mod tests {
         }
 
         // Check second column: [10,20,30] + [40,50,60] = [50,70,90]
-        if let Some(col2) = result.col(1) {
+        if let Some(col2) = result.col_ix(1) {
             if let crate::Array::NumericArray(crate::NumericArray::Int32(arr)) = &col2.array {
                 assert_eq!(arr.data.as_slice(), &[50, 70, 90]);
             } else {

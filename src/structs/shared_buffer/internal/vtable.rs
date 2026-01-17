@@ -30,6 +30,7 @@ use crate::structs::shared_buffer::internal::pvec::{
 /// - `is_unique`: Returns `true` if exclusively owned (refcount=1)
 /// - `to_vec`: Extracts `Vec<u8>` (zero-copy if unique, otherwise copies)
 /// - `to_vec64`: Like `to_vec` but produces SIMD-aligned `Vec64<u8>`
+/// - `memfd_fd`: Returns the memfd file descriptor if this is a memfd-backed buffer
 ///
 /// Each backend defines static `Vtable` instances (e.g., `OWNED_VT`, `STATIC_VT`)
 /// assigned at buffer creation.
@@ -39,6 +40,10 @@ pub(crate) struct Vtable {
     pub(crate) is_unique: unsafe fn(&AtomicPtr<()>) -> bool,
     pub(crate) to_vec: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> Vec<u8>,
     pub(crate) to_vec64: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> Vec64<u8>,
+    /// Returns the memfd file descriptor if this buffer is backed by a memfd.
+    /// Returns None for non-memfd backends.
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    pub(crate) memfd_fd: unsafe fn(&AtomicPtr<()>) -> Option<i32>,
 }
 
 /// Vtable for static/const data requiring no reference counting.
@@ -59,6 +64,8 @@ pub(crate) static STATIC_VT: Vtable = Vtable {
         }
         v
     },
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    memfd_fd: |_| None,
 };
 
 /// Vtable for Vec<u8> with lazy heap promotion (even variant).
@@ -82,10 +89,16 @@ pub(crate) static PROMO_EVEN_VT: Vtable = Vtable {
         }
         v
     },
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    memfd_fd: |_| None,
 };
 
 /// Vtable for Vec<u8> with lazy heap promotion (odd variant).
-pub(crate) static PROMO_ODD_VT: Vtable = Vtable { ..PROMO_EVEN_VT };
+pub(crate) static PROMO_ODD_VT: Vtable = Vtable {
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    memfd_fd: |_| None,
+    ..PROMO_EVEN_VT
+};
 
 /// Vtable for Vec64<u8> with lazy heap promotion (even variant).
 pub(crate) static PROMO64_EVEN_VT: Vtable = Vtable {
@@ -117,7 +130,13 @@ pub(crate) static PROMO64_EVEN_VT: Vtable = Vtable {
         }
         v
     },
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    memfd_fd: |_| None,
 };
 
 /// Vtable for Vec64<u8> with lazy heap promotion (odd variant).
-pub(crate) static PROMO64_ODD_VT: Vtable = Vtable { ..PROMO64_EVEN_VT };
+pub(crate) static PROMO64_ODD_VT: Vtable = Vtable {
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    memfd_fd: |_| None,
+    ..PROMO64_EVEN_VT
+};

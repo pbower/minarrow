@@ -268,6 +268,114 @@ impl<T> Buffer<T> {
         }
     }
 
+    /// Create a buffer backed by memfd for zero-copy cross-process sharing.
+    ///
+    /// The buffer is allocated in a memfd (anonymous file-backed memory) that can
+    /// be shared with other processes by passing the file descriptor.
+    ///
+    /// # Arguments
+    /// * `name` - Name for the memfd (visible in `/proc/pid/fd/`)
+    /// * `len` - Number of T elements to allocate
+    ///
+    /// # Returns
+    /// A Buffer backed by memfd, or IO error
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // Parent process
+    /// let buffer: Buffer<i64> = Buffer::from_memfd("my_data", 1000)?;
+    /// let fd = buffer.memfd_fd().unwrap();  // Pass this to child
+    ///
+    /// // Child process
+    /// let buffer: Buffer<i64> = Buffer::from_memfd_remote(parent_pid, fd, 1000)?;
+    /// // Same physical memory!
+    /// ```
+    ///
+    /// # Platform
+    /// Linux only - `memfd_create` is a Linux-specific syscall
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    pub fn from_memfd(name: &str, len: usize) -> std::io::Result<Self> {
+        use crate::structs::shared_buffer::MemfdBuffer;
+
+        let byte_size = len * std::mem::size_of::<T>();
+        let memfd = MemfdBuffer::new(name, byte_size)?;
+        // Use from_memfd_owner to preserve fd extraction capability
+        let shared = SharedBuffer::from_memfd_owner(memfd);
+
+        Ok(Self {
+            storage: Storage::Shared {
+                owner: shared,
+                offset: 0,
+                len,
+            },
+        })
+    }
+
+    /// Open a memfd-backed buffer from another process.
+    ///
+    /// Uses `/proc/{pid}/fd/{fd}` to access the memfd from the creator process.
+    /// The result shares the same physical memory as the original buffer.
+    ///
+    /// # Arguments
+    /// * `creator_pid` - PID of the process that created the memfd
+    /// * `fd` - File descriptor number in the creator's process
+    /// * `len` - Number of T elements in the buffer
+    ///
+    /// # Returns
+    /// A Buffer backed by the same memfd memory, or IO error
+    ///
+    /// # Security
+    /// Requires either:
+    /// - Same user as the creator process, or
+    /// - CAP_SYS_PTRACE capability
+    ///
+    /// # Platform
+    /// Linux only
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    pub fn from_memfd_remote(
+        creator_pid: u32,
+        fd: std::os::unix::io::RawFd,
+        len: usize,
+    ) -> std::io::Result<Self> {
+        use crate::structs::shared_buffer::MemfdBuffer;
+
+        let byte_size = len * std::mem::size_of::<T>();
+        let memfd = MemfdBuffer::reopen(creator_pid, fd, byte_size)?;
+        // Use from_memfd_owner to preserve fd extraction capability
+        let shared = SharedBuffer::from_memfd_owner(memfd);
+
+        Ok(Self {
+            storage: Storage::Shared {
+                owner: shared,
+                offset: 0,
+                len,
+            },
+        })
+    }
+
+    /// Returns the memfd file descriptor if this buffer is backed by a memfd.
+    ///
+    /// Use this to pass the fd to other processes for zero-copy sharing.
+    ///
+    /// # Returns
+    /// - `Some(fd)` if the buffer is memfd-backed
+    /// - `None` if the buffer is owned or backed by other shared memory types
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let buffer: Buffer<i64> = Buffer::from_memfd("data", 1000)?;
+    /// if let Some(fd) = buffer.memfd_fd() {
+    ///     // Pass fd to child process
+    /// }
+    /// ```
+    #[cfg(all(target_os = "linux", feature = "memfd"))]
+    pub fn memfd_fd(&self) -> Option<i32> {
+        match &self.storage {
+            Storage::Shared { owner, .. } => owner.memfd_fd(),
+            Storage::Owned(_) => None,
+        }
+    }
+
     /// Returns the buffer as a slice.
     #[inline]
     pub fn as_slice(&self) -> &[T] {

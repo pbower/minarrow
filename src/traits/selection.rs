@@ -45,45 +45,51 @@ pub trait DataSelector {
 // They define what selection methods are available on each structure.
 // These are "what the structure can do" for selection operations.
 
-/// Trait for types that support field selection
+/// Trait for types that support field/column selection
 pub trait ColumnSelection {
-    /// The view type returned by selection operations
+    /// The view type returned by multi-column selection
     type View;
+    /// The view type for a single column
+    type ColView;
 
-    /// Select fields (columns) by name or index
+    /// Select fields/columns by name, index, or range
+    ///
+    /// # Examples
+    /// table.c("age")           // single column by name
+    /// table.c(&["a", "b"])     // multiple columns by name
+    /// table.c(0)               // single column by index
+    /// table.c(0..3)            // columns by range
+    /// ```
     fn c<S: FieldSelector>(&self, selection: S) -> Self::View;
 
-    /// Select fields (columns) by name or index
-    fn select_cols<S: FieldSelector>(&self, selection: S) -> Self::View {
-        self.c(selection)
+    /// Alias for `c` - select column by name
+    fn col(&self, name: &str) -> Self::View {
+        self.c(name)
     }
 
-    /// Spatial alias for `.c()` - x-axis
-    fn x<S: FieldSelector>(&self, selection: S) -> Self::View {
-        self.c(selection)
-    }
+    /// Get a single column view by index
+    fn col_ix(&self, idx: usize) -> Option<Self::ColView>;
+
+    /// Get all columns as views
+    fn col_vec(&self) -> Vec<Self::ColView>;
 
     /// Get the fields for field resolution
     fn get_cols(&self) -> Vec<Arc<Field>>;
 }
 
-/// Trait for types that support data selection
+/// Trait for types that support row/data selection
 pub trait RowSelection {
     /// The view type returned by selection operations
     type View;
 
-    /// Select data (rows) by index or range
+    /// Select rows by index or range
+    ///
+    /// # Examples
+    /// table.r(5)               // single row
+    /// table.r(&[1, 3, 5])      // specific rows
+    /// table.r(0..10)           // row range
+    /// ```
     fn r<S: DataSelector>(&self, selection: S) -> Self::View;
-
-    /// Select data (rows) by index or range
-    fn select_rows<S: DataSelector>(&self, selection: S) -> Self::View {
-        self.r(selection)
-    }
-
-    /// Spatial alias for `.r()` - y-axis
-    fn y<S: DataSelector>(&self, selection: S) -> Self::View {
-        self.r(selection)
-    }
 
     /// Get the count for data resolution
     fn get_row_count(&self) -> usize;
@@ -92,14 +98,12 @@ pub trait RowSelection {
 /// Combined trait for 2D selection (field + data dimensions)
 ///
 /// This trait is automatically implemented for any type that implements
-/// both `FieldSelection` and `DataSelection` with the same `View` type.
+/// both `ColumnSelection` and `RowSelection` with the same `View` type.
 pub trait Selection2D: ColumnSelection + RowSelection {}
 
 /// Blanket implementation for any type that implements both traits
-impl<T> Selection2D for T where
-    T: ColumnSelection + RowSelection<View = <T as ColumnSelection>::View>
-{
-}
+impl<T> Selection2D for T where T: ColumnSelection + RowSelection<View = <T as ColumnSelection>::View>
+{}
 
 // These allow users to pass names, indices, and ranges when selecting fields.
 // For example: table.c("age"), table.c(&["name", "age"]), table.c(0..3)
