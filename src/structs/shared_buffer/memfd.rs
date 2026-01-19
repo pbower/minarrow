@@ -290,9 +290,9 @@ impl Drop for MemfdBuffer {
     }
 }
 
-// ============================================================================
+// 
 // Memfd-specific vtable for SharedBuffer
-// ============================================================================
+// 
 
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use crate::Vec64;

@@ -129,9 +129,9 @@ fn roundtrip_array(py: Python<'_>, array: Array) -> Result<Array, String> {
     Ok(back.into_inner().array)
 }
 
-// ============================================================================
+// 
 // Integer Array Tests
-// ============================================================================
+// 
 
 fn test_int32_roundtrip(py: Python<'_>) -> Result<(), String> {
     let mut arr = IntegerArray::<i32>::default();
@@ -253,9 +253,9 @@ fn test_uint64_roundtrip(py: Python<'_>) -> Result<(), String> {
     Ok(())
 }
 
-// ============================================================================
+// 
 // Float Array Tests
-// ============================================================================
+// 
 
 fn test_float32_roundtrip(py: Python<'_>) -> Result<(), String> {
     let mut arr = FloatArray::<f32>::default();
@@ -325,9 +325,9 @@ fn test_float64_roundtrip(py: Python<'_>) -> Result<(), String> {
     Ok(())
 }
 
-// ============================================================================
+// 
 // Boolean Array Tests
-// ============================================================================
+// 
 
 fn test_boolean_roundtrip(py: Python<'_>) -> Result<(), String> {
     let mut arr = BooleanArray::default();
@@ -357,9 +357,9 @@ fn test_boolean_roundtrip(py: Python<'_>) -> Result<(), String> {
     Ok(())
 }
 
-// ============================================================================
+// 
 // String Array Tests
-// ============================================================================
+// 
 
 fn test_string32_roundtrip(py: Python<'_>) -> Result<(), String> {
     let mut arr = StringArray::<u32>::default();
@@ -392,9 +392,9 @@ fn test_string32_roundtrip(py: Python<'_>) -> Result<(), String> {
     Ok(())
 }
 
-// ============================================================================
+// 
 // Nullable Array Tests
-// ============================================================================
+// 
 
 fn test_nullable_int32_roundtrip(py: Python<'_>) -> Result<(), String> {
     let mut arr = IntegerArray::<i32>::default();
@@ -539,9 +539,9 @@ fn test_nullable_boolean_roundtrip(py: Python<'_>) -> Result<(), String> {
     Ok(())
 }
 
-// ============================================================================
+// 
 // Table / RecordBatch Tests
-// ============================================================================
+// 
 
 fn test_table_roundtrip(py: Python<'_>) -> Result<(), String> {
     // Create arrays
@@ -683,9 +683,9 @@ fn test_table_with_nulls_roundtrip(py: Python<'_>) -> Result<(), String> {
     Ok(())
 }
 
-// ============================================================================
+// 
 // Edge Case Tests
-// ============================================================================
+// 
 
 fn test_empty_array_roundtrip(py: Python<'_>) -> Result<(), String> {
     let arr = IntegerArray::<i32>::default();

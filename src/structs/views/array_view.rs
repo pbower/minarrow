@@ -227,6 +227,76 @@ impl ArrayV {
         self.array.slice_clone(self.offset, self.len)
     }
 
+    /// Extract array data as `Vec64<T>`, casting numeric values if necessary.
+    ///
+    /// - If array type matches T exactly, copies the slice directly
+    /// - If array is a different numeric type, casts each element via `NumCast`
+    /// - Returns error if array type is not numeric or nulls are present
+    ///
+    /// # Example
+    /// ```ignore
+    /// let av = ArrayV::from(Array::from_float64(...));
+    /// let floats: Vec64<f64> = av.to_typed_vec::<f64>()?;
+    /// ```
+    pub fn to_typed_vec<T: crate::Numeric>(&self) -> Result<crate::Vec64<T>, crate::enums::error::KernelError> {
+        use crate::enums::error::KernelError;
+        use crate::{NumericArray, Vec64};
+        use num_traits::NumCast;
+
+        let offset = self.offset;
+        let len = self.len;
+
+        macro_rules! cast_slice {
+            ($arr:expr) => {{
+                let slice = &$arr.data.as_slice()[offset..offset + len];
+                slice
+                    .iter()
+                    .map(|&v| {
+                        NumCast::from(v).ok_or_else(|| {
+                            KernelError::UnsupportedType("numeric cast failed".into())
+                        })
+                    })
+                    .collect::<Result<Vec64<T>, _>>()
+            }};
+        }
+
+        match &self.array {
+            Array::NumericArray(num) => match num {
+                NumericArray::Int32(a) => cast_slice!(a),
+                NumericArray::Int64(a) => cast_slice!(a),
+                NumericArray::UInt32(a) => cast_slice!(a),
+                NumericArray::UInt64(a) => cast_slice!(a),
+                NumericArray::Float32(a) => cast_slice!(a),
+                NumericArray::Float64(a) => cast_slice!(a),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => cast_slice!(a),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => cast_slice!(a),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => cast_slice!(a),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => cast_slice!(a),
+                NumericArray::Null => {
+                    Err(KernelError::UnsupportedType("null numeric array".into()))
+                }
+            },
+            Array::BooleanArray(a) => {
+                // Convert bools to numeric: true=1, false=0
+                (0..len)
+                    .map(|i| {
+                        let v = a.get(offset + i).unwrap_or(false);
+                        NumCast::from(if v { 1u8 } else { 0u8 }).ok_or_else(|| {
+                            KernelError::UnsupportedType("bool to numeric cast failed".into())
+                        })
+                    })
+                    .collect::<Result<Vec64<T>, _>>()
+            }
+            _ => Err(KernelError::UnsupportedType(
+                "to_typed_vec requires a numeric array".into(),
+            )),
+        }
+    }
+
     /// Gather specific indices from this view into a new materialised Array.
     /// Indices are relative to this view's window.
     #[cfg(feature = "select")]
@@ -666,6 +736,18 @@ impl From<crate::TextArrayV> for ArrayV {
 impl From<crate::TemporalArrayV> for ArrayV {
     fn from(temporal_view: crate::TemporalArrayV) -> Self {
         temporal_view.into()
+    }
+}
+
+/// Scalar -> ArrayView
+///
+/// Converts a Scalar to a length-1 ArrayV, enabling scalar broadcasting
+/// in functions that accept `impl Into<ArrayV>`.
+#[cfg(feature = "scalar_type")]
+impl From<crate::Scalar> for ArrayV {
+    fn from(scalar: crate::Scalar) -> Self {
+        let array = scalar.array_from_value(1);
+        ArrayV::new(array, 0, 1)
     }
 }
 

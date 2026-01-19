@@ -7,7 +7,9 @@
 //! including broadcasting, type promotion, and operation dispatch.
 
 pub mod arithmetic;
+pub mod binary_map;
 pub mod broadcast;
 
 pub use arithmetic::resolve_binary_arithmetic;
+pub use binary_map::binary_map;
 pub use broadcast::{broadcast_length_1_array, maybe_broadcast_scalar_array};

@@ -588,9 +588,9 @@ cat_to_string!(u32, u64);
 #[cfg(feature = "extended_categorical")]
 cat_to_string!(u64, u64);
 
-// =============================================================================
+// =
 // StringArray<T>  ⇄  StringArray<U>
-// =============================================================================
+// =
 
 #[cfg(feature = "large_string")]
 impl From<&StringArray<u32>> for StringArray<u64> {

@@ -2087,6 +2087,74 @@ pub fn cast_slice<'a, U, T>(data: &'a [U], offset: usize, len: usize) -> Option<
     Some(unsafe { &*(&data[offset..offset + len] as *const [U] as *const [T]) })
 }
 
+// 
+// From<Vec64<T>> for Array - enables ergonomic array construction from Vec64
+// 
+
+impl From<Vec64<f64>> for Array {
+    fn from(vec: Vec64<f64>) -> Self {
+        Array::from_float64(FloatArray::from_vec64(vec, None).into())
+    }
+}
+
+impl From<Vec64<f32>> for Array {
+    fn from(vec: Vec64<f32>) -> Self {
+        Array::from_float32(FloatArray::from_vec64(vec, None).into())
+    }
+}
+
+impl From<Vec64<i64>> for Array {
+    fn from(vec: Vec64<i64>) -> Self {
+        Array::from_int64(IntegerArray::from_vec64(vec, None).into())
+    }
+}
+
+impl From<Vec64<i32>> for Array {
+    fn from(vec: Vec64<i32>) -> Self {
+        Array::from_int32(IntegerArray::from_vec64(vec, None).into())
+    }
+}
+
+impl From<Vec64<u64>> for Array {
+    fn from(vec: Vec64<u64>) -> Self {
+        Array::from_uint64(IntegerArray::from_vec64(vec, None).into())
+    }
+}
+
+impl From<Vec64<u32>> for Array {
+    fn from(vec: Vec64<u32>) -> Self {
+        Array::from_uint32(IntegerArray::from_vec64(vec, None).into())
+    }
+}
+
+#[cfg(feature = "extended_numeric_types")]
+impl From<Vec64<i16>> for Array {
+    fn from(vec: Vec64<i16>) -> Self {
+        Array::from_int16(IntegerArray::from_vec64(vec, None).into())
+    }
+}
+
+#[cfg(feature = "extended_numeric_types")]
+impl From<Vec64<i8>> for Array {
+    fn from(vec: Vec64<i8>) -> Self {
+        Array::from_int8(IntegerArray::from_vec64(vec, None).into())
+    }
+}
+
+#[cfg(feature = "extended_numeric_types")]
+impl From<Vec64<u16>> for Array {
+    fn from(vec: Vec64<u16>) -> Self {
+        Array::from_uint16(IntegerArray::from_vec64(vec, None).into())
+    }
+}
+
+#[cfg(feature = "extended_numeric_types")]
+impl From<Vec64<u8>> for Array {
+    fn from(vec: Vec64<u8>) -> Self {
+        Array::from_uint8(IntegerArray::from_vec64(vec, None).into())
+    }
+}
+
 impl Display for Array {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -3882,9 +3950,9 @@ fn array_category_name(arr: &Array) -> &'static str {
     }
 }
 
-// =============================================================================
+// =
 // RowSelection Implementation
-// =============================================================================
+// =
 
 #[cfg(all(feature = "select", feature = "views"))]
 impl crate::traits::selection::RowSelection for Array {
