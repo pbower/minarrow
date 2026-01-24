@@ -18,10 +18,10 @@ use crate::ArrayV;
 #[cfg(feature = "views")]
 use crate::SuperArrayV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
-use crate::traits::consolidate::Consolidate;
 use crate::ffi::arrow_dtype::ArrowType;
 #[cfg(feature = "size")]
 use crate::traits::byte_size::ByteSize;
+use crate::traits::consolidate::Consolidate;
 use crate::traits::{concatenate::Concatenate, shape::Shape};
 use crate::{Array, Field, FieldArray};
 

@@ -783,7 +783,10 @@ impl ColumnSelection for Table {
     }
 
     fn col_vec(&self) -> Vec<ArrayV> {
-        self.cols.iter().map(|fa| ArrayV::from(fa.clone())).collect()
+        self.cols
+            .iter()
+            .map(|fa| ArrayV::from(fa.clone()))
+            .collect()
     }
 
     fn get_cols(&self) -> Vec<Arc<Field>> {
@@ -902,7 +905,7 @@ mod tests {
 
         // col() returns TableV, col_ix(0) gets the single column as ArrayV
         let col_view = t.col("ints");
-        assert_eq!(col_view.cols.len(), 1);  // Column found
+        assert_eq!(col_view.cols.len(), 1); // Column found
         let av = col_view.col_ix(0).unwrap();
         assert_eq!(col_view.fields[0].name, "ints");
         match &av.array {

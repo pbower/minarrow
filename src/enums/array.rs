@@ -2087,9 +2087,9 @@ pub fn cast_slice<'a, U, T>(data: &'a [U], offset: usize, len: usize) -> Option<
     Some(unsafe { &*(&data[offset..offset + len] as *const [U] as *const [T]) })
 }
 
-// 
+//
 // From<Vec64<T>> for Array - enables ergonomic array construction from Vec64
-// 
+//
 
 impl From<Vec64<f64>> for Array {
     fn from(vec: Vec64<f64>) -> Self {

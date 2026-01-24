@@ -5,9 +5,9 @@
 //!
 //! Generic binary function application with broadcasting support.
 
+use crate::Numeric;
 use crate::enums::error::KernelError;
 use crate::kernels::routing::broadcast::maybe_broadcast_scalar_array;
-use crate::Numeric;
 use crate::{Array, ArrayV, Vec64};
 
 /// Apply a binary function element-wise with broadcasting.

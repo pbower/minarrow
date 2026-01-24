@@ -520,9 +520,7 @@ mod parallel_tests {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // Concatenate Trait Implementation
-// ═══════════════════════════════════════════════════════════════════════════
 
 impl<T: Integer> Concatenate for IntegerArray<T> {
     fn concat(

@@ -238,7 +238,9 @@ impl ArrayV {
     /// let av = ArrayV::from(Array::from_float64(...));
     /// let floats: Vec64<f64> = av.to_typed_vec::<f64>()?;
     /// ```
-    pub fn to_typed_vec<T: crate::Numeric>(&self) -> Result<crate::Vec64<T>, crate::enums::error::KernelError> {
+    pub fn to_typed_vec<T: crate::Numeric>(
+        &self,
+    ) -> Result<crate::Vec64<T>, crate::enums::error::KernelError> {
         use crate::enums::error::KernelError;
         use crate::{NumericArray, Vec64};
         use num_traits::NumCast;
@@ -659,7 +661,6 @@ impl ArrayV {
         self.null_count.set(count).map_err(|_| count)
     }
 }
-
 
 /// Array -> ArrayView
 ///

@@ -35,9 +35,9 @@ use crate::TableV;
 use crate::aliases::CubeV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
 use crate::ffi::arrow_dtype::ArrowType;
-use crate::traits::{concatenate::Concatenate, shape::Shape};
 #[cfg(all(feature = "views", feature = "select"))]
 use crate::traits::selection::ColumnSelection;
+use crate::traits::{concatenate::Concatenate, shape::Shape};
 use crate::{Field, Table};
 
 // Global counter for unnamed cube instances
@@ -170,7 +170,7 @@ impl Cube {
     }
 
     /// Returns the number of tables.
-    /// 
+    ///
     /// Alias for n_tables
     pub fn len(&self) -> usize {
         self.n_tables()
@@ -310,9 +310,7 @@ impl Cube {
             Some(
                 self.tables
                     .iter()
-                    .filter_map(|t| {
-                        t.col_name_index(name).and_then(|idx| t.cols().get(idx))
-                    })
+                    .filter_map(|t| t.col_name_index(name).and_then(|idx| t.cols().get(idx)))
                     .collect(),
             )
         }
@@ -376,9 +374,11 @@ impl Cube {
         name: &'a str,
     ) -> Option<impl Iterator<Item = &'a FieldArray> + 'a> {
         if self.has_col(name) {
-            Some(self.tables.iter().filter_map(move |t| {
-                t.col_name_index(name).and_then(|idx| t.cols().get(idx))
-            }))
+            Some(
+                self.tables
+                    .iter()
+                    .filter_map(move |t| t.col_name_index(name).and_then(|idx| t.cols().get(idx))),
+            )
         } else {
             None
         }

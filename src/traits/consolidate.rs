@@ -95,13 +95,13 @@ pub fn extend_null_mask(
 #[macro_export]
 macro_rules! consolidate_int_variant {
     ($slices:expr, $variant:ident, $ty:ty) => {{
+        use std::sync::Arc;
+        use $crate::enums::array::Array;
+        use $crate::enums::collections::numeric_array::NumericArray;
+        use $crate::structs::bitmask::Bitmask;
+        use $crate::structs::variants::integer::IntegerArray;
         use $crate::traits::consolidate::extend_null_mask;
         use $crate::traits::masked_array::MaskedArray;
-        use $crate::enums::collections::numeric_array::NumericArray;
-        use $crate::enums::array::Array;
-        use $crate::structs::variants::integer::IntegerArray;
-        use $crate::structs::bitmask::Bitmask;
-        use std::sync::Arc;
 
         let total_len: usize = $slices.iter().map(|s| s.len()).sum();
         let has_nulls = $slices.iter().any(|s| {
@@ -124,7 +124,13 @@ macro_rules! consolidate_int_variant {
             if let Array::NumericArray(NumericArray::$variant(arr)) = &slice.array {
                 let data: &[$ty] = &arr.data[slice.offset..slice.offset + slice.len()];
                 result.extend_from_slice(data);
-                extend_null_mask(&mut result_mask, current_len, arr.null_mask(), slice.offset, slice.len());
+                extend_null_mask(
+                    &mut result_mask,
+                    current_len,
+                    arr.null_mask(),
+                    slice.offset,
+                    slice.len(),
+                );
                 current_len += slice.len();
             }
         }
@@ -141,13 +147,13 @@ macro_rules! consolidate_int_variant {
 #[macro_export]
 macro_rules! consolidate_float_variant {
     ($slices:expr, $variant:ident, $ty:ty) => {{
+        use std::sync::Arc;
+        use $crate::enums::array::Array;
+        use $crate::enums::collections::numeric_array::NumericArray;
+        use $crate::structs::bitmask::Bitmask;
+        use $crate::structs::variants::float::FloatArray;
         use $crate::traits::consolidate::extend_null_mask;
         use $crate::traits::masked_array::MaskedArray;
-        use $crate::enums::collections::numeric_array::NumericArray;
-        use $crate::enums::array::Array;
-        use $crate::structs::variants::float::FloatArray;
-        use $crate::structs::bitmask::Bitmask;
-        use std::sync::Arc;
 
         let total_len: usize = $slices.iter().map(|s| s.len()).sum();
         let has_nulls = $slices.iter().any(|s| {
@@ -170,7 +176,13 @@ macro_rules! consolidate_float_variant {
             if let Array::NumericArray(NumericArray::$variant(arr)) = &slice.array {
                 let data: &[$ty] = &arr.data[slice.offset..slice.offset + slice.len()];
                 result.extend_from_slice(data);
-                extend_null_mask(&mut result_mask, current_len, arr.null_mask(), slice.offset, slice.len());
+                extend_null_mask(
+                    &mut result_mask,
+                    current_len,
+                    arr.null_mask(),
+                    slice.offset,
+                    slice.len(),
+                );
                 current_len += slice.len();
             }
         }
@@ -187,14 +199,14 @@ macro_rules! consolidate_float_variant {
 #[macro_export]
 macro_rules! consolidate_string_variant {
     ($slices:expr, $variant:ident, $offset_ty:ty) => {{
+        use std::sync::Arc;
+        use $crate::Vec64;
+        use $crate::enums::array::Array;
+        use $crate::enums::collections::text_array::TextArray;
+        use $crate::structs::bitmask::Bitmask;
+        use $crate::structs::variants::string::StringArray;
         use $crate::traits::consolidate::extend_null_mask;
         use $crate::traits::masked_array::MaskedArray;
-        use $crate::enums::collections::text_array::TextArray;
-        use $crate::enums::array::Array;
-        use $crate::structs::variants::string::StringArray;
-        use $crate::structs::bitmask::Bitmask;
-        use $crate::Vec64;
-        use std::sync::Arc;
 
         let total_len: usize = $slices.iter().map(|s| s.len()).sum();
 
@@ -236,12 +248,19 @@ macro_rules! consolidate_string_variant {
                     result_offsets.push(adjusted_offset);
                 }
 
-                extend_null_mask(&mut result_mask, current_len, arr.null_mask(), slice.offset, slice.len());
+                extend_null_mask(
+                    &mut result_mask,
+                    current_len,
+                    arr.null_mask(),
+                    slice.offset,
+                    slice.len(),
+                );
                 current_len += slice.len();
             }
         }
 
-        let result = StringArray::<$offset_ty>::from_parts(result_offsets, result_data, result_mask);
+        let result =
+            StringArray::<$offset_ty>::from_parts(result_offsets, result_data, result_mask);
         Array::TextArray(TextArray::$variant(Arc::new(result)))
     }};
 }
@@ -253,22 +272,23 @@ macro_rules! consolidate_string_variant {
 #[macro_export]
 macro_rules! consolidate_temporal_variant {
     ($slices:expr, $variant:ident, $ty:ty) => {{
+        use std::sync::Arc;
+        use $crate::enums::array::Array;
+        use $crate::enums::collections::temporal_array::TemporalArray;
+        use $crate::structs::bitmask::Bitmask;
+        use $crate::structs::variants::datetime::DatetimeArray;
         use $crate::traits::consolidate::extend_null_mask;
         use $crate::traits::masked_array::MaskedArray;
-        use $crate::enums::collections::temporal_array::TemporalArray;
-        use $crate::enums::array::Array;
-        use $crate::structs::variants::datetime::DatetimeArray;
-        use $crate::structs::bitmask::Bitmask;
-        use std::sync::Arc;
 
         let total_len: usize = $slices.iter().map(|s| s.len()).sum();
 
         // Extract time_unit from first slice
-        let time_unit = if let Array::TemporalArray(TemporalArray::$variant(arr)) = &$slices[0].array {
-            arr.time_unit.clone()
-        } else {
-            panic!("Expected TemporalArray::{}", stringify!($variant))
-        };
+        let time_unit =
+            if let Array::TemporalArray(TemporalArray::$variant(arr)) = &$slices[0].array {
+                arr.time_unit.clone()
+            } else {
+                panic!("Expected TemporalArray::{}", stringify!($variant))
+            };
 
         let has_nulls = $slices.iter().any(|s| {
             if let Array::TemporalArray(TemporalArray::$variant(arr)) = &s.array {
@@ -290,7 +310,13 @@ macro_rules! consolidate_temporal_variant {
             if let Array::TemporalArray(TemporalArray::$variant(arr)) = &slice.array {
                 let data: &[$ty] = &arr.data[slice.offset..slice.offset + slice.len()];
                 result.extend_from_slice(data);
-                extend_null_mask(&mut result_mask, current_len, arr.null_mask(), slice.offset, slice.len());
+                extend_null_mask(
+                    &mut result_mask,
+                    current_len,
+                    arr.null_mask(),
+                    slice.offset,
+                    slice.len(),
+                );
                 current_len += slice.len();
             }
         }

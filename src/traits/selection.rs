@@ -102,8 +102,10 @@ pub trait RowSelection {
 pub trait Selection2D: ColumnSelection + RowSelection {}
 
 /// Blanket implementation for any type that implements both traits
-impl<T> Selection2D for T where T: ColumnSelection + RowSelection<View = <T as ColumnSelection>::View>
-{}
+impl<T> Selection2D for T where
+    T: ColumnSelection + RowSelection<View = <T as ColumnSelection>::View>
+{
+}
 
 // These allow users to pass names, indices, and ranges when selecting fields.
 // For example: table.c("age"), table.c(&["name", "age"]), table.c(0..3)

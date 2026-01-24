@@ -34,17 +34,17 @@
 use std::sync::Arc;
 
 use crate::{
-    Array, ArrayV, ArrayVT, Field, SuperArray,
-    consolidate_int_variant, consolidate_float_variant, consolidate_string_variant,
-    enums::error::MinarrowError,
+    Array, ArrayV, ArrayVT, Field, SuperArray, consolidate_float_variant, consolidate_int_variant,
+    consolidate_string_variant,
     enums::collections::numeric_array::NumericArray,
     enums::collections::text_array::TextArray,
+    enums::error::MinarrowError,
     enums::shape_dim::ShapeDim,
     structs::bitmask::Bitmask,
     structs::variants::boolean::BooleanArray,
     structs::variants::categorical::CategoricalArray,
-    traits::{concatenate::Concatenate, consolidate::Consolidate, shape::Shape},
     traits::type_unions::Integer,
+    traits::{concatenate::Concatenate, consolidate::Consolidate, shape::Shape},
 };
 
 #[cfg(feature = "datetime")]
@@ -288,9 +288,9 @@ fn consolidate_text_slices(slices: &[ArrayV], first_text: &TextArray) -> Array {
 /// Consolidates CategoricalArray slices by directly extending indices.
 /// Requires all slices to share the same dictionary (same Arc pointer).
 fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV]) -> Array {
+    use crate::Vec64;
     use crate::traits::consolidate::extend_null_mask;
     use crate::traits::masked_array::MaskedArray;
-    use crate::Vec64;
 
     // Extract the dictionary from the first slice
     let first_dict = match &slices[0].array {
@@ -323,7 +323,9 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
         // Different dictionaries - fall back to standard concat which handles dictionary merging
         let mut iter = slices.iter().cloned();
         let first_slice = iter.next().unwrap();
-        let mut result = first_slice.array.slice_clone(first_slice.offset, first_slice.len());
+        let mut result = first_slice
+            .array
+            .slice_clone(first_slice.offset, first_slice.len());
         for slice in iter {
             let arr = slice.array.slice_clone(slice.offset, slice.len());
             result = result.concat(arr).expect("Failed to concatenate arrays");
@@ -363,7 +365,10 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
                         arr.data.len(),
                     )
                 };
-                (&data_slice[slice.offset..slice.offset + slice.len()], arr.null_mask())
+                (
+                    &data_slice[slice.offset..slice.offset + slice.len()],
+                    arr.null_mask(),
+                )
             }
             #[cfg(feature = "extended_categorical")]
             Array::TextArray(TextArray::Categorical8(arr)) => {
@@ -373,7 +378,10 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
                         arr.data.len(),
                     )
                 };
-                (&data_slice[slice.offset..slice.offset + slice.len()], arr.null_mask())
+                (
+                    &data_slice[slice.offset..slice.offset + slice.len()],
+                    arr.null_mask(),
+                )
             }
             #[cfg(feature = "extended_categorical")]
             Array::TextArray(TextArray::Categorical16(arr)) => {
@@ -383,7 +391,10 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
                         arr.data.len(),
                     )
                 };
-                (&data_slice[slice.offset..slice.offset + slice.len()], arr.null_mask())
+                (
+                    &data_slice[slice.offset..slice.offset + slice.len()],
+                    arr.null_mask(),
+                )
             }
             #[cfg(feature = "extended_categorical")]
             Array::TextArray(TextArray::Categorical64(arr)) => {
@@ -393,13 +404,22 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
                         arr.data.len(),
                     )
                 };
-                (&data_slice[slice.offset..slice.offset + slice.len()], arr.null_mask())
+                (
+                    &data_slice[slice.offset..slice.offset + slice.len()],
+                    arr.null_mask(),
+                )
             }
             _ => continue,
         };
 
         result_data.extend_from_slice(data);
-        extend_null_mask(&mut result_mask, current_len, null_mask, slice.offset, slice.len());
+        extend_null_mask(
+            &mut result_mask,
+            current_len,
+            null_mask,
+            slice.offset,
+            slice.len(),
+        );
         current_len += slice.len();
     }
 
@@ -1008,12 +1028,21 @@ mod tests {
     fn fa_datetime64(name: &str, vals: &[i64]) -> FieldArray {
         use crate::enums::time_units::TimeUnit;
         use crate::traits::masked_array::MaskedArray;
-        let mut arr = crate::DatetimeArray::<i64>::with_capacity(vals.len(), false, Some(TimeUnit::Milliseconds));
+        let mut arr = crate::DatetimeArray::<i64>::with_capacity(
+            vals.len(),
+            false,
+            Some(TimeUnit::Milliseconds),
+        );
         for &v in vals {
             arr.push(v);
         }
         let arr = Array::from_datetime_i64(arr);
-        let field = Field::new(name, ArrowType::Timestamp(TimeUnit::Milliseconds, None), false, None);
+        let field = Field::new(
+            name,
+            ArrowType::Timestamp(TimeUnit::Milliseconds, None),
+            false,
+            None,
+        );
         FieldArray::new(field, arr)
     }
 
@@ -1090,7 +1119,12 @@ mod tests {
         let string_arr = crate::StringArray::<u32>::from_slice(vals);
         let cat_arr = string_arr.to_categorical_array();
         let arr = Array::from_categorical32(cat_arr);
-        let field = Field::new(name, ArrowType::Dictionary(CategoricalIndexType::UInt32), false, None);
+        let field = Field::new(
+            name,
+            ArrowType::Dictionary(CategoricalIndexType::UInt32),
+            false,
+            None,
+        );
         FieldArray::new(field, arr)
     }
 
@@ -1140,7 +1174,12 @@ mod tests {
         let cat_arr = Arc::new(string_arr.to_categorical_array());
 
         // Create two FieldArrays pointing to slices of the same categorical
-        let field = Field::new("color", ArrowType::Dictionary(CategoricalIndexType::UInt32), false, None);
+        let field = Field::new(
+            "color",
+            ArrowType::Dictionary(CategoricalIndexType::UInt32),
+            false,
+            None,
+        );
 
         // First chunk: first 2 elements
         let arr1 = Array::TextArray(crate::TextArray::Categorical32(cat_arr.clone()));

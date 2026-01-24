@@ -40,11 +40,11 @@ use std::ffi::{CString, c_void};
 use std::sync::Arc;
 use std::{ptr, slice};
 
-use crate::structs::buffer::Buffer;
-use crate::structs::shared_buffer::SharedBuffer;
 use crate::ffi::arrow_dtype::ArrowType;
 use crate::ffi::arrow_dtype::CategoricalIndexType;
 use crate::ffi::schema::Schema;
+use crate::structs::buffer::Buffer;
+use crate::structs::shared_buffer::SharedBuffer;
 use crate::{
     Array, Bitmask, BooleanArray, CategoricalArray, Field, Float, FloatArray, Integer,
     IntegerArray, MaskedArray, StringArray, TextArray, Vec64, vec64,
@@ -65,7 +65,7 @@ use crate::{DatetimeArray, IntervalUnit, TemporalArray, TimeUnit};
 // instances or once to transmit a single array—depending on the use case.
 
 /// ArrowArray as per the Arrow C spec
-/// 
+///
 /// 1. Box::new(ArrowArray::empty()) - allocates ~80 bytes for the metadata struct
 /// 2. PyArrow's _export_to_c fills in the struct, setting buffers to point to PyArrow's memory
 /// 3. ForeignBuffer stores this Box and uses the buffers pointer for zero-copy access
@@ -453,7 +453,11 @@ fn export_string_array_to_c(
         .unwrap_or((ptr::null(), 0));
     // Arrow expects: [null, offsets, values]
     // For values buffer, only use it if non-empty; otherwise use null to avoid sentinel pointers
-    let values_buf_ptr = if values_len > 0 { values_ptr } else { ptr::null() };
+    let values_buf_ptr = if values_len > 0 {
+        values_ptr
+    } else {
+        ptr::null()
+    };
     let mut buf_ptrs = vec64![null_ptr, offsets_ptr, values_buf_ptr];
     let name_cstr = CString::new(schema.fields[0].name.clone()).unwrap();
     check_alignment(&mut buf_ptrs, len);
@@ -735,7 +739,9 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
             #[cfg(feature = "large_string")]
             ArrowType::LargeString => unsafe { import_utf8::<u64>(arr, None) },
             #[cfg(feature = "datetime")]
-            ArrowType::Date32 => unsafe { import_datetime::<i32>(arr, None, crate::TimeUnit::Days) },
+            ArrowType::Date32 => unsafe {
+                import_datetime::<i32>(arr, None, crate::TimeUnit::Days)
+            },
             #[cfg(feature = "datetime")]
             ArrowType::Date64 => unsafe {
                 import_datetime::<i64>(arr, None, crate::TimeUnit::Milliseconds)
@@ -875,7 +881,11 @@ pub unsafe fn import_from_c_owned(
             let tz = if fmt.len() > 4 {
                 let tz_bytes = &fmt[4..];
                 let tz_str = String::from_utf8_lossy(tz_bytes).into_owned();
-                if tz_str.is_empty() { None } else { Some(tz_str) }
+                if tz_str.is_empty() {
+                    None
+                } else {
+                    Some(tz_str)
+                }
             } else {
                 None
             };
@@ -891,32 +901,42 @@ pub unsafe fn import_from_c_owned(
         // Release the schema box (we don't need it for copying)
         drop(sch_box);
         let result = unsafe {
-            import_categorical(arr, sch, match &dtype {
-                ArrowType::Dictionary(i) => i.clone(),
-                #[cfg(feature = "extended_numeric_types")]
-                ArrowType::Int8 | ArrowType::UInt8 => {
-                    #[cfg(feature = "extended_categorical")]
-                    { CategoricalIndexType::UInt8 }
-                    #[cfg(not(feature = "extended_categorical"))]
-                    panic!("Extended categorical not enabled")
-                }
-                #[cfg(feature = "extended_numeric_types")]
-                ArrowType::Int16 | ArrowType::UInt16 => {
-                    #[cfg(feature = "extended_categorical")]
-                    { CategoricalIndexType::UInt16 }
-                    #[cfg(not(feature = "extended_categorical"))]
-                    panic!("Extended categorical not enabled")
-                }
-                ArrowType::Int32 | ArrowType::UInt32 => CategoricalIndexType::UInt32,
-                #[cfg(feature = "extended_numeric_types")]
-                ArrowType::Int64 | ArrowType::UInt64 => {
-                    #[cfg(feature = "extended_categorical")]
-                    { CategoricalIndexType::UInt64 }
-                    #[cfg(not(feature = "extended_categorical"))]
-                    panic!("Extended categorical not enabled")
-                }
-                _ => panic!("FFI: unsupported dictionary index type {:?}", dtype),
-            })
+            import_categorical(
+                arr,
+                sch,
+                match &dtype {
+                    ArrowType::Dictionary(i) => i.clone(),
+                    #[cfg(feature = "extended_numeric_types")]
+                    ArrowType::Int8 | ArrowType::UInt8 => {
+                        #[cfg(feature = "extended_categorical")]
+                        {
+                            CategoricalIndexType::UInt8
+                        }
+                        #[cfg(not(feature = "extended_categorical"))]
+                        panic!("Extended categorical not enabled")
+                    }
+                    #[cfg(feature = "extended_numeric_types")]
+                    ArrowType::Int16 | ArrowType::UInt16 => {
+                        #[cfg(feature = "extended_categorical")]
+                        {
+                            CategoricalIndexType::UInt16
+                        }
+                        #[cfg(not(feature = "extended_categorical"))]
+                        panic!("Extended categorical not enabled")
+                    }
+                    ArrowType::Int32 | ArrowType::UInt32 => CategoricalIndexType::UInt32,
+                    #[cfg(feature = "extended_numeric_types")]
+                    ArrowType::Int64 | ArrowType::UInt64 => {
+                        #[cfg(feature = "extended_categorical")]
+                        {
+                            CategoricalIndexType::UInt64
+                        }
+                        #[cfg(not(feature = "extended_categorical"))]
+                        panic!("Extended categorical not enabled")
+                    }
+                    _ => panic!("FFI: unsupported dictionary index type {:?}", dtype),
+                },
+            )
         };
         // Release the array after copying
         if let Some(release) = arr_box.release {
@@ -1186,7 +1206,11 @@ unsafe fn import_utf8<T: Integer>(
         len + 1,
         "UTF8: offsets length must be len+1"
     );
-    assert_eq!(offsets_slice[0].to_usize(), 0, "UTF8: first offset must be 0");
+    assert_eq!(
+        offsets_slice[0].to_usize(),
+        0,
+        "UTF8: first offset must be 0"
+    );
     let mut prev = 0usize;
     for (i, off) in offsets_slice.iter().enumerate().take(len + 1) {
         let cur = off.to_usize().expect("Error: could not unwrap usize");

@@ -915,9 +915,9 @@ mod tests {
     use crate::structs::field::Field;
     use crate::structs::field_array::FieldArray;
     use crate::structs::table::Table;
-    use crate::{Array, IntegerArray};
     #[cfg(feature = "select")]
     use crate::traits::selection::ColumnSelection;
+    use crate::{Array, IntegerArray};
 
     #[test]
     fn test_table_slice_from_table_and_access() {

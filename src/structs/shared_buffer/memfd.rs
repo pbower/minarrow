@@ -290,14 +290,14 @@ impl Drop for MemfdBuffer {
     }
 }
 
-// 
+//
 // Memfd-specific vtable for SharedBuffer
-// 
+//
 
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use crate::Vec64;
 use crate::structs::shared_buffer::SharedBuffer;
 use crate::structs::shared_buffer::internal::vtable::Vtable;
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 /// Reference-counted wrapper for MemfdBuffer.
 /// This is identical to Owned<T> but we know the concrete type.
@@ -437,16 +437,11 @@ mod tests {
         // Write some data
         let data = b"Test data for reopen";
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                data.as_ptr(),
-                memfd.ptr,
-                data.len(),
-            );
+            std::ptr::copy_nonoverlapping(data.as_ptr(), memfd.ptr, data.len());
         }
 
         // Reopen from the same process (simulates child process access)
-        let reopened =
-            MemfdBuffer::reopen(pid, fd, 512).expect("Failed to reopen memfd");
+        let reopened = MemfdBuffer::reopen(pid, fd, 512).expect("Failed to reopen memfd");
 
         // Verify we see the same data
         assert_eq!(&reopened.as_slice()[..data.len()], data);
@@ -485,8 +480,8 @@ mod tests {
     fn test_memfd_fd_extraction_from_buffer() {
         use crate::structs::buffer::Buffer;
 
-        let buffer: Buffer<i64> = Buffer::from_memfd("buffer_fd_test", 100)
-            .expect("Failed to create memfd buffer");
+        let buffer: Buffer<i64> =
+            Buffer::from_memfd("buffer_fd_test", 100).expect("Failed to create memfd buffer");
 
         // Should be able to extract the fd
         let fd = buffer.memfd_fd();

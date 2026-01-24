@@ -41,9 +41,7 @@ pub trait ByteSize {
     fn est_bytes(&self) -> usize;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // Base Buffer Type Implementations
-// ═══════════════════════════════════════════════════════════════════════════
 
 use crate::{Bitmask, Buffer, Vec64};
 
@@ -74,9 +72,7 @@ impl ByteSize for Bitmask {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // Concrete Array Type Implementations
-// ═══════════════════════════════════════════════════════════════════════════
 
 use crate::{BooleanArray, CategoricalArray, FloatArray, IntegerArray, StringArray};
 
@@ -146,9 +142,7 @@ impl<T> ByteSize for DatetimeArray<T> {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // Mid-Level Enum Implementations
-// ═══════════════════════════════════════════════════════════════════════════
 
 use crate::{NumericArray, TextArray};
 
@@ -209,9 +203,7 @@ impl ByteSize for TemporalArray {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // Top-Level Array Enum Implementation
-// ═══════════════════════════════════════════════════════════════════════════
 
 use crate::Array;
 
@@ -229,9 +221,7 @@ impl ByteSize for Array {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // High-Level Structure Implementations
-// ═══════════════════════════════════════════════════════════════════════════
 
 use crate::{Field, FieldArray, Table};
 
@@ -260,9 +250,7 @@ impl ByteSize for Table {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // View Type Implementations
-// ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(feature = "views")]
 use crate::{ArrayV, TableV};
@@ -356,9 +344,7 @@ impl ByteSize for SuperTable {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // Value Enum Implementation
-// ═══════════════════════════════════════════════════════════════════════════
 
 #[cfg(feature = "value_type")]
 use crate::Value;

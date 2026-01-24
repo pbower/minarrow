@@ -94,7 +94,6 @@ impl SuperTableV {
         self.slices.iter()
     }
 
-
     /// Returns a sub-window of this chunked slice object as a new ChunkedTableSlice.
     #[inline]
     pub fn slice(&self, mut offset: usize, mut len: usize) -> Self {

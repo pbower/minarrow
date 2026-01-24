@@ -647,7 +647,10 @@ impl Consolidate for SuperTable {
     /// # Panics
     /// Panics if the SuperTable is empty.
     fn consolidate(self) -> Table {
-        assert!(!self.batches.is_empty(), "consolidate() called on empty SuperTable");
+        assert!(
+            !self.batches.is_empty(),
+            "consolidate() called on empty SuperTable"
+        );
         let n_cols = self.schema.len();
         let mut unified_cols = Vec::with_capacity(n_cols);
 
