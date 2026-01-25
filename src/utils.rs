@@ -298,19 +298,22 @@ fn union_array_superarray_masks(
     super_array: &SuperArray,
 ) -> Result<Option<Bitmask>, MinarrowError> {
     let array_mask = array.null_mask();
-    let super_array_masks: Vec<_> = super_array
+    let super_array_masks: Vec<Option<&Bitmask>> = super_array
         .chunks()
         .iter()
-        .map(|chunk| chunk.array.null_mask())
+        .map(|chunk| chunk.null_mask())
         .collect();
 
-    let super_array_concatenated_mask = if super_array_masks.iter().any(|m| m.is_some()) {
+    let super_array_concatenated_mask = if super_array_masks
+        .iter()
+        .any(|m: &Option<&Bitmask>| m.is_some())
+    {
         let mut concatenated_bits = Vec::new();
         for (chunk, mask_opt) in super_array.chunks().iter().zip(super_array_masks.iter()) {
             if let Some(mask) = mask_opt {
                 concatenated_bits.extend((0..mask.len()).map(|i| mask.get(i)));
             } else {
-                concatenated_bits.extend(std::iter::repeat(true).take(chunk.array.len()));
+                concatenated_bits.extend(std::iter::repeat(true).take(chunk.len()));
             }
         }
         Some(Bitmask::from_bools(&concatenated_bits))
@@ -362,8 +365,8 @@ pub fn create_aligned_chunks_from_array(
     // Extract chunk lengths from SuperArray
     let chunk_lengths: Vec<usize> = super_array
         .chunks()
-        .into_iter()
-        .map(|chunk| chunk.array.len())
+        .iter()
+        .map(|chunk| chunk.len())
         .collect();
 
     // Create aligned chunks from Array using view function
@@ -396,7 +399,7 @@ pub fn create_aligned_chunks_from_array(
             }
 
             start = end;
-            let first_super_chunk = &super_array.chunks()[0].array;
+            let first_super_chunk = &super_array.chunks()[0];
             let field =
                 create_field_for_array(field_name, &array_chunk, Some(first_super_chunk), None);
             Ok(FieldArray::new(field, array_chunk))

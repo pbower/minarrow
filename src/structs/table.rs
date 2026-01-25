@@ -443,14 +443,24 @@ impl Table {
 
         for col in self.cols {
             let split_result = col.array.split(index, &col.field)?;
+            let field = col.field.clone();
 
             // Extract the two arrays from the SuperArray
-            let mut left_arrays = split_result.into_arrays();
-            let mut right_arrays = left_arrays.split_off(1);
+            let mut chunks = split_result.into_chunks();
+            let right_array = chunks.pop().expect("split should produce 2 chunks");
+            let left_array = chunks.pop().expect("split should produce 2 chunks");
 
-            // Should have one array each after split
-            let left_field = left_arrays.remove(0);
-            let right_field = right_arrays.remove(0);
+            // Reconstruct FieldArrays with the original field
+            let left_field = FieldArray {
+                field: field.clone(),
+                array: left_array,
+                null_count: 0, // Will be recomputed if needed
+            };
+            let right_field = FieldArray {
+                field,
+                array: right_array,
+                null_count: 0, // Will be recomputed if needed
+            };
 
             left_cols.push(left_field);
             right_cols.push(right_field);

@@ -3,6 +3,7 @@
 //! Contains From/TryFrom implementations and value creation macros.
 
 use super::Value;
+use super::impls::value_variant_name;
 #[cfg(feature = "cube")]
 use crate::Cube;
 #[cfg(feature = "matrix")]
@@ -23,7 +24,9 @@ use crate::{ArrayV, NumericArrayV, TableV, TextArrayV};
 use crate::TemporalArrayV;
 
 #[cfg(all(feature = "chunked", feature = "views"))]
-use crate::SuperArrayV;
+use crate::{SuperArrayV, SuperTableV};
+
+use crate::traits::custom_value::CustomValue;
 
 // Typed Accessors
 

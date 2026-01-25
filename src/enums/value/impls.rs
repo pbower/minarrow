@@ -1,9 +1,20 @@
+use super::Value;
+use crate::enums::error::MinarrowError;
+use crate::enums::shape_dim::ShapeDim;
+use crate::traits::concatenate::Concatenate;
+use crate::traits::shape::Shape;
+use crate::{BooleanArray, FloatArray, IntegerArray, StringArray};
+use std::sync::Arc;
+
+#[cfg(feature = "datetime")]
+use crate::DatetimeArray;
+
 /// Implements `PartialEq` for `Value`
 ///
 /// This includes special handling for the `Custom` type.
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        use Value::*;
+        use super::Value::*;
         match (self, other) {
             #[cfg(feature = "scalar_type")]
             (Scalar(a), Scalar(b)) => a == b,
@@ -116,7 +127,7 @@ impl Shape for Value {
 
 impl Concatenate for Value {
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
-        use Value::*;
+        use super::Value::*;
         match (self, other) {
             // Scalar + Scalar -> Array (length 2)
             #[cfg(feature = "scalar_type")]
@@ -444,7 +455,7 @@ fn scalar_variant_name(scalar: &crate::Scalar) -> &'static str {
 }
 
 /// Helper function to get value variant name for error messages
-fn value_variant_name(value: &Value) -> &'static str {
+pub(crate) fn value_variant_name(value: &Value) -> &'static str {
     match value {
         #[cfg(feature = "scalar_type")]
         Value::Scalar(_) => "Scalar",

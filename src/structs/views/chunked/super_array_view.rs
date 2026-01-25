@@ -1209,18 +1209,24 @@ mod tests {
 /// SuperArray -> SuperArrayV conversion
 impl From<SuperArray> for SuperArrayV {
     fn from(super_array: SuperArray) -> Self {
-        let field = super_array.field().clone();
-        let slices: Vec<ArrayV> = super_array
-            .chunks()
-            .iter()
-            .map(|fa| ArrayV::from(fa.clone()))
-            .collect();
         let len = super_array.len();
 
-        SuperArrayV {
-            slices,
-            len,
-            field: Arc::new(field),
-        }
+        // Get field from SuperArray or synthesise from first chunk
+        let field = if let Some(f) = super_array.field.clone() {
+            f
+        } else if let Some(chunk) = super_array.chunks.first() {
+            Arc::new(Field::new(
+                "data",
+                chunk.arrow_type(),
+                chunk.is_nullable(),
+                None,
+            ))
+        } else {
+            panic!("Cannot convert empty SuperArray with no field to SuperArrayV")
+        };
+
+        let slices: Vec<ArrayV> = super_array.chunks.into_iter().map(ArrayV::from).collect();
+
+        SuperArrayV { slices, len, field }
     }
 }

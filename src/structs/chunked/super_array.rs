@@ -1,16 +1,21 @@
 //! # **SuperArray** - *Holds multiple arrays for chunked data partitioning, streaming + fast memIO*
 //!
-//! Contains SuperArray, a higher-order container representing a logical column split into multiple immutable `FieldArray` chunks.
+//! Contains SuperArray, a higher-order container representing a logical column split into
+//! multiple immutable `Array` chunks with optional shared field metadata.
 //!
 //! ## Overview
 //! - Equivalent to Apache Arrow's `ChunkedArray`.
-//! - Stores an ordered list of `FieldArray` segments, each with identical field metadata.
+//! - Stores an ordered list of `Array` segments with shared field metadata.
 //! - Chunk lengths may vary.
 //! - A solid fit for append-only patterns, partitioned storage, and streaming data ingestion.
+//!
+//! ## Field Metadata
+//! - Field metadata is stored once at the SuperArray level, not per-chunk.
+//! - Use `from_arrays()` when you don't need field metadata (e.g., Dam consolidation)
+//! - Use `from_arrays_with_field()` when field metadata is required
 
 use std::fmt::{Display, Formatter};
 use std::iter::FromIterator;
-#[cfg(feature = "views")]
 use std::sync::Arc;
 
 #[cfg(feature = "views")]
@@ -41,47 +46,160 @@ pub enum RechunkStrategy {
 
 /// # SuperArray
 ///
-/// Higher-order container for multiple immutable `FieldArray` segments.
+/// Higher-order container for multiple immutable `Array` chunks with optional shared field metadata.
 ///
 /// ## Description
-/// - Stores an ordered sequence of `FieldArray` chunks, each with identical field metadata.
-/// - Equivalent to Apache Arrow’s `ChunkedArray` when sent over FFI, where it is treated
+/// - Stores an ordered sequence of `Array` chunks with a single optional `Field` for all.
+/// - Equivalent to Apache Arrow's `ChunkedArray` when sent over FFI, where it is treated
 ///   as a single logical column.
 /// - It can also serve as an unbounded or continuously growing
 ///   collection of segments, making it useful for streaming ingestion and partitioned storage.
 /// - Chunk lengths may vary without restriction.
 ///
+/// ## Field Metadata
+/// - Field metadata is stored once at the SuperArray level.
+/// - For streaming consolidation (e.g., Dam output), field may be `None`.
+/// - Use `field()` to access metadata optionally, `field_ref()` when metadata is required.
+///
 /// ## Example
 /// ```ignore
-/// // Create from multiple chunks with matching metadata
-/// let sa = SuperArray::from_chunks(vec![fa("col", &[1, 2], 0), fa("col", &[3], 0)]);
+/// // From raw arrays without field metadata
+/// let sa = SuperArray::from_arrays(vec![arr1, arr2]);
+/// assert!(sa.field().is_none());
 ///
-/// assert_eq!(sa.len(), 3);         // total rows across chunks
-/// assert_eq!(sa.n_chunks(), 2);    // number of chunks
-/// assert_eq!(sa.field().name, "col");
+/// // From arrays with field metadata
+/// let sa = SuperArray::from_arrays_with_field(
+///     vec![arr1, arr2],
+///     Field::new("col", ArrowType::Int32, false, None)
+/// );
+/// assert_eq!(sa.field().unwrap().name, "col");
+///
+/// // From FieldArrays (extracts field from first)
+/// let sa = SuperArray::from_field_array_chunks(vec![fa1, fa2]);
+/// assert_eq!(sa.field().unwrap().name, fa1.field.name);
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct SuperArray {
-    arrays: Vec<FieldArray>,
+    /// The underlying array chunks.
+    pub chunks: Vec<Array>,
+    /// Optional field metadata, shared by all chunks.
+    pub field: Option<Arc<Field>>,
+    /// Optional null counts per chunk. If present, must have same length as `chunks`.
+    pub null_counts: Option<Vec<usize>>,
 }
 
 impl SuperArray {
     // Constructors
 
-    /// Constructs an empty ChunkedArray.
+    /// Constructs an empty SuperArray with no field metadata.
     #[inline]
     pub fn new() -> Self {
-        Self { arrays: Vec::new() }
+        Self {
+            chunks: Vec::new(),
+            field: None,
+            null_counts: None,
+        }
     }
 
-    /// Constructs a ChunkedArray from `FieldArray` chunks.
+    /// Constructs a SuperArray from raw `Array` chunks without field metadata.
+    ///
+    /// Use this for streaming consolidation patterns where field metadata is not needed.
+    ///
+    /// # Panics
+    /// Panics if chunks have mismatched types.
+    pub fn from_arrays(chunks: Vec<Array>) -> Self {
+        if chunks.len() > 1 {
+            let dtype = chunks[0].arrow_type();
+            for (i, chunk) in chunks.iter().enumerate().skip(1) {
+                assert_eq!(
+                    chunk.arrow_type(),
+                    dtype,
+                    "Chunk {i} ArrowType mismatch (expected {:?}, got {:?})",
+                    dtype,
+                    chunk.arrow_type()
+                );
+            }
+        }
+        Self {
+            chunks,
+            field: None,
+            null_counts: None,
+        }
+    }
+
+    /// Constructs a SuperArray from raw `Array` chunks with field metadata.
+    ///
+    /// The field metadata applies to all chunks (they represent the same logical column).
+    ///
+    /// # Panics
+    /// Panics if chunks have mismatched types or don't match the field type.
+    pub fn from_arrays_with_field(chunks: Vec<Array>, field: impl Into<Arc<Field>>) -> Self {
+        let field = field.into();
+
+        for (i, chunk) in chunks.iter().enumerate() {
+            assert_eq!(
+                chunk.arrow_type(),
+                field.dtype,
+                "Chunk {i} ArrowType mismatch (expected {:?}, got {:?})",
+                field.dtype,
+                chunk.arrow_type()
+            );
+        }
+
+        Self {
+            chunks,
+            field: Some(field),
+            null_counts: None,
+        }
+    }
+
+    /// Constructs a SuperArray from raw `Array` chunks with null counts.
+    ///
+    /// # Panics
+    /// Panics if chunks have mismatched types or null_counts length doesn't match chunks length.
+    pub fn from_arrays_with_null_counts(chunks: Vec<Array>, null_counts: Vec<usize>) -> Self {
+        assert_eq!(
+            chunks.len(),
+            null_counts.len(),
+            "null_counts length ({}) must match chunks length ({})",
+            null_counts.len(),
+            chunks.len()
+        );
+
+        if chunks.len() > 1 {
+            let dtype = chunks[0].arrow_type();
+            for (i, chunk) in chunks.iter().enumerate().skip(1) {
+                assert_eq!(
+                    chunk.arrow_type(),
+                    dtype,
+                    "Chunk {i} ArrowType mismatch (expected {:?}, got {:?})",
+                    dtype,
+                    chunk.arrow_type()
+                );
+            }
+        }
+
+        Self {
+            chunks,
+            field: None,
+            null_counts: Some(null_counts),
+        }
+    }
+
+    /// Constructs a SuperArray from `FieldArray` chunks.
+    ///
+    /// Extracts field metadata and null counts from the chunks.
+    ///
+    /// # Panics
     /// Panics if chunks is empty or metadata/type/nullable mismatch is found.
     pub fn from_field_array_chunks(chunks: Vec<FieldArray>) -> Self {
         assert!(
             !chunks.is_empty(),
             "from_field_array_chunks: input chunks cannot be empty"
         );
-        let field = &chunks[0].field;
+
+        let field = chunks[0].field.clone();
+
         for (i, fa) in chunks.iter().enumerate().skip(1) {
             assert_eq!(
                 fa.field.dtype, field.dtype,
@@ -98,15 +216,25 @@ impl SuperArray {
                 field.name, fa.field.name
             );
         }
-        Self { arrays: chunks }
+
+        let null_counts: Vec<usize> = chunks.iter().map(|fa| fa.null_count).collect();
+        let arrays = chunks.into_iter().map(|fa| fa.array).collect();
+
+        Self {
+            chunks: arrays,
+            field: Some(field),
+            null_counts: Some(null_counts),
+        }
     }
 
     /// Construct from `Vec<FieldArray>`.
+    ///
+    /// Alias for `from_field_array_chunks`.
     pub fn from_chunks(chunks: Vec<FieldArray>) -> Self {
         Self::from_field_array_chunks(chunks)
     }
 
-    /// Materialises a `ChunkedArray` from an existing slice of `ArrayView` tuples,
+    /// Materialises a `SuperArray` from an existing slice of `ArrayView` tuples,
     /// using the provided field metadata (applied to all slices).
     ///
     /// Panics if the slice list is empty, or if any slice's type or nullability
@@ -115,7 +243,8 @@ impl SuperArray {
     pub fn from_slices(slices: &[ArrayV], field: Arc<Field>) -> Self {
         assert!(!slices.is_empty(), "from_slices requires non-empty slice");
 
-        let mut out = Vec::with_capacity(slices.len());
+        let mut arrays = Vec::with_capacity(slices.len());
+        let mut null_counts = Vec::with_capacity(slices.len());
         for (i, view) in slices.iter().enumerate() {
             assert_eq!(
                 view.array.arrow_type(),
@@ -127,38 +256,42 @@ impl SuperArray {
                 field.nullable,
                 "Slice {i} nullability does not match field"
             );
-            out.push(FieldArray {
-                field: field.clone(),
-                array: view.array.slice_clone(view.offset, view.len()),
-                null_count: view.null_count(),
-            });
+            arrays.push(view.array.slice_clone(view.offset, view.len()));
+            null_counts.push(view.null_count());
         }
 
-        Self { arrays: out }
+        Self {
+            chunks: arrays,
+            field: Some(field),
+            null_counts: Some(null_counts),
+        }
     }
 
     /// Returns a zero-copy view of this chunked array over the window `[offset..offset+len)`.
     ///
     /// If the chunks are fragmented in memory, access patterns may result in
     /// degraded cache locality and reduced SIMD optimisation.
+    ///
+    /// # Panics
+    /// Panics if field metadata is not present.
     #[cfg(feature = "views")]
     pub fn slice(&self, offset: usize, len: usize) -> SuperArrayV {
         assert!(offset + len <= self.len(), "slice out of bounds");
+        let field = self.field.clone().expect("slice() requires field metadata");
 
         let mut remaining = len;
         let mut off = offset;
         let mut slices = Vec::new();
-        let field = self.field().clone();
 
-        for fa in &self.arrays {
-            let this_len = fa.len();
+        for chunk in &self.chunks {
+            let this_len = chunk.len();
             if off >= this_len {
                 off -= this_len;
                 continue;
             }
 
             let take = remaining.min(this_len - off);
-            slices.push(ArrayV::new(fa.array.clone(), off, take));
+            slices.push(ArrayV::new(chunk.clone(), off, take));
             remaining -= take;
 
             if remaining == 0 {
@@ -167,42 +300,74 @@ impl SuperArray {
             off = 0;
         }
 
-        SuperArrayV {
-            slices,
-            len,
-            field: field.into(),
-        }
+        SuperArrayV { slices, len, field }
     }
 
     // Metadata
 
-    /// Returns the field metadata from the first chunk (guaranteed by constructor).
+    /// Returns the field metadata if present.
     #[inline]
-    pub fn field(&self) -> &Field {
-        &self.arrays[0].field
+    pub fn field(&self) -> Option<&Field> {
+        self.field.as_deref()
     }
 
-    /// Returns the Arrow physical type.
+    /// Returns the field metadata, panicking if not present.
+    ///
+    /// Use this when field metadata is required (e.g., for schema operations).
+    #[inline]
+    pub fn field_ref(&self) -> &Field {
+        self.field
+            .as_ref()
+            .expect("field_ref() called but SuperArray has no field metadata")
+    }
+
+    /// Returns `true` if this SuperArray has field metadata.
+    #[inline]
+    pub fn has_field(&self) -> bool {
+        self.field.is_some()
+    }
+
+    /// Returns the Arc-wrapped field if present.
+    #[inline]
+    pub fn field_arc(&self) -> Option<&Arc<Field>> {
+        self.field.as_ref()
+    }
+
+    /// Returns the Arrow physical type from the first chunk.
+    ///
+    /// Falls back to field metadata if no chunks present.
+    ///
+    /// # Panics
+    /// Panics if both chunks and field are empty/None.
     #[inline]
     pub fn arrow_type(&self) -> ArrowType {
-        self.arrays[0].field.dtype.clone()
+        if let Some(chunk) = self.chunks.first() {
+            chunk.arrow_type()
+        } else if let Some(ref field) = self.field {
+            field.dtype.clone()
+        } else {
+            panic!("arrow_type() called on empty SuperArray with no field")
+        }
     }
 
     /// Returns the nullability flag.
+    ///
+    /// # Panics
+    /// Panics if field metadata is not present.
     #[inline]
     pub fn is_nullable(&self) -> bool {
-        self.arrays[0].field.nullable
+        self.field_ref().nullable
     }
 
     /// Returns the number of logical chunks.
     #[inline]
     pub fn n_chunks(&self) -> usize {
-        self.arrays.len()
+        self.chunks.len()
     }
 
     /// Returns total logical length (sum of all chunk lengths).
     pub fn len(&self) -> usize {
-        self.arrays.iter().map(|c| c.len()).sum()
+        self.chunks.iter().map(|c| c.len()).sum()
     }
 
     /// Returns true if the array has no chunks or all chunks are empty.
@@ -213,41 +378,108 @@ impl SuperArray {
 
     // Chunk Access
 
-    /// Returns a read-only reference to all underlying chunks.
-    #[inline]
-    pub fn chunks(&self) -> &[FieldArray] {
-        &self.arrays
-    }
-    /// Returns a mutable reference to the underlying chunks.
-    #[inline]
-    pub fn chunks_mut(&mut self) -> &mut [FieldArray] {
-        &mut self.arrays
-    }
-
     /// Returns a reference to a specific chunk, if it exists.
     #[inline]
-    pub fn chunk(&self, idx: usize) -> Option<&FieldArray> {
-        self.arrays.get(idx)
+    pub fn chunk(&self, idx: usize) -> Option<&Array> {
+        self.chunks.get(idx)
+    }
+
+    /// Returns the null count for a specific chunk, if available.
+    #[inline]
+    pub fn chunk_null_count(&self, idx: usize) -> Option<usize> {
+        self.null_counts
+            .as_ref()
+            .and_then(|nc| nc.get(idx).copied())
     }
 
     // Mutation
 
-    /// Validates and appends a new chunk.
+    /// Appends a raw array chunk.
+    ///
+    /// If null counts are being tracked, the null count is computed from the
+    /// array's null_mask. If you already know the null count, use
+    /// `push_with_null_count()` to avoid recomputation.
     ///
     /// # Panics
-    /// If the chunk does not match the expected type or nullability.
-    pub fn push(&mut self, chunk: FieldArray) {
-        if self.arrays.is_empty() {
-            self.arrays.push(chunk);
-        } else {
-            let f = &self.arrays[0].field;
-            assert_eq!(chunk.field.dtype, f.dtype, "Chunk ArrowType mismatch");
+    /// Panics if the chunk type doesn't match existing chunks or field.
+    pub fn push(&mut self, chunk: Array) {
+        if let Some(first) = self.chunks.first() {
             assert_eq!(
-                chunk.field.nullable, f.nullable,
+                chunk.arrow_type(),
+                first.arrow_type(),
+                "Chunk ArrowType mismatch"
+            );
+        } else if let Some(ref field) = self.field {
+            assert_eq!(
+                chunk.arrow_type(),
+                field.dtype,
+                "Chunk ArrowType mismatch with field"
+            );
+        }
+        // If tracking null counts, compute from the array's null_mask
+        if let Some(ref mut nc) = self.null_counts {
+            nc.push(chunk.null_count());
+        }
+        self.chunks.push(chunk);
+    }
+
+    /// Appends a raw array chunk with its null count.
+    ///
+    /// When the null count is already known this is slightly faster than `push`
+    pub fn push_with_null_count(&mut self, chunk: Array, null_count: usize) {
+        if let Some(first) = self.chunks.first() {
+            assert_eq!(
+                chunk.arrow_type(),
+                first.arrow_type(),
+                "Chunk ArrowType mismatch"
+            );
+        } else if let Some(ref field) = self.field {
+            assert_eq!(
+                chunk.arrow_type(),
+                field.dtype,
+                "Chunk ArrowType mismatch with field"
+            );
+        }
+        self.chunks.push(chunk);
+        if let Some(ref mut nc) = self.null_counts {
+            nc.push(null_count);
+        } else {
+            self.null_counts = Some(vec![null_count]);
+        }
+    }
+
+    /// Validates and appends a FieldArray chunk.
+    ///
+    /// If this SuperArray has no field metadata yet, it will be set from the chunk.
+    ///
+    /// # Panics
+    /// If the chunk does not match the expected type, nullability, or field name.
+    pub fn push_field_array(&mut self, chunk: FieldArray) {
+        if let Some(ref field) = self.field {
+            assert_eq!(chunk.field.dtype, field.dtype, "Chunk ArrowType mismatch");
+            assert_eq!(
+                chunk.field.nullable, field.nullable,
                 "Chunk nullability mismatch"
             );
-            assert_eq!(chunk.field.name, f.name, "Chunk field name mismatch");
-            self.arrays.push(chunk);
+            assert_eq!(chunk.field.name, field.name, "Chunk field name mismatch");
+        } else if !self.chunks.is_empty() {
+            assert_eq!(
+                chunk.array.arrow_type(),
+                self.chunks[0].arrow_type(),
+                "Chunk ArrowType mismatch"
+            );
+        }
+
+        // Set field from first push if not already set
+        if self.field.is_none() {
+            self.field = Some(chunk.field.clone());
+        }
+
+        self.chunks.push(chunk.array);
+        if let Some(ref mut nc) = self.null_counts {
+            nc.push(chunk.null_count);
+        } else {
+            self.null_counts = Some(vec![chunk.null_count]);
         }
     }
 
@@ -261,7 +493,7 @@ impl SuperArray {
     /// * `other` - SuperArray or Array to insert (via `Into<SuperArray>`)
     ///
     /// # Requirements
-    /// - Field metadata (name, type, nullability) must match
+    /// - Array types must match
     /// - `index` must be <= `self.len()`
     ///
     /// # Strategy
@@ -270,7 +502,7 @@ impl SuperArray {
     ///
     /// # Errors
     /// - `IndexError` if index > len()
-    /// - Schema mismatch if field metadata doesn't match
+    /// - Type mismatch if array types don't match
     pub fn insert_rows(
         &mut self,
         index: usize,
@@ -292,55 +524,35 @@ impl SuperArray {
             return Ok(());
         }
 
-        // Validate schema match
-        if !self.arrays.is_empty() {
-            let self_field = &self.arrays[0].field;
-            let other_field = &other.arrays[0].field;
+        // Validate type match
+        if !self.chunks.is_empty() && !other.chunks.is_empty() {
+            let self_type = self.chunks[0].arrow_type();
+            let other_type = other.chunks[0].arrow_type();
 
-            if self_field.name != other_field.name {
-                return Err(MinarrowError::IncompatibleTypeError {
-                    from: "SuperArray",
-                    to: "SuperArray",
-                    message: Some(format!(
-                        "Field name mismatch: '{}' vs '{}'",
-                        self_field.name, other_field.name
-                    )),
-                });
-            }
-
-            if self_field.dtype != other_field.dtype {
+            if self_type != other_type {
                 return Err(MinarrowError::IncompatibleTypeError {
                     from: "SuperArray",
                     to: "SuperArray",
                     message: Some(format!(
                         "Type mismatch: {:?} vs {:?}",
-                        self_field.dtype, other_field.dtype
-                    )),
-                });
-            }
-
-            if self_field.nullable != other_field.nullable {
-                return Err(MinarrowError::IncompatibleTypeError {
-                    from: "SuperArray",
-                    to: "SuperArray",
-                    message: Some(format!(
-                        "Nullable mismatch: {} vs {}",
-                        self_field.nullable, other_field.nullable
+                        self_type, other_type
                     )),
                 });
             }
         }
 
-        // Handle empty self - just append other's chunks
-        if self.arrays.is_empty() {
-            self.arrays = other.arrays;
+        // Handle empty self - just take other's data
+        if self.chunks.is_empty() {
+            self.chunks = other.chunks;
+            self.field = other.field;
+            self.null_counts = other.null_counts;
             return Ok(());
         }
 
         // Find which chunk contains the insertion index
         let mut cumulative = 0;
         let mut chunk_idx = None;
-        for (i, chunk) in self.arrays.iter().enumerate() {
+        for (i, chunk) in self.chunks.iter().enumerate() {
             let chunk_len = chunk.len();
 
             // Check if index falls within this chunk or at its boundary
@@ -356,47 +568,64 @@ impl SuperArray {
             MinarrowError::IndexError(format!("Failed to find chunk for index {}", index))
         })?;
 
-        let target_chunk_len = self.arrays[target_idx].len();
+        let target_chunk_len = self.chunks[target_idx].len();
+
+        // Get field for split operations (required by Array::split)
+        let field = self.field.clone().unwrap_or_else(|| {
+            Arc::new(Field::new(
+                "data",
+                self.chunks[0].arrow_type(),
+                self.chunks[0].is_nullable(),
+                None,
+            ))
+        });
 
         // Handle edge cases: prepend or append to a chunk without splitting
         if local_index == 0 {
             // Insert before target chunk
-            let mut new_chunks = Vec::with_capacity(self.arrays.len() + other.arrays.len());
-            new_chunks.extend(self.arrays.drain(0..target_idx));
-            new_chunks.extend(other.arrays.into_iter());
-            new_chunks.extend(self.arrays.drain(..));
-            self.arrays = new_chunks;
+            let mut new_chunks = Vec::with_capacity(self.chunks.len() + other.chunks.len());
+            new_chunks.extend(self.chunks.drain(0..target_idx));
+            new_chunks.extend(other.chunks.into_iter());
+            new_chunks.extend(self.chunks.drain(..));
+            self.chunks = new_chunks;
+            // Note: null_counts tracking is invalidated by this operation
+            self.null_counts = None;
         } else if local_index == target_chunk_len {
             // Insert after target chunk
-            let mut new_chunks = Vec::with_capacity(self.arrays.len() + other.arrays.len());
-            new_chunks.extend(self.arrays.drain(0..=target_idx));
-            new_chunks.extend(other.arrays.into_iter());
-            new_chunks.extend(self.arrays.drain(..));
-            self.arrays = new_chunks;
+            let mut new_chunks = Vec::with_capacity(self.chunks.len() + other.chunks.len());
+            new_chunks.extend(self.chunks.drain(0..=target_idx));
+            new_chunks.extend(other.chunks.into_iter());
+            new_chunks.extend(self.chunks.drain(..));
+            self.chunks = new_chunks;
+            // Note: null_counts tracking is invalidated by this operation
+            self.null_counts = None;
         } else {
             // Split the target chunk at the insertion point
-            let target_chunk = self.arrays.remove(target_idx);
-            let mut split_chunks = target_chunk.array.split(local_index, &target_chunk.field)?;
+            let target_chunk = self.chunks.remove(target_idx);
+            let split_result = target_chunk.split(local_index, &field)?;
+            let split_arrays: Vec<Array> = split_result.chunks;
 
             // Build new chunk list: left chunk + other's chunks + right chunk
-            let mut new_chunks = Vec::with_capacity(self.arrays.len() + other.arrays.len() + 2);
+            let mut new_chunks = Vec::with_capacity(self.chunks.len() + other.chunks.len() + 2);
 
             // Add chunks before target
-            new_chunks.extend(self.arrays.drain(0..target_idx));
+            new_chunks.extend(self.chunks.drain(0..target_idx));
 
             // Add left half of split
-            new_chunks.extend(split_chunks.arrays.drain(0..1));
+            new_chunks.push(split_arrays[0].clone());
 
             // Add other's chunks
-            new_chunks.extend(other.arrays.into_iter());
+            new_chunks.extend(other.chunks.into_iter());
 
             // Add right half of split
-            new_chunks.extend(split_chunks.arrays.drain(..));
+            new_chunks.push(split_arrays[1].clone());
 
             // Add remaining chunks after target
-            new_chunks.extend(self.arrays.drain(..));
+            new_chunks.extend(self.chunks.drain(..));
 
-            self.arrays = new_chunks;
+            self.chunks = new_chunks;
+            // Note: null_counts tracking is invalidated by this operation
+            self.null_counts = None;
         }
 
         Ok(())
@@ -405,7 +634,7 @@ impl SuperArray {
     /// Rechunks the array according to the specified strategy.
     ///
     /// Redistributes data across chunks using an efficient incremental approach
-    /// that avoids full materialization:
+    /// that avoids full materialisation:
     /// - `Count(n)`: Creates chunks of `n` elements. The last chunk may be smaller.
     /// - `Auto`: Uses a default size of 8192 elements
     /// - `Memory(bytes)`: Targets a specific memory size per chunk
@@ -429,7 +658,7 @@ impl SuperArray {
     /// array.rechunk(RechunkStrategy::Memory(65536))?;
     /// ```
     pub fn rechunk(&mut self, strategy: RechunkStrategy) -> Result<(), MinarrowError> {
-        if self.arrays.is_empty() || self.len() == 0 {
+        if self.chunks.is_empty() || self.len() == 0 {
             return Ok(());
         }
 
@@ -460,16 +689,25 @@ impl SuperArray {
         };
 
         // Fast path: single chunk already at target size
-        if self.arrays.len() == 1 && self.arrays[0].len() == chunk_size {
+        if self.chunks.len() == 1 && self.chunks[0].len() == chunk_size {
             return Ok(());
         }
 
-        let field = self.arrays[0].field.clone();
-        let mut new_chunks = Vec::new();
-        let mut accumulator: Option<FieldArray> = None;
+        // Get or create field for split operations
+        let field = self.field.clone().unwrap_or_else(|| {
+            Arc::new(Field::new(
+                "data",
+                self.chunks[0].arrow_type(),
+                self.chunks[0].is_nullable(),
+                None,
+            ))
+        });
+
+        let mut new_chunks: Vec<Array> = Vec::new();
+        let mut accumulator: Option<Array> = None;
 
         // Process each existing chunk
-        for chunk in self.arrays.drain(..) {
+        for chunk in self.chunks.drain(..) {
             let mut remaining = chunk;
 
             while remaining.len() > 0 {
@@ -488,10 +726,10 @@ impl SuperArray {
                         break; // consumed remaining
                     } else {
                         // Split remaining chunk to complete accumulator
-                        let split_result = remaining.array.split(needed, &field)?;
-                        let mut parts = split_result.into_arrays();
-                        let to_add = parts.remove(0);
-                        remaining = parts.remove(0);
+                        let split_result = remaining.split(needed, &field)?;
+                        let parts = split_result.chunks;
+                        let to_add = parts[0].clone();
+                        remaining = parts[1].clone();
 
                         // Complete and emit the accumulator
                         *acc = acc.clone().concat(to_add)?;
@@ -505,10 +743,10 @@ impl SuperArray {
                         break;
                     } else if remaining.len() > chunk_size {
                         // Split off one chunk_size portion
-                        let split_result = remaining.array.split(chunk_size, &field)?;
-                        let mut parts = split_result.into_arrays();
-                        new_chunks.push(parts.remove(0));
-                        remaining = parts.remove(0);
+                        let split_result = remaining.split(chunk_size, &field)?;
+                        let parts = split_result.chunks;
+                        new_chunks.push(parts[0].clone());
+                        remaining = parts[1].clone();
                     } else {
                         // Remaining becomes new accumulator
                         accumulator = Some(remaining);
@@ -523,7 +761,9 @@ impl SuperArray {
             new_chunks.push(final_chunk);
         }
 
-        self.arrays = new_chunks;
+        self.chunks = new_chunks;
+        // Null counts are invalidated by rechunking
+        self.null_counts = None;
         Ok(())
     }
 
@@ -559,7 +799,7 @@ impl SuperArray {
             )));
         }
 
-        if up_to_index == 0 || self.arrays.is_empty() {
+        if up_to_index == 0 || self.chunks.is_empty() {
             return Ok(());
         }
 
@@ -568,11 +808,21 @@ impl SuperArray {
             return self.rechunk(strategy);
         }
 
+        // Get or create field for split operations
+        let field = self.field.clone().unwrap_or_else(|| {
+            Arc::new(Field::new(
+                "data",
+                self.chunks[0].arrow_type(),
+                self.chunks[0].is_nullable(),
+                None,
+            ))
+        });
+
         // Find which chunks contain the data up to up_to_index
         let mut current_offset = 0;
         let mut split_point = 0;
 
-        for (i, chunk) in self.arrays.iter().enumerate() {
+        for (i, chunk) in self.chunks.iter().enumerate() {
             let chunk_end = current_offset + chunk.len();
             if chunk_end > up_to_index {
                 split_point = i;
@@ -582,38 +832,46 @@ impl SuperArray {
         }
 
         // Extract chunks to rechunk and chunks to keep
-        let mut to_rechunk = self.arrays.drain(..=split_point).collect::<Vec<_>>();
-        let keep_chunks = self.arrays.drain(..).collect::<Vec<_>>();
+        let mut to_rechunk: Vec<Array> = self.chunks.drain(..=split_point).collect();
+        let keep_chunks: Vec<Array> = self.chunks.drain(..).collect();
 
         // If the split chunk needs to be divided
         if current_offset < up_to_index {
             let split_chunk = to_rechunk.pop().unwrap();
             let split_at = up_to_index - current_offset;
-            let field = split_chunk.field.clone();
 
-            let split_result = split_chunk.array.split(split_at, &field)?;
-            let mut parts = split_result.into_arrays();
-            to_rechunk.push(parts.remove(0));
-            self.arrays.push(parts.remove(0));
+            let split_result = split_chunk.split(split_at, &field)?;
+            let parts = split_result.chunks;
+            to_rechunk.push(parts[0].clone());
+            self.chunks.push(parts[1].clone());
         }
 
         // Rechunk the selected portion
-        self.arrays.extend(keep_chunks);
-        let mut temp = SuperArray::from_field_array_chunks(to_rechunk);
+        self.chunks.extend(keep_chunks);
+        let mut temp = SuperArray::from_arrays(to_rechunk);
+        temp.field = self.field.clone();
         temp.rechunk(strategy)?;
 
         // Reconstruct rechunked portion + untouched portion
-        let mut result = temp.arrays;
-        result.extend(self.arrays.drain(..));
-        self.arrays = result;
+        let mut result = temp.chunks;
+        result.extend(self.chunks.drain(..));
+        self.chunks = result;
+        // Null counts are invalidated
+        self.null_counts = None;
 
         Ok(())
     }
 
-    /// Consumes the SuperArray and returns the underlying Vec<FieldArray> chunks.
+    /// Consumes the SuperArray and returns the underlying chunks.
     #[inline]
-    pub fn into_arrays(self) -> Vec<FieldArray> {
-        self.arrays
+    pub fn into_chunks(self) -> Vec<Array> {
+        self.chunks
+    }
+
+    /// Returns a reference to the underlying chunks.
+    #[inline]
+    pub fn chunks(&self) -> &[Array] {
+        &self.chunks
     }
 }
 
@@ -630,11 +888,24 @@ impl FromIterator<FieldArray> for SuperArray {
     }
 }
 
-// FieldArray -> ChunkedArray (Vec<FieldArray> of single entry)
+// FieldArray -> SuperArray (single chunk with field metadata)
 impl From<FieldArray> for SuperArray {
-    fn from(field_array: FieldArray) -> Self {
+    fn from(fa: FieldArray) -> Self {
         SuperArray {
-            arrays: vec![field_array],
+            chunks: vec![fa.array],
+            field: Some(fa.field),
+            null_counts: Some(vec![fa.null_count]),
+        }
+    }
+}
+
+// Array -> SuperArray (single chunk without field metadata)
+impl From<Array> for SuperArray {
+    fn from(array: Array) -> Self {
+        SuperArray {
+            chunks: vec![array],
+            field: None,
+            null_counts: None,
         }
     }
 }
@@ -660,18 +931,15 @@ impl Consolidate for SuperArray {
     /// Panics if the SuperArray is empty.
     fn consolidate(self) -> Array {
         assert!(
-            !self.arrays.is_empty(),
+            !self.chunks.is_empty(),
             "consolidate() called on empty SuperArray"
         );
 
-        // Use the Concatenate trait to combine all FieldArrays
-        let result = self
-            .arrays
+        // Use the Concatenate trait to combine all Arrays
+        self.chunks
             .into_iter()
             .reduce(|acc, arr| acc.concat(arr).expect("Failed to concatenate arrays"))
-            .expect("Expected at least one array");
-
-        result.array
+            .expect("Expected at least one array")
     }
 }
 
@@ -679,94 +947,102 @@ impl Concatenate for SuperArray {
     /// Concatenates two SuperArrays by appending all chunks from `other` to `self`.
     ///
     /// # Requirements
-    /// - Both SuperArrays must have the same field metadata (name, type, nullability)
+    /// - Both SuperArrays must have compatible types
     ///
     /// # Returns
     /// A new SuperArray containing all chunks from `self` followed by all chunks from `other`
     ///
     /// # Errors
-    /// - `IncompatibleTypeError` if field metadata doesn't match
+    /// - `IncompatibleTypeError` if array types don't match
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
         // If both are empty, return empty
-        if self.arrays.is_empty() && other.arrays.is_empty() {
+        if self.chunks.is_empty() && other.chunks.is_empty() {
             return Ok(SuperArray::new());
         }
 
         // If one is empty, return the other
-        if self.arrays.is_empty() {
+        if self.chunks.is_empty() {
             return Ok(other);
         }
-        if other.arrays.is_empty() {
+        if other.chunks.is_empty() {
             return Ok(self);
         }
 
-        // Validate field metadata matches
-        let self_field = &self.arrays[0].field;
-        let other_field = &other.arrays[0].field;
+        // Validate types match
+        let self_type = self.chunks[0].arrow_type();
+        let other_type = other.chunks[0].arrow_type();
 
-        if self_field.name != other_field.name {
+        if self_type != other_type {
             return Err(MinarrowError::IncompatibleTypeError {
                 from: "SuperArray",
                 to: "SuperArray",
                 message: Some(format!(
-                    "Field name mismatch: '{}' vs '{}'",
-                    self_field.name, other_field.name
-                )),
-            });
-        }
-
-        if self_field.dtype != other_field.dtype {
-            return Err(MinarrowError::IncompatibleTypeError {
-                from: "SuperArray",
-                to: "SuperArray",
-                message: Some(format!(
-                    "Field '{}' type mismatch: {:?} vs {:?}",
-                    self_field.name, self_field.dtype, other_field.dtype
-                )),
-            });
-        }
-
-        if self_field.nullable != other_field.nullable {
-            return Err(MinarrowError::IncompatibleTypeError {
-                from: "SuperArray",
-                to: "SuperArray",
-                message: Some(format!(
-                    "Field '{}' nullable mismatch: {} vs {}",
-                    self_field.name, self_field.nullable, other_field.nullable
+                    "Type mismatch: {:?} vs {:?}",
+                    self_type, other_type
                 )),
             });
         }
 
         // Concatenate chunks
-        let mut result_arrays = self.arrays;
-        result_arrays.extend(other.arrays);
+        let mut result_chunks = self.chunks;
+        result_chunks.extend(other.chunks);
+
+        // Merge null counts if both have them
+        let null_counts = match (self.null_counts, other.null_counts) {
+            (Some(mut self_nc), Some(other_nc)) => {
+                self_nc.extend(other_nc);
+                Some(self_nc)
+            }
+            _ => None,
+        };
 
         Ok(SuperArray {
-            arrays: result_arrays,
+            chunks: result_chunks,
+            field: self.field.or(other.field),
+            null_counts,
         })
     }
 }
 
 impl Display for SuperArray {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = self
+            .field
+            .as_ref()
+            .map(|f| f.name.as_str())
+            .unwrap_or("<unnamed>");
+        let dtype = if let Some(chunk) = self.chunks.first() {
+            format!("{:?}", chunk.arrow_type())
+        } else if let Some(ref field) = self.field {
+            format!("{:?}", field.dtype)
+        } else {
+            "<empty>".to_string()
+        };
+
         writeln!(
             f,
             "SuperArray \"{}\" [{} rows, {} chunks] (dtype: {})",
-            self.field().name,
+            name,
             self.len(),
             self.n_chunks(),
-            self.field().dtype
+            dtype
         )?;
 
-        for (i, chunk) in self.arrays.iter().enumerate() {
+        for (i, chunk) in self.chunks.iter().enumerate() {
+            let null_count = self
+                .null_counts
+                .as_ref()
+                .and_then(|nc| nc.get(i).copied())
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "?".to_string());
             writeln!(
                 f,
                 "  ├─ Chunk {i}: {} rows, nulls: {}",
                 chunk.len(),
-                chunk.null_count
+                null_count
             )?;
             let indent = "    │ ";
-            for line in format!("{}", chunk.array).lines() {
+            for line in format!("{}", chunk).lines() {
                 writeln!(f, "{indent}{line}")?;
             }
         }
@@ -808,13 +1084,26 @@ mod tests {
     }
 
     #[test]
-    fn test_new_and_push() {
+    fn test_new_and_push_array() {
         let mut ca = SuperArray::new();
         assert_eq!(ca.n_chunks(), 0);
-        ca.push(fa("a", &[1, 2, 3], 0));
+        ca.push(int_array(&[1, 2, 3]));
         assert_eq!(ca.n_chunks(), 1);
         assert_eq!(ca.len(), 3);
-        ca.push(fa("a", &[4, 5], 0));
+        ca.push(int_array(&[4, 5]));
+        assert_eq!(ca.n_chunks(), 2);
+        assert_eq!(ca.len(), 5);
+    }
+
+    #[test]
+    fn test_new_and_push_field_array() {
+        let mut ca = SuperArray::new();
+        assert_eq!(ca.n_chunks(), 0);
+        ca.push_field_array(fa("a", &[1, 2, 3], 0));
+        assert_eq!(ca.n_chunks(), 1);
+        assert_eq!(ca.len(), 3);
+        assert!(ca.field().is_some());
+        ca.push_field_array(fa("a", &[4, 5], 0));
         assert_eq!(ca.n_chunks(), 2);
         assert_eq!(ca.len(), 5);
     }
@@ -823,15 +1112,11 @@ mod tests {
     #[should_panic(expected = "Chunk ArrowType mismatch")]
     fn test_type_mismatch() {
         let mut ca = SuperArray::new();
-        ca.push(fa("a", &[1, 2, 3], 0));
-        let wrong = FieldArray {
-            field: field("a", ArrowType::Float64, false).into(),
-            array: Array::from_float64(crate::FloatArray::<f64> {
-                data: Vec64::from_slice(&[1.0, 2.0]).into(),
-                null_mask: None,
-            }),
-            null_count: 0,
-        };
+        ca.push(int_array(&[1, 2, 3]));
+        let wrong = Array::from_float64(crate::FloatArray::<f64> {
+            data: Vec64::from_slice(&[1.0, 2.0]).into(),
+            null_mask: None,
+        });
         ca.push(wrong);
     }
 
@@ -839,18 +1124,28 @@ mod tests {
     #[should_panic(expected = "Chunk field name mismatch")]
     fn test_name_mismatch() {
         let mut ca = SuperArray::new();
-        ca.push(fa("a", &[1, 2, 3], 0));
-        ca.push(fa("b", &[4, 5], 0)); // wrong name
+        ca.push_field_array(fa("a", &[1, 2, 3], 0));
+        ca.push_field_array(fa("b", &[4, 5], 0)); // wrong name
     }
 
     #[test]
     fn test_from_field_array_chunks() {
         let c1 = fa("a", &[1, 2, 3], 0);
         let c2 = fa("a", &[4], 0);
-        let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()].into());
+        let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()]);
         assert_eq!(ca.n_chunks(), 2);
         assert_eq!(ca.len(), 4);
-        assert_eq!(ca.field().name, "a");
+        assert_eq!(ca.field().unwrap().name, "a");
+    }
+
+    #[test]
+    fn test_from_arrays() {
+        let a1 = int_array(&[1, 2, 3]);
+        let a2 = int_array(&[4, 5]);
+        let ca = SuperArray::from_arrays(vec![a1, a2]);
+        assert_eq!(ca.n_chunks(), 2);
+        assert_eq!(ca.len(), 5);
+        assert!(ca.field().is_none());
     }
 
     #[test]
@@ -866,7 +1161,7 @@ mod tests {
 
         let c1 = fa("a", &[10, 20, 30], 0);
         let c2 = fa("a", &[40, 50], 0);
-        let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()].into());
+        let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()]);
         let sl = ca.slice(2, 3);
         assert_eq!(sl.len, 3);
         let arr = sl.consolidate();
@@ -882,7 +1177,7 @@ mod tests {
     fn test_from_slices() {
         let c1 = fa("a", &[10, 20, 30], 0);
         let c2 = fa("a", &[40, 50], 0);
-        let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()].into());
+        let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()]);
 
         let sl = ca.slice(1, 4);
         let slices = &sl.slices;
@@ -896,16 +1191,16 @@ mod tests {
     fn test_is_empty_and_default() {
         let ca = SuperArray::default();
         assert!(ca.is_empty());
-        let ca2 = SuperArray::from_chunks(vec![fa("a", &[1], 0)].into());
+        let ca2 = SuperArray::from_chunks(vec![fa("a", &[1], 0)]);
         assert!(!ca2.is_empty());
     }
 
     #[test]
     fn test_metadata_accessors() {
-        let ca = SuperArray::from_chunks(vec![fa("z", &[1, 2, 3, 4], 0)].into());
+        let ca = SuperArray::from_chunks(vec![fa("z", &[1, 2, 3, 4], 0)]);
         assert_eq!(ca.arrow_type(), ArrowType::Int32);
         assert!(!ca.is_nullable());
-        assert_eq!(ca.field().name, "z");
+        assert_eq!(ca.field().unwrap().name, "z");
         assert_eq!(ca.chunks().len(), 1);
     }
 
@@ -914,7 +1209,7 @@ mod tests {
     fn test_insert_rows_into_first_chunk() {
         let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0), fa("a", &[4, 5], 0)]);
 
-        let other = SuperArray::from_chunks(vec![fa("a", &[99, 88], 0)]);
+        let other = SuperArray::from_arrays(vec![int_array(&[99, 88])]);
 
         ca.insert_rows(1, other).unwrap();
 
@@ -934,7 +1229,7 @@ mod tests {
     fn test_insert_rows_into_second_chunk() {
         let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2], 0), fa("a", &[3, 4, 5], 0)]);
 
-        let other = SuperArray::from_chunks(vec![fa("a", &[99], 0)]);
+        let other = SuperArray::from_arrays(vec![int_array(&[99])]);
 
         ca.insert_rows(3, other).unwrap();
 
@@ -954,7 +1249,7 @@ mod tests {
     fn test_insert_rows_prepend() {
         let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
 
-        let other = SuperArray::from_chunks(vec![fa("a", &[99], 0)]);
+        let other = SuperArray::from_arrays(vec![int_array(&[99])]);
 
         ca.insert_rows(0, other).unwrap();
 
@@ -973,7 +1268,7 @@ mod tests {
     fn test_insert_rows_append() {
         let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
 
-        let other = SuperArray::from_chunks(vec![fa("a", &[99], 0)]);
+        let other = SuperArray::from_arrays(vec![int_array(&[99])]);
 
         ca.insert_rows(3, other).unwrap();
 
@@ -988,15 +1283,14 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_rows_schema_mismatch() {
-        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
+    fn test_insert_rows_type_mismatch() {
+        let mut ca = SuperArray::from_arrays(vec![int_array(&[1, 2, 3])]);
 
-        let wrong_name = FieldArray {
-            field: field("b", ArrowType::Int32, false).into(),
-            array: int_array(&[99]),
-            null_count: 0,
-        };
-        let other = SuperArray::from_chunks(vec![wrong_name]);
+        let wrong_type = Array::from_float64(crate::FloatArray::<f64> {
+            data: Vec64::from_slice(&[99.0]).into(),
+            null_mask: None,
+        });
+        let other = SuperArray::from_arrays(vec![wrong_type]);
 
         let result = ca.insert_rows(0, other);
         assert!(result.is_err());
@@ -1004,8 +1298,8 @@ mod tests {
 
     #[test]
     fn test_insert_rows_out_of_bounds() {
-        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
-        let other = SuperArray::from_chunks(vec![fa("a", &[99], 0)]);
+        let mut ca = SuperArray::from_arrays(vec![int_array(&[1, 2, 3])]);
+        let other = SuperArray::from_arrays(vec![int_array(&[99])]);
 
         let result = ca.insert_rows(10, other);
         assert!(result.is_err());
@@ -1023,9 +1317,9 @@ mod tests {
 
         assert_eq!(ca.n_chunks(), 3);
         assert_eq!(ca.len(), 9);
-        assert_eq!(ca.arrays[0].len(), 3);
-        assert_eq!(ca.arrays[1].len(), 3);
-        assert_eq!(ca.arrays[2].len(), 3);
+        assert_eq!(ca.chunks[0].len(), 3);
+        assert_eq!(ca.chunks[1].len(), 3);
+        assert_eq!(ca.chunks[2].len(), 3);
 
         let result = ca.consolidate();
         if let Array::NumericArray(NumericArray::Int32(ia)) = result {
