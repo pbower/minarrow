@@ -881,6 +881,19 @@ impl Default for SuperArray {
     }
 }
 
+
+// Vec<Array> -> SuperArray
+//
+// Multiple chunks without field metadata
+impl From<Vec<FieldArray>> for SuperArray {
+    fn from(arrays: Vec<FieldArray>) -> Self {
+        SuperArray::from_field_array_chunks(arrays)
+    }
+}
+
+// Vec<Array> -> SuperArray
+//
+// Multiple chunks without field metadata - Catch all case
 impl FromIterator<FieldArray> for SuperArray {
     fn from_iter<T: IntoIterator<Item = FieldArray>>(iter: T) -> Self {
         let chunks: Vec<FieldArray> = iter.into_iter().collect();
@@ -888,7 +901,8 @@ impl FromIterator<FieldArray> for SuperArray {
     }
 }
 
-// FieldArray -> SuperArray (single chunk with field metadata)
+// FieldArray -> SuperArray
+// Single chunk with field metadata
 impl From<FieldArray> for SuperArray {
     fn from(fa: FieldArray) -> Self {
         SuperArray {
@@ -899,7 +913,9 @@ impl From<FieldArray> for SuperArray {
     }
 }
 
-// Array -> SuperArray (single chunk without field metadata)
+// Array -> SuperArray
+//
+// Single chunk without field metadata
 impl From<Array> for SuperArray {
     fn from(array: Array) -> Self {
         SuperArray {
@@ -907,6 +923,25 @@ impl From<Array> for SuperArray {
             field: None,
             null_counts: None,
         }
+    }
+}
+
+// Vec<Array> -> SuperArray
+//
+// Multiple chunks without field metadata
+impl From<Vec<Array>> for SuperArray {
+    fn from(arrays: Vec<Array>) -> Self {
+        SuperArray::from_arrays(arrays)
+    }
+}
+
+// Vec<Array> -> SuperArray
+//
+// Catch all iterator
+impl FromIterator<Array> for SuperArray {
+    fn from_iter<T: IntoIterator<Item = Array>>(iter: T) -> Self {
+        let chunks: Vec<Array> = iter.into_iter().collect();
+        Self::from_arrays(chunks)
     }
 }
 

@@ -495,6 +495,7 @@ pub(crate) fn value_variant_name(value: &Value) -> &'static str {
 #[cfg(test)]
 mod concat_tests {
     use super::*;
+    use crate::Array;
     use crate::MaskedArray;
     use crate::structs::field_array::field_array;
     use crate::structs::variants::integer::IntegerArray;

@@ -378,8 +378,8 @@ fn test_super_array_broadcasting() {
             Ok(Value::SuperArray(result)) => {
                 println!("│  Result with {} chunks:", result.len());
                 for i in 0..result.len() {
-                    if let Some(fa) = result.chunk(i) {
-                        if let Array::NumericArray(NumericArray::Int32(arr)) = &fa.array {
+                    if let Some(chunk) = result.chunk(i) {
+                        if let Array::NumericArray(NumericArray::Int32(arr)) = chunk {
                             println!("│    Chunk {}: {:?}", i, arr.data.as_slice());
                         }
                     }

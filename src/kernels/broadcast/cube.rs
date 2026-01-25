@@ -403,7 +403,7 @@ fn materialise_super_array(super_array: &crate::SuperArray) -> Result<Array, Min
     }
 
     // Get the first chunk to determine type
-    let first_array = &chunks[0].array;
+    let first_array = &chunks[0];
 
     // For now, handle numeric arrays (can be extended for other types)
     match first_array {
@@ -411,7 +411,7 @@ fn materialise_super_array(super_array: &crate::SuperArray) -> Result<Array, Min
             use crate::IntegerArray;
             let mut all_values = Vec::new();
             for chunk in chunks {
-                if let Array::NumericArray(NumericArray::Int32(arr)) = &chunk.array {
+                if let Array::NumericArray(NumericArray::Int32(arr)) = chunk {
                     all_values.extend_from_slice(arr.data.as_slice());
                 } else {
                     return Err(MinarrowError::TypeError {
@@ -427,7 +427,7 @@ fn materialise_super_array(super_array: &crate::SuperArray) -> Result<Array, Min
             use crate::IntegerArray;
             let mut all_values = Vec::new();
             for chunk in chunks {
-                if let Array::NumericArray(NumericArray::Int64(arr)) = &chunk.array {
+                if let Array::NumericArray(NumericArray::Int64(arr)) = chunk {
                     all_values.extend_from_slice(arr.data.as_slice());
                 } else {
                     return Err(MinarrowError::TypeError {
@@ -443,7 +443,7 @@ fn materialise_super_array(super_array: &crate::SuperArray) -> Result<Array, Min
             use crate::FloatArray;
             let mut all_values = Vec::new();
             for chunk in chunks {
-                if let Array::NumericArray(NumericArray::Float32(arr)) = &chunk.array {
+                if let Array::NumericArray(NumericArray::Float32(arr)) = chunk {
                     all_values.extend_from_slice(arr.data.as_slice());
                 } else {
                     return Err(MinarrowError::TypeError {
@@ -459,7 +459,7 @@ fn materialise_super_array(super_array: &crate::SuperArray) -> Result<Array, Min
             use crate::FloatArray;
             let mut all_values = Vec::new();
             for chunk in chunks {
-                if let Array::NumericArray(NumericArray::Float64(arr)) = &chunk.array {
+                if let Array::NumericArray(NumericArray::Float64(arr)) = chunk {
                     all_values.extend_from_slice(arr.data.as_slice());
                 } else {
                     return Err(MinarrowError::TypeError {

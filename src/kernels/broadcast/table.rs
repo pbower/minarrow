@@ -358,7 +358,7 @@ pub fn broadcast_table_to_superarray(
         .chunks()
         .iter()
         .map(|chunk| {
-            let chunk_array = &chunk.array;
+            let chunk_array = chunk;
             let result_table = broadcast_table_to_array(op, table, chunk_array)?;
             // Convert result table back to a FieldArray chunk with matching structure
             if result_table.cols.len() == 1 {
@@ -660,7 +660,7 @@ mod tests {
 
         // Both chunks: [2,3,4] + [10,20,30] = [12,23,34] and [2,3,4] + [40,50,60] = [42,53,64]
         if let crate::Array::NumericArray(crate::NumericArray::Int32(arr)) =
-            &result.chunks()[0].array
+            &result.chunks()[0]
         {
             assert_eq!(arr.data.as_slice(), &[12, 23, 34]);
         } else {
@@ -668,7 +668,7 @@ mod tests {
         }
 
         if let crate::Array::NumericArray(crate::NumericArray::Int32(arr)) =
-            &result.chunks()[1].array
+            &result.chunks()[1]
         {
             assert_eq!(arr.data.as_slice(), &[42, 53, 64]);
         } else {

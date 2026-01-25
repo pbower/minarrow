@@ -304,7 +304,7 @@ pub fn broadcast_superarray_to_supertable(
     let mut result_tables = Vec::with_capacity(super_table.batches.len());
     for (i, table) in super_table.batches.iter().enumerate() {
         let chunk = &super_array.chunks()[i];
-        let broadcasted = broadcast_array_to_table(op, &chunk.array, table)?;
+        let broadcasted = broadcast_array_to_table(op, chunk, table)?;
         result_tables.push(Arc::new(broadcasted));
     }
 
@@ -336,7 +336,7 @@ pub fn broadcast_supertable_to_superarray(
     let mut result_tables = Vec::with_capacity(super_table.batches.len());
     for (i, table) in super_table.batches.iter().enumerate() {
         let chunk = &super_array.chunks()[i];
-        let broadcasted = broadcast_table_to_array(op, table, &chunk.array)?;
+        let broadcasted = broadcast_table_to_array(op, table, chunk)?;
         result_tables.push(Arc::new(broadcasted));
     }
 
@@ -371,7 +371,7 @@ pub fn broadcast_superarray_to_supertableview(
     for (i, table_view) in super_table_view.slices.iter().enumerate() {
         let chunk = &super_array.chunks()[i];
         let table = table_view.to_table();
-        let broadcasted = broadcast_array_to_table(op, &chunk.array, &table)?;
+        let broadcasted = broadcast_array_to_table(op, chunk, &table)?;
         result_tables.push(Arc::new(broadcasted));
     }
 
@@ -404,7 +404,7 @@ pub fn broadcast_supertableview_to_superarray(
     for (i, table_view) in super_table_view.slices.iter().enumerate() {
         let chunk = &super_array.chunks()[i];
         let table = table_view.to_table();
-        let broadcasted = broadcast_table_to_array(op, &table, &chunk.array)?;
+        let broadcasted = broadcast_table_to_array(op, &table, chunk)?;
         result_tables.push(Arc::new(broadcasted));
     }
 

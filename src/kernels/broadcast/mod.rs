@@ -1345,13 +1345,13 @@ pub fn broadcast_value(
         #[cfg(feature = "chunked")]
         (Value::Array(l), Value::SuperArray(r)) => {
 
-            let l_super_array = create_aligned_chunks_from_array(Arc::unwrap_or_clone(l), &r, &r.chunks()[0].field.name)?;
+            let l_super_array = create_aligned_chunks_from_array(Arc::unwrap_or_clone(l), &r, r.field_ref().name.as_str())?;
             route_super_array_broadcast(op, l_super_array, Arc::unwrap_or_clone(r), None)
                 .map(|sa| Value::SuperArray(Arc::new(sa)))
         }
         #[cfg(feature = "chunked")]
         (Value::SuperArray(l), Value::Array(r)) => {
-            let r_super_array = create_aligned_chunks_from_array(Arc::unwrap_or_clone(r), &l, &l.chunks()[0].field.name)?;
+            let r_super_array = create_aligned_chunks_from_array(Arc::unwrap_or_clone(r), &l, l.field_ref().name.as_str())?;
             route_super_array_broadcast(op, Arc::unwrap_or_clone(l), r_super_array, None)
                 .map(|sa| Value::SuperArray(Arc::new(sa)))
         }

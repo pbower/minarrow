@@ -2454,10 +2454,9 @@ macro_rules! arr_f32 {
 #[macro_export]
 macro_rules! arr_f64 {
     ($v:expr) => {
-        $crate::Array::from_float64($crate::FloatArray::<f64>::from_vec64($v, None))
-    };
+            $crate::Array::from_float64($crate::FloatArray::<f64>::from_vec64($v, None))
+        };
     ($($x:expr),+ $(,)?) => {{
-
         use $crate::vec64;
         let temp_vec = vec64![$($x),+];
         $crate::Array::from_float64($crate::FloatArray::<f64>::from_vec64(temp_vec, None))

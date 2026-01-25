@@ -201,11 +201,11 @@ pub fn broadcast_scalar_to_superarray(
             let chunk_result = broadcast_value(
                 op,
                 Value::Scalar(scalar.clone()),
-                Value::Array(Arc::new(chunk.array.clone())),
+                Value::Array(Arc::new(chunk.clone())),
             )?;
             match chunk_result {
                 Value::Array(arr) => Ok(FieldArray::new(
-                    (*chunk.field).clone(),
+                    super_array.field_ref().clone(),
                     Arc::unwrap_or_clone(arr),
                 )),
                 _ => Err(MinarrowError::TypeError {
@@ -1112,14 +1112,14 @@ mod tests {
         assert_eq!(result.chunks().len(), 2);
 
         // First chunk: 10 + [1,2,3] = [11,12,13]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0] {
             assert_eq!(arr.data.as_slice(), &[11, 12, 13]);
         } else {
             panic!("Expected Int32 array in chunk 0");
         }
 
         // Second chunk: 10 + [4,5,6] = [14,15,16]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1] {
             assert_eq!(arr.data.as_slice(), &[14, 15, 16]);
         } else {
             panic!("Expected Int32 array in chunk 1");
@@ -1156,14 +1156,14 @@ mod tests {
         assert_eq!(result.chunks().len(), 2);
 
         // First chunk: 5 * [10,20,30] = [50,100,150]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0] {
             assert_eq!(arr.data.as_slice(), &[50, 100, 150]);
         } else {
             panic!("Expected Int32 array in chunk 0");
         }
 
         // Second chunk: 5 * [40,50,60] = [200,250,300]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1] {
             assert_eq!(arr.data.as_slice(), &[200, 250, 300]);
         } else {
             panic!("Expected Int32 array in chunk 1");

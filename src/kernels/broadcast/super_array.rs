@@ -1,7 +1,6 @@
 // Copyright Peter Bower 2025. All Rights Reserved.
 // Licensed under MIT License.
 
-use std::ops::Deref;
 use std::sync::Arc;
 
 #[cfg(all(feature = "chunked", feature = "scalar_type"))]
@@ -66,8 +65,8 @@ pub fn broadcast_super_array_add(
             }
         };
         // TODO: Metadata clone has potential to be heavily than should be required here.
-        let fa = FieldArray::new(lhs_arr.field.deref().clone(), arr);
-        super_array.push(fa);
+        // Push the result array into the SuperArray
+        super_array.push(arr);
     }
     Ok(super_array)
 }
@@ -85,12 +84,12 @@ pub fn broadcast_superarray_to_scalar(
         .map(|chunk| {
             let chunk_result = broadcast_value(
                 op,
-                Value::Array(Arc::new(chunk.array.clone())),
+                Value::Array(Arc::new(chunk.clone())),
                 Value::Scalar(scalar.clone()),
             )?;
             match chunk_result {
                 Value::Array(arr) => Ok(FieldArray::new(
-                    (*chunk.field).clone(),
+                    super_array.field_ref().clone(),
                     Arc::unwrap_or_clone(arr),
                 )),
                 _ => Err(MinarrowError::TypeError {
@@ -149,8 +148,7 @@ pub fn broadcast_superarray_to_table(
         .chunks()
         .iter()
         .map(|chunk| {
-            let chunk_array = &chunk.array;
-            let result_table = broadcast_array_to_table(op, chunk_array, table)?;
+            let result_table = broadcast_array_to_table(op, chunk, table)?;
             // Convert result table back to a FieldArray chunk with matching structure
             if result_table.cols.len() == 1 {
                 Ok(result_table.cols[0].clone())
@@ -174,7 +172,7 @@ pub fn route_super_array_broadcast(
     rhs: impl Into<SuperArrayV>,
     null_mask_override: Option<Arc<Bitmask>>,
 ) -> Result<SuperArray, MinarrowError> {
-    use {FieldArray, SuperArray};
+    use SuperArray;
 
     // LHS and RHS as Super Array Views
     let lhs_arr: SuperArrayV = lhs.into();
@@ -236,7 +234,7 @@ pub fn route_super_array_broadcast(
             }
         };
 
-        super_array.push(FieldArray::new_arc(lhs_arr.field.clone(), arr));
+        super_array.push(arr);
     }
     Ok(super_array)
 }
@@ -265,12 +263,12 @@ pub fn broadcast_arrayview_to_superarray(
 
     for chunk in super_array.chunks() {
         // Create a view into the array matching this chunk's size
-        let array_slice = array_view.slice(current_offset, chunk.array.len());
+        let array_slice = array_view.slice(current_offset, chunk.len());
 
         // Broadcast the array slice with this chunk
         let result = match (
             Value::ArrayView(Arc::new(array_slice)),
-            Value::Array(Arc::new(chunk.array.clone())),
+            Value::Array(Arc::new(chunk.clone())),
         ) {
             (a, b) => broadcast_value(op, a, b)?,
         };
@@ -278,7 +276,7 @@ pub fn broadcast_arrayview_to_superarray(
         match result {
             Value::Array(arr) => {
                 let field_array =
-                    FieldArray::new_arc(chunk.field.clone(), Arc::unwrap_or_clone(arr));
+                    FieldArray::new_arc(super_array.field.clone().unwrap(), Arc::unwrap_or_clone(arr));
                 result_chunks.push(field_array);
             }
             _ => {
@@ -289,7 +287,7 @@ pub fn broadcast_arrayview_to_superarray(
                 });
             }
         }
-        current_offset += chunk.array.len();
+        current_offset += chunk.len();
     }
 
     Ok(SuperArray::from_field_array_chunks(result_chunks))
@@ -319,11 +317,11 @@ pub fn broadcast_superarray_to_arrayview(
 
     for chunk in super_array.chunks() {
         // Create a view into the array matching this chunk's size
-        let array_slice = array_view.slice(current_offset, chunk.array.len());
+        let array_slice = array_view.slice(current_offset, chunk.len());
 
         // Broadcast this chunk with the array slice
         let result = match (
-            Value::Array(Arc::new(chunk.array.clone())),
+            Value::Array(Arc::new(chunk.clone())),
             Value::ArrayView(Arc::new(array_slice)),
         ) {
             (a, b) => broadcast_value(op, a, b)?,
@@ -332,7 +330,7 @@ pub fn broadcast_superarray_to_arrayview(
         match result {
             Value::Array(arr) => {
                 let field_array =
-                    FieldArray::new_arc(chunk.field.clone(), Arc::unwrap_or_clone(arr));
+                    FieldArray::new_arc(super_array.field.clone().unwrap(), Arc::unwrap_or_clone(arr));
                 result_chunks.push(field_array);
             }
             _ => {
@@ -343,7 +341,7 @@ pub fn broadcast_superarray_to_arrayview(
                 });
             }
         }
-        current_offset += chunk.array.len();
+        current_offset += chunk.len();
     }
 
     Ok(SuperArray::from_field_array_chunks(result_chunks))
@@ -538,14 +536,14 @@ mod tests {
         assert_eq!(result.chunks().len(), 2);
 
         // First chunk: [1,2,3] + [10,10,10] = [11,12,13]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0] {
             assert_eq!(arr.data.as_slice(), &[11, 12, 13]);
         } else {
             panic!("Expected Int32 array");
         }
 
         // Second chunk: [4,5,6] + [20,20,20] = [24,25,26]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1] {
             assert_eq!(arr.data.as_slice(), &[24, 25, 26]);
         } else {
             panic!("Expected Int32 array");
@@ -611,14 +609,14 @@ mod tests {
         .unwrap();
 
         // First chunk: [2,3,4] * [10,10,10] = [20,30,40]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0] {
             assert_eq!(arr.data.as_slice(), &[20, 30, 40]);
         } else {
             panic!("Expected Int32 array");
         }
 
         // Second chunk: [5,6,7] * [2,2,2] = [10,12,14]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1] {
             assert_eq!(arr.data.as_slice(), &[10, 12, 14]);
         } else {
             panic!("Expected Int32 array");
@@ -649,7 +647,7 @@ mod tests {
         .unwrap();
 
         // [100,200,300] / [10,20,30] = [10,10,10]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0] {
             assert_eq!(arr.data.as_slice(), &[10, 10, 10]);
         } else {
             panic!("Expected Int32 array");
@@ -689,14 +687,14 @@ mod tests {
         assert_eq!(result.chunks().len(), 2);
 
         // First chunk: [1,2,3] + [10,20,30] = [11,22,33]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0] {
             assert_eq!(arr.data.as_slice(), &[11, 22, 33]);
         } else {
             panic!("Expected Int32 array");
         }
 
         // Second chunk: [4,5,6] + [10,20,30] = [14,25,36]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1] {
             assert_eq!(arr.data.as_slice(), &[14, 25, 36]);
         } else {
             panic!("Expected Int32 array");
@@ -735,14 +733,14 @@ mod tests {
         .unwrap();
 
         // First chunk: [10,20,30] - [1,2,3] = [9,18,27]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[0] {
             assert_eq!(arr.data.as_slice(), &[9, 18, 27]);
         } else {
             panic!("Expected Int32 array");
         }
 
         // Second chunk: [100,200,300] - [10,20,30] = [90,180,270]
-        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1].array {
+        if let Array::NumericArray(NumericArray::Int32(arr)) = &result.chunks()[1] {
             assert_eq!(arr.data.as_slice(), &[90, 180, 270]);
         } else {
             panic!("Expected Int32 array");
