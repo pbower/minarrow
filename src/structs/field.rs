@@ -8,7 +8,7 @@
 //! Primarily used in table schemas and during Arrow FFI export to ensure
 //! correct logical typing (especially for temporal data).  
 //!
-//! This module contains only the schema description — it does not hold
+//! This module contains only the schema description - it does not hold
 //! any row data. Pair with `FieldArray` to bind a schema to actual values.
 
 use std::collections::BTreeMap;

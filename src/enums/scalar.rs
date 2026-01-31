@@ -1879,7 +1879,7 @@ impl Pow<Scalar> for Scalar {
             #[cfg(feature = "datetime")]
             (_, Interval) => panic!("Cannot exponentiate Interval"),
 
-            // Datetime — explicitly panic for all
+            // Datetime - explicitly panic for all
             #[cfg(feature = "datetime")]
             (Datetime32(_), _) => panic!("Cannot exponentiate datetimes"),
             #[cfg(feature = "datetime")]

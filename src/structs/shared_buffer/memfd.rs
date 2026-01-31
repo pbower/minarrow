@@ -1,4 +1,4 @@
-//! # **MemfdBuffer** — *Zero-copy cross-process buffer sharing via memfd*
+//! # **MemfdBuffer** - *Zero-copy cross-process buffer sharing via memfd*
 //!
 //! Linux-only buffer backed by `memfd_create()` for sharing memory between processes.
 //!

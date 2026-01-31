@@ -66,7 +66,7 @@ use crate::{
 /// - `&Array`: match on categories or individual types.
 ///
 /// ## Benefits
-/// - No heap allocation or runtime indirection — all enum variants are inline
+/// - No heap allocation or runtime indirection - all enum variants are inline
 ///   with minimal discriminant cost.
 /// - Unified call sites with compiler-enforced type safety.
 /// - Easy casting to inner types (e.g., `.str()` for strings).
@@ -74,7 +74,7 @@ use crate::{
 ///   dynamic dispatch and downcasting.
 ///
 /// ## Trade-offs
-/// - Adds ~30–100 ns latency compared to direct inner type calls — only
+/// - Adds ~30–100 ns latency compared to direct inner type calls - only
 ///   noticeable in extreme low-latency contexts such as HFT.
 /// - Requires enum matching at dispatch sites compared to direct inner type usage.
 

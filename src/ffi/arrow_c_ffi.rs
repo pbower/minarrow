@@ -62,7 +62,7 @@ use crate::{DatetimeArray, IntervalUnit, TemporalArray, TimeUnit};
 //
 // On the receiving side, these arrays and the schema can combine to reconstruct
 // an Arrow `RecordBatch`. This process can repeat to transmit multiple `RecordBatch`
-// instances or once to transmit a single array—depending on the use case.
+// instances or once to transmit a single array-depending on the use case.
 
 /// ArrowArray as per the Arrow C spec
 ///
@@ -135,6 +135,40 @@ impl ArrowSchema {
         }
     }
 }
+
+/// ArrowArrayStream as per the Arrow C Stream Interface spec.
+///
+/// Provides a streaming interface for consuming a sequence of ArrowArrays
+/// with a shared schema. Used by the PyCapsule protocol for chunked data
+/// exchange between different runtimes and languages.
+///
+/// See: https://arrow.apache.org/docs/format/CStreamInterface.html
+#[repr(C)]
+pub struct ArrowArrayStream {
+    pub get_schema:
+        Option<unsafe extern "C" fn(stream: *mut ArrowArrayStream, out: *mut ArrowSchema) -> i32>,
+    pub get_next:
+        Option<unsafe extern "C" fn(stream: *mut ArrowArrayStream, out: *mut ArrowArray) -> i32>,
+    pub get_last_error: Option<unsafe extern "C" fn(stream: *mut ArrowArrayStream) -> *const i8>,
+    pub release: Option<unsafe extern "C" fn(stream: *mut ArrowArrayStream)>,
+    pub private_data: *mut c_void,
+}
+
+impl ArrowArrayStream {
+    /// Creates an empty ArrowArrayStream for receiving FFI data.
+    pub fn empty() -> Self {
+        Self {
+            get_schema: None,
+            get_next: None,
+            get_last_error: None,
+            release: None,
+            private_data: ptr::null_mut(),
+        }
+    }
+}
+
+unsafe impl Send for ArrowArrayStream {}
+unsafe impl Sync for ArrowArrayStream {}
 
 /// Keep buffers and data alive for the C Data Interface.
 /// Ensures backing data and all pointers while referenced by ArrowArray.private_data.
@@ -1500,6 +1534,843 @@ fn create_arrow_export(
     }
 
     (arr_ptr, Box::into_raw(schema_box))
+}
+
+// ─── Arrow C Stream Interface ─────────────────────────────────────────
+//
+// Implements the Arrow C Stream Interface for streaming sequences of arrays.
+// Used by the PyCapsule protocol: `__arrow_c_stream__`.
+//
+// Two stream flavours:
+// 1. **Record batch stream** - yields struct arrays (one per batch), used for
+//    Table / SuperTable / DataFrame exchange.
+// 2. **Array stream** - yields plain arrays (one per chunk), used for
+//    ChunkedArray / SuperArray exchange.
+
+/// Private holder for record-batch stream state.
+struct RecordBatchStreamHolder {
+    /// Schema fields for the struct array (one per column).
+    fields: Vec<crate::Field>,
+    /// Batches to yield: each batch is a Vec of column (Arc<Array>, Schema) pairs.
+    batches: Vec<Vec<(Arc<Array>, Schema)>>,
+    /// Index of the next batch to return from get_next.
+    cursor: usize,
+    /// Last error message.
+    last_error: Option<CString>,
+    /// Optional schema-level metadata, encoded in Arrow binary format.
+    /// Kept alive so the pointer in ArrowSchema.metadata remains valid.
+    schema_metadata: Option<Vec<u8>>,
+}
+
+/// Private holder for plain-array stream state.
+struct ArrayStreamHolder {
+    /// Field describing the array type.
+    field: crate::Field,
+    /// Chunks to yield.
+    chunks: Vec<Arc<Array>>,
+    /// Index of the next chunk to return from get_next.
+    cursor: usize,
+    /// Last error message.
+    last_error: Option<CString>,
+}
+
+// ── Struct array helpers ────────────────────────────────────────────────
+
+/// Exports a single record batch (a set of column arrays with a shared schema)
+/// as an Arrow struct array + struct schema pair.
+///
+/// The resulting `ArrowArray` has format `"+s"` with one child per column.
+/// Callers must eventually call the release callback on the returned pointers.
+pub fn export_struct_to_c(
+    columns: Vec<(Arc<Array>, Schema)>,
+) -> (*mut ArrowArray, *mut ArrowSchema) {
+    let n_cols = columns.len();
+    let n_rows = if n_cols > 0 {
+        columns[0].0.len() as i64
+    } else {
+        0
+    };
+
+    // Export each column individually
+    let mut child_array_ptrs: Vec<*mut ArrowArray> = Vec::with_capacity(n_cols);
+    let mut child_schema_ptrs: Vec<*mut ArrowSchema> = Vec::with_capacity(n_cols);
+
+    for (array, schema) in &columns {
+        let (arr_ptr, sch_ptr) = export_to_c(array.clone(), schema.clone());
+        child_array_ptrs.push(arr_ptr);
+        child_schema_ptrs.push(sch_ptr);
+    }
+
+    // Build the parent struct ArrowArray
+    let children_arr_box = child_array_ptrs.into_boxed_slice();
+    let children_arr_ptr = Box::into_raw(children_arr_box) as *mut *mut ArrowArray;
+
+    let struct_arr = Box::new(ArrowArray {
+        length: n_rows,
+        null_count: 0,
+        offset: 0,
+        n_buffers: 1, // struct arrays have a single null bitmap buffer
+        n_children: n_cols as i64,
+        buffers: Box::into_raw(Box::new(ptr::null::<u8>())) as *mut *const u8,
+        children: children_arr_ptr,
+        dictionary: ptr::null_mut(),
+        release: Some(release_struct_array),
+        private_data: ptr::null_mut(),
+    });
+
+    // Build the parent struct ArrowSchema
+    let children_sch_box = child_schema_ptrs.into_boxed_slice();
+    let children_sch_ptr = Box::into_raw(children_sch_box) as *mut *mut ArrowSchema;
+
+    let format_cstr = CString::new("+s").unwrap();
+    let name_cstr = CString::new("").unwrap();
+
+    let struct_holder = Box::new(StructSchemaHolder {
+        format_cstr,
+        name_cstr,
+        metadata_bytes: None,
+    });
+
+    let struct_sch = Box::new(ArrowSchema {
+        format: struct_holder.format_cstr.as_ptr(),
+        name: struct_holder.name_cstr.as_ptr(),
+        metadata: ptr::null(),
+        flags: 0,
+        n_children: n_cols as i64,
+        children: children_sch_ptr,
+        dictionary: ptr::null_mut(),
+        release: Some(release_struct_schema),
+        private_data: Box::into_raw(struct_holder) as *mut c_void,
+    });
+
+    (Box::into_raw(struct_arr), Box::into_raw(struct_sch))
+}
+
+struct StructSchemaHolder {
+    #[allow(dead_code)]
+    format_cstr: CString,
+    #[allow(dead_code)]
+    name_cstr: CString,
+    /// Encoded Arrow metadata bytes kept alive for the pointer in ArrowSchema.metadata.
+    #[allow(dead_code)]
+    metadata_bytes: Option<Vec<u8>>,
+}
+
+/// Encodes key-value pairs into the Arrow C Data Interface metadata binary format.
+///
+/// Format: int32 num_pairs, then for each pair: int32 key_len, key bytes, int32 value_len, value bytes.
+/// All integers are little-endian as per the Arrow spec.
+fn encode_arrow_metadata(pairs: &std::collections::BTreeMap<String, String>) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.extend_from_slice(&(pairs.len() as i32).to_le_bytes());
+    for (k, v) in pairs {
+        buf.extend_from_slice(&(k.len() as i32).to_le_bytes());
+        buf.extend_from_slice(k.as_bytes());
+        buf.extend_from_slice(&(v.len() as i32).to_le_bytes());
+        buf.extend_from_slice(v.as_bytes());
+    }
+    buf
+}
+
+/// Decodes Arrow C Data Interface metadata from a raw pointer into key-value pairs.
+///
+/// Returns `None` if the pointer is null. The binary format is:
+/// int32 num_pairs, then for each pair: int32 key_len, key bytes, int32 value_len, value bytes.
+/// All integers are little-endian.
+///
+/// # Safety
+/// The pointer must be null or point to a valid Arrow metadata buffer.
+pub unsafe fn decode_arrow_metadata(
+    ptr: *const i8,
+) -> Option<std::collections::BTreeMap<String, String>> {
+    if ptr.is_null() {
+        return None;
+    }
+    let mut cursor = ptr as *const u8;
+
+    let num_pairs = i32::from_le_bytes(unsafe {
+        let bytes = slice::from_raw_parts(cursor, 4);
+        cursor = cursor.add(4);
+        bytes.try_into().unwrap()
+    });
+
+    let mut map = std::collections::BTreeMap::new();
+    for _ in 0..num_pairs {
+        let key_len = i32::from_le_bytes(unsafe {
+            let bytes = slice::from_raw_parts(cursor, 4);
+            cursor = cursor.add(4);
+            bytes.try_into().unwrap()
+        }) as usize;
+        let key = unsafe {
+            let bytes = slice::from_raw_parts(cursor, key_len);
+            cursor = cursor.add(key_len);
+            String::from_utf8_lossy(bytes).into_owned()
+        };
+
+        let val_len = i32::from_le_bytes(unsafe {
+            let bytes = slice::from_raw_parts(cursor, 4);
+            cursor = cursor.add(4);
+            bytes.try_into().unwrap()
+        }) as usize;
+        let val = unsafe {
+            let bytes = slice::from_raw_parts(cursor, val_len);
+            cursor = cursor.add(val_len);
+            String::from_utf8_lossy(bytes).into_owned()
+        };
+
+        map.insert(key, val);
+    }
+    Some(map)
+}
+
+/// Release callback for struct ArrowArrays.
+/// Frees each child's ArrowArray via their own release callbacks, then frees
+/// the parent's buffers and children array.
+unsafe extern "C" fn release_struct_array(arr: *mut ArrowArray) {
+    if arr.is_null() || (unsafe { &*arr }).release.is_none() {
+        return;
+    }
+    let a = unsafe { &*arr };
+    let n_children = a.n_children as usize;
+
+    // Release each child array
+    if !a.children.is_null() {
+        let children = unsafe { slice::from_raw_parts_mut(a.children, n_children) };
+        for child_ptr in children.iter_mut() {
+            if !child_ptr.is_null() {
+                let child = unsafe { &mut **child_ptr };
+                if let Some(release) = child.release {
+                    unsafe { release(*child_ptr) };
+                }
+                let _ = unsafe { Box::from_raw(*child_ptr) };
+            }
+        }
+        // Free the children pointer array
+        let _ = unsafe { Box::from_raw(slice::from_raw_parts_mut(a.children, n_children) as *mut [*mut ArrowArray]) };
+    }
+
+    // Free the buffers pointer (single null bitmap)
+    if !a.buffers.is_null() {
+        let _ = unsafe { Box::from_raw(a.buffers as *mut *const u8) };
+    }
+
+    unsafe { ptr::write_bytes(arr, 0, 1) };
+}
+
+/// Release callback for struct ArrowSchemas.
+unsafe extern "C" fn release_struct_schema(sch: *mut ArrowSchema) {
+    if sch.is_null() || (unsafe { &*sch }).release.is_none() {
+        return;
+    }
+    let s = unsafe { &*sch };
+    let n_children = s.n_children as usize;
+
+    // Release each child schema
+    if !s.children.is_null() {
+        let children = unsafe { slice::from_raw_parts_mut(s.children, n_children) };
+        for child_ptr in children.iter_mut() {
+            if !child_ptr.is_null() {
+                let child = unsafe { &mut **child_ptr };
+                if let Some(release) = child.release {
+                    unsafe { release(*child_ptr) };
+                }
+                let _ = unsafe { Box::from_raw(*child_ptr) };
+            }
+        }
+        let _ = unsafe { Box::from_raw(slice::from_raw_parts_mut(s.children, n_children) as *mut [*mut ArrowSchema]) };
+    }
+
+    // Free the private data
+    if !s.private_data.is_null() {
+        let _ = unsafe { Box::from_raw(s.private_data as *mut StructSchemaHolder) };
+    }
+
+    unsafe { ptr::write_bytes(sch, 0, 1) };
+}
+
+// ── Stream export: record batches ───────────────────────────────────────
+
+/// Creates an ArrowArrayStream that yields record batches as struct arrays.
+///
+/// Each batch is a vector of column (Array, Schema) pairs. The stream schema
+/// is a struct type with one child field per column, derived from the first batch.
+///
+/// # Arguments
+/// * `batches` - one or more batches of column arrays with their schemas
+///
+/// # Returns
+/// A heap-allocated ArrowArrayStream. The caller must eventually call its
+/// release callback or pass it to a consumer that will.
+pub fn export_record_batch_stream(
+    batches: Vec<Vec<(Arc<Array>, Schema)>>,
+    fields: Vec<crate::Field>,
+) -> Box<ArrowArrayStream> {
+    export_record_batch_stream_with_metadata(batches, fields, None)
+}
+
+/// Like [`export_record_batch_stream`], but attaches key-value metadata to the
+/// struct-level schema. Use this to preserve a table name or other metadata
+/// across the FFI boundary.
+pub fn export_record_batch_stream_with_metadata(
+    batches: Vec<Vec<(Arc<Array>, Schema)>>,
+    fields: Vec<crate::Field>,
+    metadata: Option<std::collections::BTreeMap<String, String>>,
+) -> Box<ArrowArrayStream> {
+    let schema_metadata = metadata.map(|m| encode_arrow_metadata(&m));
+    let holder = Box::new(RecordBatchStreamHolder {
+        fields,
+        batches,
+        cursor: 0,
+        last_error: None,
+        schema_metadata,
+    });
+
+    let stream = Box::new(ArrowArrayStream {
+        get_schema: Some(rb_stream_get_schema),
+        get_next: Some(rb_stream_get_next),
+        get_last_error: Some(stream_get_last_error::<RecordBatchStreamHolder>),
+        release: Some(rb_stream_release),
+        private_data: Box::into_raw(holder) as *mut c_void,
+    });
+
+    stream
+}
+
+unsafe extern "C" fn rb_stream_get_schema(
+    stream: *mut ArrowArrayStream,
+    out: *mut ArrowSchema,
+) -> i32 {
+    let holder = unsafe { &*((*stream).private_data as *const RecordBatchStreamHolder) };
+
+    // Build a struct schema from the fields
+    let n_fields = holder.fields.len();
+    let mut child_schemas: Vec<*mut ArrowSchema> = Vec::with_capacity(n_fields);
+
+    for field in &holder.fields {
+        let format_cstr = fmt_c(field.dtype.clone());
+        let name_cstr = CString::new(field.name.clone()).unwrap_or_default();
+        let flags = if field.nullable { 2 } else { 0 };
+
+        let child_holder = Box::new(StructSchemaHolder {
+            format_cstr,
+            name_cstr,
+            metadata_bytes: None,
+        });
+
+        let child = Box::new(ArrowSchema {
+            format: child_holder.format_cstr.as_ptr(),
+            name: child_holder.name_cstr.as_ptr(),
+            metadata: ptr::null(),
+            flags,
+            n_children: 0,
+            children: ptr::null_mut(),
+            dictionary: ptr::null_mut(),
+            release: Some(release_struct_schema),
+            private_data: Box::into_raw(child_holder) as *mut c_void,
+        });
+
+        child_schemas.push(Box::into_raw(child));
+    }
+
+    let children_box = child_schemas.into_boxed_slice();
+    let children_ptr = Box::into_raw(children_box) as *mut *mut ArrowSchema;
+
+    let format_cstr = CString::new("+s").unwrap();
+    let name_cstr = CString::new("").unwrap();
+
+    let metadata_bytes = holder.schema_metadata.clone();
+    let metadata_ptr = metadata_bytes
+        .as_ref()
+        .map(|b| b.as_ptr() as *const i8)
+        .unwrap_or(ptr::null());
+
+    let schema_holder = Box::new(StructSchemaHolder {
+        format_cstr,
+        name_cstr,
+        metadata_bytes,
+    });
+
+    let struct_schema = ArrowSchema {
+        format: schema_holder.format_cstr.as_ptr(),
+        name: schema_holder.name_cstr.as_ptr(),
+        metadata: metadata_ptr,
+        flags: 0,
+        n_children: n_fields as i64,
+        children: children_ptr,
+        dictionary: ptr::null_mut(),
+        release: Some(release_struct_schema),
+        private_data: Box::into_raw(schema_holder) as *mut c_void,
+    };
+
+    unsafe { ptr::write(out, struct_schema) };
+    0
+}
+
+unsafe extern "C" fn rb_stream_get_next(
+    stream: *mut ArrowArrayStream,
+    out: *mut ArrowArray,
+) -> i32 {
+    let holder = unsafe { &mut *((*stream).private_data as *mut RecordBatchStreamHolder) };
+
+    if holder.cursor >= holder.batches.len() {
+        // Signal end of stream: write empty array with release = None
+        unsafe { ptr::write(out, ArrowArray::empty()) };
+        return 0;
+    }
+
+    let batch = holder.batches[holder.cursor].clone();
+    holder.cursor += 1;
+
+    let (arr_ptr, _sch_ptr) = export_struct_to_c(batch);
+
+    // Copy the exported struct array into the caller's out pointer
+    unsafe {
+        ptr::write(out, ptr::read(arr_ptr));
+        // Free the box wrapper without running drop on the ArrowArray itself
+        // (caller now owns the data through the out pointer)
+        std::alloc::dealloc(
+            arr_ptr as *mut u8,
+            std::alloc::Layout::for_value(&*arr_ptr),
+        );
+    }
+
+    // Release the schema (get_next only returns arrays, schema came from get_schema)
+    unsafe {
+        if let Some(release) = (*_sch_ptr).release {
+            release(_sch_ptr);
+        }
+        let _ = Box::from_raw(_sch_ptr);
+    }
+
+    0
+}
+
+unsafe extern "C" fn rb_stream_release(stream: *mut ArrowArrayStream) {
+    if stream.is_null() || (unsafe { &*stream }).release.is_none() {
+        return;
+    }
+    let _ = unsafe { Box::from_raw((*stream).private_data as *mut RecordBatchStreamHolder) };
+    unsafe { ptr::write_bytes(stream, 0, 1) };
+}
+
+// ── Stream export: plain arrays ─────────────────────────────────────────
+
+/// Creates an ArrowArrayStream that yields plain arrays (one per chunk).
+///
+/// Used for SuperArray / ChunkedArray exchange.
+///
+/// # Arguments
+/// * `chunks` - the arrays to yield
+/// * `field` - the field describing the array type
+///
+/// # Returns
+/// A heap-allocated ArrowArrayStream.
+pub fn export_array_stream(
+    chunks: Vec<Arc<Array>>,
+    field: crate::Field,
+) -> Box<ArrowArrayStream> {
+    let holder = Box::new(ArrayStreamHolder {
+        field,
+        chunks,
+        cursor: 0,
+        last_error: None,
+    });
+
+    let stream = Box::new(ArrowArrayStream {
+        get_schema: Some(arr_stream_get_schema),
+        get_next: Some(arr_stream_get_next),
+        get_last_error: Some(stream_get_last_error::<ArrayStreamHolder>),
+        release: Some(arr_stream_release),
+        private_data: Box::into_raw(holder) as *mut c_void,
+    });
+
+    stream
+}
+
+unsafe extern "C" fn arr_stream_get_schema(
+    stream: *mut ArrowArrayStream,
+    out: *mut ArrowSchema,
+) -> i32 {
+    let holder = unsafe { &*((*stream).private_data as *const ArrayStreamHolder) };
+    let field = &holder.field;
+
+    let format_cstr = fmt_c(field.dtype.clone());
+    let name_cstr = CString::new(field.name.clone()).unwrap_or_default();
+    let flags = if field.nullable { 2 } else { 0 };
+
+    let schema_holder = Box::new(StructSchemaHolder {
+        format_cstr,
+        name_cstr,
+        metadata_bytes: None,
+    });
+
+    let schema = ArrowSchema {
+        format: schema_holder.format_cstr.as_ptr(),
+        name: schema_holder.name_cstr.as_ptr(),
+        metadata: ptr::null(),
+        flags,
+        n_children: 0,
+        children: ptr::null_mut(),
+        dictionary: ptr::null_mut(),
+        release: Some(release_struct_schema),
+        private_data: Box::into_raw(schema_holder) as *mut c_void,
+    };
+
+    unsafe { ptr::write(out, schema) };
+    0
+}
+
+unsafe extern "C" fn arr_stream_get_next(
+    stream: *mut ArrowArrayStream,
+    out: *mut ArrowArray,
+) -> i32 {
+    let holder = unsafe { &mut *((*stream).private_data as *mut ArrayStreamHolder) };
+
+    if holder.cursor >= holder.chunks.len() {
+        unsafe { ptr::write(out, ArrowArray::empty()) };
+        return 0;
+    }
+
+    let array = holder.chunks[holder.cursor].clone();
+    holder.cursor += 1;
+
+    let schema = Schema::from(vec![holder.field.clone()]);
+    let (arr_ptr, sch_ptr) = export_to_c(array, schema);
+
+    // Move the exported array into the caller's out pointer
+    unsafe {
+        ptr::write(out, ptr::read(arr_ptr));
+        std::alloc::dealloc(
+            arr_ptr as *mut u8,
+            std::alloc::Layout::for_value(&*arr_ptr),
+        );
+    }
+
+    // Release the schema (not needed for get_next)
+    unsafe {
+        if let Some(release) = (*sch_ptr).release {
+            release(sch_ptr);
+        }
+        let _ = Box::from_raw(sch_ptr);
+    }
+
+    0
+}
+
+unsafe extern "C" fn arr_stream_release(stream: *mut ArrowArrayStream) {
+    if stream.is_null() || (unsafe { &*stream }).release.is_none() {
+        return;
+    }
+    let _ = unsafe { Box::from_raw((*stream).private_data as *mut ArrayStreamHolder) };
+    unsafe { ptr::write_bytes(stream, 0, 1) };
+}
+
+/// Generic get_last_error implementation for stream holders.
+///
+/// Expects the holder's first two fields to be the type-specific data, followed
+/// by `last_error: Option<CString>`. We use a trait to abstract over holder types.
+trait HasLastError {
+    fn last_error(&self) -> Option<&CString>;
+}
+
+impl HasLastError for RecordBatchStreamHolder {
+    fn last_error(&self) -> Option<&CString> {
+        self.last_error.as_ref()
+    }
+}
+
+impl HasLastError for ArrayStreamHolder {
+    fn last_error(&self) -> Option<&CString> {
+        self.last_error.as_ref()
+    }
+}
+
+unsafe extern "C" fn stream_get_last_error<T: HasLastError>(
+    stream: *mut ArrowArrayStream,
+) -> *const i8 {
+    unsafe {
+        if stream.is_null() || (*stream).private_data.is_null() {
+            return ptr::null();
+        }
+        let holder = &*((*stream).private_data as *const T);
+        match holder.last_error() {
+            Some(err) => err.as_ptr(),
+            None => ptr::null(),
+        }
+    }
+}
+
+// ── Stream import ───────────────────────────────────────────────────────
+
+/// Consumes an ArrowArrayStream that yields struct arrays (record batches)
+/// and returns a list of Tables.
+///
+/// Each yielded struct array is decomposed into individual column arrays
+/// which are imported via the copying path, as child array memory is owned
+/// by the parent struct's release callback.
+///
+/// # Safety
+/// `stream` must be a valid, non-null pointer to an initialised ArrowArrayStream.
+pub unsafe fn import_record_batch_stream(
+    stream: *mut ArrowArrayStream,
+) -> Vec<Vec<(Arc<Array>, crate::Field)>> {
+    let (batches, _metadata) = unsafe { import_record_batch_stream_with_metadata(stream) };
+    batches
+}
+
+/// Like [`import_record_batch_stream`], but also returns the schema-level
+/// metadata as key-value pairs. Returns `None` for metadata when the schema
+/// has no metadata attached.
+pub unsafe fn import_record_batch_stream_with_metadata(
+    stream: *mut ArrowArrayStream,
+) -> (
+    Vec<Vec<(Arc<Array>, crate::Field)>>,
+    Option<std::collections::BTreeMap<String, String>>,
+) {
+    unsafe {
+        // 1. Get schema
+        let mut schema = ArrowSchema::empty();
+        let get_schema = ((*stream).get_schema).expect("stream has no get_schema callback");
+        let rc = get_schema(stream, &mut schema);
+        assert_eq!(rc, 0, "ArrowArrayStream get_schema returned error code {}", rc);
+
+        // Extract metadata before parsing children
+        let metadata = decode_arrow_metadata(schema.metadata);
+
+        // Parse child field info from the struct schema
+        let n_fields = schema.n_children as usize;
+        let child_schemas: Vec<&ArrowSchema> = if n_fields > 0 && !schema.children.is_null() {
+            (0..n_fields)
+                .map(|i| &**schema.children.add(i))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // 2. Consume batches
+        let mut batches = Vec::new();
+        let get_next = ((*stream).get_next).expect("stream has no get_next callback");
+
+        loop {
+            let mut arr = ArrowArray::empty();
+            let rc = get_next(stream, &mut arr);
+            assert_eq!(rc, 0, "ArrowArrayStream get_next returned error code {}", rc);
+
+            // End of stream: release is None
+            if arr.release.is_none() {
+                break;
+            }
+
+            // Decompose struct array into columns using the copying import path
+            let n_children = arr.n_children as usize;
+            assert_eq!(
+                n_children, n_fields,
+                "Struct array child count ({}) does not match schema ({})",
+                n_children, n_fields
+            );
+
+            let mut columns = Vec::with_capacity(n_children);
+            for i in 0..n_children {
+                let child_arr = &**arr.children.add(i);
+                let child_sch = child_schemas[i];
+                // Use copying import since children are owned by the parent's release
+                let imported = import_from_c(child_arr as *const _, child_sch as *const _);
+                // Extract field from child schema
+                let name = if child_sch.name.is_null() {
+                    String::new()
+                } else {
+                    std::ffi::CStr::from_ptr(child_sch.name)
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                let nullable = (child_sch.flags & 2) != 0;
+                let fmt = std::ffi::CStr::from_ptr(child_sch.format).to_bytes();
+                let dtype = parse_arrow_format(fmt);
+                let field = crate::Field::new(name, dtype, nullable, None);
+                columns.push((imported, field));
+            }
+
+            // Release the parent struct array, which frees children
+            if let Some(release) = arr.release {
+                release(&mut arr as *mut ArrowArray);
+            }
+
+            batches.push(columns);
+        }
+
+        // 3. Release the struct schema
+        if let Some(release) = schema.release {
+            release(&mut schema as *mut ArrowSchema);
+        }
+
+        // 4. Release the stream
+        if let Some(release) = (*stream).release {
+            release(stream);
+        }
+
+        (batches, metadata)
+    }
+}
+
+/// Consumes an ArrowArrayStream that yields plain arrays and returns the
+/// imported arrays along with the field metadata.
+///
+/// Uses the zero-copy import path since each yielded array is independently
+/// owned.
+///
+/// # Safety
+/// `stream` must be a valid, non-null pointer to an initialised ArrowArrayStream.
+pub unsafe fn import_array_stream(
+    stream: *mut ArrowArrayStream,
+) -> (Vec<Arc<Array>>, crate::Field) {
+    unsafe {
+        // 1. Get schema
+        let mut schema_c = ArrowSchema::empty();
+        let get_schema = ((*stream).get_schema).expect("stream has no get_schema callback");
+        let rc = get_schema(stream, &mut schema_c);
+        assert_eq!(rc, 0, "ArrowArrayStream get_schema returned error code {}", rc);
+
+        // Extract field info
+        let name = if schema_c.name.is_null() {
+            String::new()
+        } else {
+            std::ffi::CStr::from_ptr(schema_c.name)
+                .to_string_lossy()
+                .into_owned()
+        };
+        let nullable = (schema_c.flags & 2) != 0;
+        let fmt = std::ffi::CStr::from_ptr(schema_c.format).to_bytes();
+        let dtype = parse_arrow_format(fmt);
+        let field = crate::Field::new(name, dtype, nullable, None);
+
+        // Release the schema as we have extracted what we need
+        if let Some(release) = schema_c.release {
+            release(&mut schema_c as *mut ArrowSchema);
+        }
+
+        // 2. Consume arrays
+        let mut arrays = Vec::new();
+        let get_next = ((*stream).get_next).expect("stream has no get_next callback");
+
+        loop {
+            let mut arr = ArrowArray::empty();
+            let rc = get_next(stream, &mut arr);
+            assert_eq!(rc, 0, "ArrowArrayStream get_next returned error code {}", rc);
+
+            if arr.release.is_none() {
+                break;
+            }
+
+            // Create schema for this array to import with ownership
+            let schema_box = {
+                let fmt_cstr = fmt_c(field.dtype.clone());
+                let name_cstr = CString::new(field.name.clone()).unwrap_or_default();
+                let flags = if field.nullable { 2 } else { 0 };
+                Box::new(ArrowSchema {
+                    format: fmt_cstr.into_raw(),
+                    name: name_cstr.into_raw(),
+                    metadata: ptr::null(),
+                    flags,
+                    n_children: 0,
+                    children: ptr::null_mut(),
+                    dictionary: ptr::null_mut(),
+                    release: Some(release_arrow_schema),
+                    private_data: ptr::null_mut(),
+                })
+            };
+
+            let arr_box = Box::new(arr);
+            let (imported, _) = import_from_c_owned(arr_box, schema_box);
+            arrays.push(imported);
+        }
+
+        // 3. Release the stream
+        if let Some(release) = (*stream).release {
+            release(stream);
+        }
+
+        (arrays, field)
+    }
+}
+
+/// Parses an Arrow C format string into an ArrowType.
+/// Shared between import_from_c, import_from_c_owned, and stream import.
+fn parse_arrow_format(fmt: &[u8]) -> ArrowType {
+    match fmt {
+        b"n" => ArrowType::Null,
+        b"b" => ArrowType::Boolean,
+        #[cfg(feature = "extended_numeric_types")]
+        b"c" => ArrowType::Int8,
+        #[cfg(feature = "extended_numeric_types")]
+        b"C" => ArrowType::UInt8,
+        #[cfg(feature = "extended_numeric_types")]
+        b"s" => ArrowType::Int16,
+        #[cfg(feature = "extended_numeric_types")]
+        b"S" => ArrowType::UInt16,
+        b"i" => ArrowType::Int32,
+        b"I" => ArrowType::UInt32,
+        b"l" => ArrowType::Int64,
+        b"L" => ArrowType::UInt64,
+        b"f" => ArrowType::Float32,
+        b"g" => ArrowType::Float64,
+        b"u" => ArrowType::String,
+        #[cfg(feature = "large_string")]
+        b"U" => ArrowType::LargeString,
+        #[cfg(feature = "datetime")]
+        b"tdD" => ArrowType::Date32,
+        #[cfg(feature = "datetime")]
+        b"tdm" => ArrowType::Date64,
+        #[cfg(feature = "datetime")]
+        b"tts" => ArrowType::Time32(crate::TimeUnit::Seconds),
+        #[cfg(feature = "datetime")]
+        b"ttm" => ArrowType::Time32(crate::TimeUnit::Milliseconds),
+        #[cfg(feature = "datetime")]
+        b"ttu" => ArrowType::Time64(crate::TimeUnit::Microseconds),
+        #[cfg(feature = "datetime")]
+        b"ttn" => ArrowType::Time64(crate::TimeUnit::Nanoseconds),
+        #[cfg(feature = "datetime")]
+        b"tDs" => ArrowType::Duration32(crate::TimeUnit::Seconds),
+        #[cfg(feature = "datetime")]
+        b"tDm" => ArrowType::Duration32(crate::TimeUnit::Milliseconds),
+        #[cfg(feature = "datetime")]
+        b"tDu" => ArrowType::Duration64(crate::TimeUnit::Microseconds),
+        #[cfg(feature = "datetime")]
+        b"tDn" => ArrowType::Duration64(crate::TimeUnit::Nanoseconds),
+        #[cfg(feature = "datetime")]
+        b"tiM" => ArrowType::Interval(crate::IntervalUnit::YearMonth),
+        #[cfg(feature = "datetime")]
+        b"tiD" => ArrowType::Interval(crate::IntervalUnit::DaysTime),
+        #[cfg(feature = "datetime")]
+        b"tin" => ArrowType::Interval(crate::IntervalUnit::MonthDaysNs),
+        b"+s" => ArrowType::Null, // struct marker (handled at stream level)
+        #[cfg(feature = "datetime")]
+        _ if fmt.starts_with(b"tss")
+            || fmt.starts_with(b"tsm")
+            || fmt.starts_with(b"tsu")
+            || fmt.starts_with(b"tsn") =>
+        {
+            let unit = match &fmt[..3] {
+                b"tss" => crate::TimeUnit::Seconds,
+                b"tsm" => crate::TimeUnit::Milliseconds,
+                b"tsu" => crate::TimeUnit::Microseconds,
+                b"tsn" => crate::TimeUnit::Nanoseconds,
+                _ => unreachable!(),
+            };
+            let tz = if fmt.len() > 4 {
+                let tz_bytes = &fmt[4..];
+                let tz_str = String::from_utf8_lossy(tz_bytes).into_owned();
+                if tz_str.is_empty() {
+                    None
+                } else {
+                    Some(tz_str)
+                }
+            } else {
+                None
+            };
+            ArrowType::Timestamp(unit, tz)
+        }
+        o => panic!("unsupported Arrow format {:?}", std::str::from_utf8(o).unwrap_or("??")),
+    }
 }
 
 // Arrow C Data Interface basic tests

@@ -68,7 +68,7 @@ Achieved through minimal dependencies: primarily `num-traits`, with optional `ra
 
 ### SIMD Alignment
 
-All buffers use 64-byte alignment via `Vec64`. No reallocation step to fix alignment—data is ready for vectorised operations from the moment it's created.
+All buffers use 64-byte alignment via `Vec64`. No reallocation step to fix alignment-data is ready for vectorised operations from the moment it's created.
 
 ### Zero-Copy Views
 
@@ -134,9 +134,9 @@ match array {
 ```
 
 This gives you:
-- **Performance** — Compiler inlines through the dispatch
-- **Type safety** — No `Any`, no runtime downcasts
-- **Ergonomics** — Direct accessors like `array.num().i64()`
+- **Performance** - Compiler inlines through the dispatch
+- **Type safety** - No `Any`, no runtime downcasts
+- **Ergonomics** - Direct accessors like `array.num().i64()`
 
 ## Benchmarks
 
@@ -186,9 +186,9 @@ Minarrow focuses on flat columnar data and 80/20. Nested types (List, Struct) ar
 
 Contributions welcome:
 
-1. **Connectors** — Data source/sink integrations
-2. **Optimisations** — Performance improvements
-3. **Nested types** — List and Struct support (PRs welcome)
+1. **Connectors** - Data source/sink integrations
+2. **Optimisations** - Performance improvements
+3. **Nested types** - List and Struct support (PRs welcome)
 4. **Bug fixes**
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

@@ -22,7 +22,7 @@ name = "minarrow_pyo3"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-minarrow = { version = "0.5.0", features = ["large_string"] }
+minarrow = { path = "..", features = ["large_string"] }
 pyo3 = { version = "0.23" }
 once_cell = "1"
 thiserror = "2"
@@ -36,4 +36,16 @@ extended_categorical = ["minarrow/extended_categorical"]
 
 [build-dependencies]
 pyo3-build-config = "0.23"
+
+[[example]]
+name = "atomic_tests"
+path = "tests/atomic_tests.rs"
+
+[[example]]
+name = "python_roundtrip"
+path = "tests/python_roundtrip.rs"
+
+[[example]]
+name = "pycapsule_exchange"
+path = "examples/pycapsule_exchange.rs"
 

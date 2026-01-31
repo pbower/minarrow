@@ -1,12 +1,12 @@
-//! # **Buffer** — *Unified owned/shared data storage*
+//! # **Buffer** - *Unified owned/shared data storage*
 //!
 //! Buffer backs most inner Array types in *Minarrow* (`IntegerArray`, `FloatArray`, `CategoricalArray`, `StringArray`, `DatetimeArray`).
 //!
 //! # Design
 //! `Buffer<T>` abstracts over two storage backends:
-//! - **Owned**: [`Vec64<T>`] — an internally aligned, 64-byte, heap-allocated vector optimised
+//! - **Owned**: [`Vec64<T>`] - an internally aligned, 64-byte, heap-allocated vector optimised
 //!   for SIMD kernels.
-//! - **Shared**: [`SharedBuffer`] — a zero-copy, read-only window into externally owned memory
+//! - **Shared**: [`SharedBuffer`] - a zero-copy, read-only window into externally owned memory
 //!   (e.g. memory-mapped files, network streams).
 //! - Whilst it would be simpler to avoid an extra abstraction *(putting `Vec64` directly in the above types)*,
 //! that would mean data would be copied from those external sources breaking zero-copy guarantees.
@@ -26,7 +26,7 @@
 //! - **Mutating ops** (push, splice, clear, etc.) transparently convert shared buffers into
 //!   owned `Vec64<T>` before modifying.
 //! - All owned buffers are guaranteed 64-byte aligned for predictable SIMD performance.
-//! - Shared buffers *may* be 64-byte aligned — if not, they are cloned into an aligned `Vec64<T>`
+//! - Shared buffers *may* be 64-byte aligned - if not, they are cloned into an aligned `Vec64<T>`
 //!   on ingestion.
 //!
 //! ## Alignment rules
@@ -40,7 +40,7 @@
 //! ## Safety notes
 //! - When using `from_shared_raw`, the pointer must be valid, correctly aligned for `T`,
 //!   and must lie entirely within the lifetime of the provided `Arc<[u8]>`.
-//! - For externally supplied memory, alignment should be ensured at source — *Minarrow*’s
+//! - For externally supplied memory, alignment should be ensured at source - *Minarrow*’s
 //!   IO paths (e.g. via *Lightstream-IO*) guarantee it.
 //!
 //! ## Typical use

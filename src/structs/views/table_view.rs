@@ -12,7 +12,7 @@
 //! ## Behaviour
 //! - Columns are exposed as `ArrayV` windows with the same `(offset, len)`.
 //! - Schema (`Field`s) is retained and shared; column data is not copied.
-//! - Slicing a `TableV` (`from_self`) is O(1) — metadata-only.
+//! - Slicing a `TableV` (`from_self`) is O(1) - metadata-only.
 //! - `to_table()` materialises an owned `Table` copy of the window.
 //!
 //! ## When to use

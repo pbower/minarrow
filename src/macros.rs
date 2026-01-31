@@ -1,24 +1,24 @@
-//! # **Internal Macros** — *Automates boilerplate Array implementations*
+//! # **Internal Macros** - *Automates boilerplate Array implementations*
 //!
 //! Utilities to remove boilerplate when building Minarrow array types, trait impls,
 //! and enum dispatch. These macros keep array definitions small and consistent.
 //!
 //! ## Included macros
-//! - **`impl_numeric_array_constructors!`** — adds common constructors
+//! - **`impl_numeric_array_constructors!`** - adds common constructors
 //!   (`new`, `with_capacity`, `from_slice`) to "numeric-shaped" arrays
 //!   that store `data: Buffer<T>` and an optional `null_mask`.
-//! - **`impl_masked_array!`** — implements the core [`MaskedArray`] trait for a
+//! - **`impl_masked_array!`** - implements the core [`MaskedArray`] trait for a
 //!   given array type and element bound, including getters/setters, iterators,
 //!   slicing (`slice_clone`), and null-mask handling.
-//! - **`impl_from_vec_primitive!`** — adds zero-copy builders
+//! - **`impl_from_vec_primitive!`** - adds zero-copy builders
 //!   (`from_vec64`, `from_vec`) for arrays backed by `Vec64<T>` (and friends).
-//! - **`match_array!`** — concise enum dispatch helper over [`Array`] variants;
+//! - **`match_array!`** - concise enum dispatch helper over [`Array`] variants;
 //!   calls the same method on the active variant and returns a default otherwise.
-//! - **`impl_usize_conversions!`** — implements lossless `usize` conversions for
+//! - **`impl_usize_conversions!`** - implements lossless `usize` conversions for
 //!   integer offset/index types used across the crate.
-//! - **`impl_array_ref_deref!`** — generates `AsRef`, `AsMut`, `Deref`, `DerefMut`
+//! - **`impl_array_ref_deref!`** - generates `AsRef`, `AsMut`, `Deref`, `DerefMut`
 //!   to expose the inner value buffer as slices, for generic or concrete arrays.
-//! - **`impl_arc_masked_array!`** — implements [`MaskedArray`] for `Arc<Inner>`,
+//! - **`impl_arc_masked_array!`** - implements [`MaskedArray`] for `Arc<Inner>`,
 //!   enabling clone-on-write mutation and making `Arc` arrays usable with view APIs.
 //!
 //! ## Notes
@@ -832,14 +832,14 @@ macro_rules! impl_array_ref_deref {
 /// We implement these under [crate::conversions].
 ///
 /// ### Parameters
-/// - `Inner = $inner:ty`               — the concrete array type, e.g. `BooleanArray<()>`  
-/// - `T = $T:ty`                       — element type, e.g. `bool`  
-/// - `Container = $Container:ty`       — backing store, e.g. `Bitmask`  
-/// - `LogicalType = $LogicalType:ty`   — logical type, e.g. `bool`  
-/// - `CopyType = $CopyType:ty`         — copy type, e.g. `bool`  
-/// - `BufferT = $BufferT:ty`           — view buffer type, e.g. `u8`  
-/// - `Variant = $variant:ident`        — enum variant, e.g. `BooleanArray`
-/// - `Bound = &Bound:path`             —  
+/// - `Inner = $inner:ty`               - the concrete array type, e.g. `BooleanArray<()>`  
+/// - `T = $T:ty`                       - element type, e.g. `bool`  
+/// - `Container = $Container:ty`       - backing store, e.g. `Bitmask`  
+/// - `LogicalType = $LogicalType:ty`   - logical type, e.g. `bool`  
+/// - `CopyType = $CopyType:ty`         - copy type, e.g. `bool`  
+/// - `BufferT = $BufferT:ty`           - view buffer type, e.g. `u8`  
+/// - `Variant = $variant:ident`        - enum variant, e.g. `BooleanArray`
+/// - `Bound = &Bound:path`             -  
 ///
 /// *Due to inherent variation, it turns out that all of these parameters
 /// are required to support unification, despite appearing overkill at first glance*.

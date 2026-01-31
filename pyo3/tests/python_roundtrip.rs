@@ -1,17 +1,18 @@
-//! # Python Roundtrip Example
+//! # Python Roundtrip Integration Test
 //!
 //! Demonstrates roundtrip conversion between MinArrow and PyArrow.
 //!
-//! ## Running this example
+//! ## Running
 //!
-//! Make sure pyarrow is installed:
 //! ```bash
-//! pip install pyarrow
-//! ```
-//!
-//! Then run:
-//! ```bash
-//! PYO3_PYTHON=/usr/bin/python3 cargo run --example python_roundtrip
+//! cd pyo3
+//! PYO3_PYTHON=$(pwd)/.venv/bin/python \
+//!   PYTHONHOME=/usr \
+//!   PYTHONPATH=$(pwd)/.venv/lib/python3.12/site-packages \
+//!   LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu \
+//!   cargo run --example python_roundtrip \
+//!     --no-default-features \
+//!     --features "datetime,extended_numeric_types,extended_categorical"
 //! ```
 
 use minarrow::{Array, Field, FieldArray, IntegerArray, MaskedArray, StringArray, Table};
@@ -24,7 +25,7 @@ fn main() -> PyResult<()> {
     pyo3::prepare_freethreaded_python();
 
     Python::with_gil(|py| {
-        println!("=== MinArrow ↔ PyArrow Roundtrip Example ===\n");
+        println!("=== MinArrow <-> PyArrow Roundtrip Example ===\n");
 
         // Test 1: Integer Array roundtrip
         test_integer_array_roundtrip(py)?;

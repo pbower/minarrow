@@ -989,6 +989,12 @@ impl TryFrom<Value> for SuperArray {
             Value::SuperArray(inner) => {
                 Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone()))
             }
+            Value::VecValue(inner) => {
+                let values = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                let chunks: Result<Vec<Array>, _> =
+                    values.into_iter().map(Array::try_from).collect();
+                Ok(SuperArray::from_arrays(chunks?))
+            }
             _ => Err(MinarrowError::TypeError {
                 from: "Value",
                 to: "SuperArray",

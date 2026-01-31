@@ -1,17 +1,118 @@
 # minarrow-pyo3
 
-PyO3 bindings for MinArrow - zero-copy Arrow interop with Python via PyArrow.
+PyO3 bindings for MinArrow - zero-copy Arrow interop with Python via the Arrow PyCapsule and C Data Interfaces.
 
 ## Overview
 
-This crate provides transparent wrapper types that enable seamless conversion between MinArrow's Rust types and PyArrow's Python types using the Arrow C Data Interface.
+This crate provides transparent wrapper types that enable straightforward conversion between MinArrow's Rust types and Python Arrow-compatible types. Any library supporting the Arrow PyCapsule protocol works out of the box: PyArrow, Polars, DuckDB, nanoarrow, pandas with ArrowDtype, etc.
 
-## Type Mappings
+## Container Type Mappings
 
-| MinArrow | PyArrow | Wrapper Type |
-|----------|---------|--------------|
-| `Array` | `pa.Array` | `PyArray` |
-| `Table` | `pa.RecordBatch` | `PyRecordBatch` |
+MinArrow calls an object with a header, rows and columns a "Table" favouring broader matter-of-factness. Apache Arrow calls it a "RecordBatch" in line with the Apache Arrow standard, whereby a "Table" (at least in PyArrow) is considered a chunked composition of those RecordBatches, for a more highly engineered approach. Below is how they map to one another for the equivalent memory and object layout.
+
+| MinArrow | PyArrow | Wrapper Type | Protocol |
+|----------|---------|--------------|----------|
+| `Array` | `pa.Array` | `PyArray` | `__arrow_c_array__` |
+| `Table` | `pa.RecordBatch` | `PyRecordBatch` | `__arrow_c_stream__` (one batch) |
+| `SuperTable` | `pa.Table` | `PyTable` | `__arrow_c_stream__` (multiple batches) |
+| `SuperArray` | `pa.ChunkedArray` | `PyChunkedArray` | `__arrow_c_stream__` (one array per chunk) |
+
+## Array Data Type Mappings
+
+Each inner MinArrow array type maps 1:1 to a specific PyArrow typed array. The Arrow C Data Interface preserves schema metadata so PyArrow reconstructs the correct type on import.
+
+### Numeric types
+
+| MinArrow inner type | `Array` enum path | Arrow format | PyArrow type |
+|---------------------|-------------------|--------------|--------------|
+| `IntegerArray<i32>` | `NumericArray::Int32` | `i` | `pa.Int32Array` |
+| `IntegerArray<i64>` | `NumericArray::Int64` | `l` | `pa.Int64Array` |
+| `IntegerArray<u32>` | `NumericArray::UInt32` | `I` | `pa.UInt32Array` |
+| `IntegerArray<u64>` | `NumericArray::UInt64` | `L` | `pa.UInt64Array` |
+| `FloatArray<f32>` | `NumericArray::Float32` | `f` | `pa.FloatArray` |
+| `FloatArray<f64>` | `NumericArray::Float64` | `g` | `pa.DoubleArray` |
+
+### Extended numeric types (feature `extended_numeric_types`)
+
+| MinArrow inner type | `Array` enum path | Arrow format | PyArrow type |
+|---------------------|-------------------|--------------|--------------|
+| `IntegerArray<i8>` | `NumericArray::Int8` | `c` | `pa.Int8Array` |
+| `IntegerArray<i16>` | `NumericArray::Int16` | `s` | `pa.Int16Array` |
+| `IntegerArray<u8>` | `NumericArray::UInt8` | `C` | `pa.UInt8Array` |
+| `IntegerArray<u16>` | `NumericArray::UInt16` | `S` | `pa.UInt16Array` |
+
+### Boolean
+
+| MinArrow inner type | `Array` enum path | Arrow format | PyArrow type |
+|---------------------|-------------------|--------------|--------------|
+| `BooleanArray` | `Array::BooleanArray` | `b` | `pa.BooleanArray` |
+
+### Text types
+
+| MinArrow inner type | `Array` enum path | Arrow format | PyArrow type |
+|---------------------|-------------------|--------------|--------------|
+| `StringArray<u32>` | `TextArray::String32` | `u` | `pa.StringArray` |
+| `StringArray<u64>` | `TextArray::String64` | `U` | `pa.LargeStringArray` |
+
+### Temporal types (feature `datetime`)
+
+MinArrow stores temporal data in `DatetimeArray<i32>` or `DatetimeArray<i64>` with a `TimeUnit` discriminator. The Arrow type is determined by the `ArrowType` in the `Field`, not the storage type alone.
+
+| MinArrow inner type | `ArrowType` | Arrow format | PyArrow type |
+|---------------------|-------------|--------------|--------------|
+| `DatetimeArray<i32>` | `Date32` | `tdD` | `pa.Date32Array` |
+| `DatetimeArray<i64>` | `Date64` | `tdm` | `pa.Date64Array` |
+| `DatetimeArray<i32>` | `Time32(Seconds)` | `tts` | `pa.Time32Array` |
+| `DatetimeArray<i32>` | `Time32(Milliseconds)` | `ttm` | `pa.Time32Array` |
+| `DatetimeArray<i64>` | `Time64(Microseconds)` | `ttu` | `pa.Time64Array` |
+| `DatetimeArray<i64>` | `Time64(Nanoseconds)` | `ttn` | `pa.Time64Array` |
+| `DatetimeArray<i64>` | `Timestamp(Seconds, tz)` | `tss:tz` | `pa.TimestampArray` |
+| `DatetimeArray<i64>` | `Timestamp(Milliseconds, tz)` | `tsm:tz` | `pa.TimestampArray` |
+| `DatetimeArray<i64>` | `Timestamp(Microseconds, tz)` | `tsu:tz` | `pa.TimestampArray` |
+| `DatetimeArray<i64>` | `Timestamp(Nanoseconds, tz)` | `tsn:tz` | `pa.TimestampArray` |
+| `DatetimeArray<i32>` | `Duration32(Seconds)` | `tDs` | `pa.DurationArray` |
+| `DatetimeArray<i32>` | `Duration32(Milliseconds)` | `tDm` | `pa.DurationArray` |
+| `DatetimeArray<i64>` | `Duration64(Microseconds)` | `tDu` | `pa.DurationArray` |
+| `DatetimeArray<i64>` | `Duration64(Nanoseconds)` | `tDn` | `pa.DurationArray` |
+
+Timezone metadata for timestamps is preserved via the Arrow schema format string.
+
+### Categorical / dictionary types
+
+| MinArrow inner type | `Array` enum path | Arrow format | PyArrow type |
+|---------------------|-------------------|--------------|--------------|
+| `CategoricalArray<u32>` | `TextArray::Categorical32` | dictionary(int32, utf8) | `pa.DictionaryArray` |
+
+With feature `extended_categorical` + `extended_numeric_types`:
+
+| MinArrow inner type | `Array` enum path | Arrow format | PyArrow type |
+|---------------------|-------------------|--------------|--------------|
+| `CategoricalArray<u8>` | `TextArray::Categorical8` | dictionary(int8, utf8) | `pa.DictionaryArray` |
+| `CategoricalArray<u16>` | `TextArray::Categorical16` | dictionary(int16, utf8) | `pa.DictionaryArray` |
+
+With feature `extended_categorical`:
+
+| MinArrow inner type | `Array` enum path | Arrow format | PyArrow type |
+|---------------------|-------------------|--------------|--------------|
+| `CategoricalArray<u64>` | `TextArray::Categorical64` | dictionary(int64, utf8) | `pa.DictionaryArray` |
+
+### Nullability
+
+All array types support null values via MinArrow's `MaskedArray` wrapper. The validity bitmap is transferred through the Arrow C Data Interface and PyArrow reconstructs the same null positions on import.
+
+## Conversion Path
+
+Inner array types like `IntegerArray<T>` are not exported directly. They must first be wrapped in the `Array` enum via a factory method, then paired with a `Field` to form a `FieldArray`:
+
+```text
+IntegerArray<i64>
+  -> Array::from_int64(arr)          // wraps in NumericArray::Int64(Arc<IntegerArray<i64>>)
+  -> FieldArray::new(field, array)   // pairs with schema metadata
+  -> PyArray                         // wrapper implementing PyO3 traits
+  -> export_to_c / PyCapsule        // Arrow C Data Interface export
+```
+
+The `Array::from_*` factory methods wrap inner arrays in `Arc`, so subsequent clones of the `Array` enum only increment reference counts - the underlying buffer is never copied. The FFI `Holder` struct stores this `Arc<Array>` in its `private_data` field, keeping the buffer alive until the consumer calls `release()`.
 
 ## Installation
 
@@ -29,13 +130,13 @@ pip install maturin pyarrow
 ### Building
 
 ```bash
-cd minarrow-pyo3
-maturin develop
+cd pyo3
+maturin develop --all-features
 ```
 
 For a release build:
 ```bash
-maturin build --release
+maturin build --release --all-features
 ```
 
 ## Usage
@@ -51,9 +152,7 @@ use pyo3::prelude::*;
 
 #[pyfunction]
 fn double_values(input: PyArray) -> PyResult<PyArray> {
-    // Access the MinArrow Array
     let array = input.inner();
-
     // Process... (example: clone and return)
     Ok(PyArray::from(array.clone()))
 }
@@ -95,58 +194,79 @@ print(result)  # PyArrow RecordBatch
 
 ## Features
 
-- `datetime` - Enable datetime/temporal type support
+- `datetime` - Enable datetime/temporal type support (Date32, Date64, Timestamp, Duration, Time32, Time64)
 - `extended_numeric_types` - Enable i8, i16, u8, u16 types
 - `extended_categorical` - Enable Categorical8, Categorical16, Categorical64
 
+All features are enabled by default.
+
 ## Testing
 
-### Python Tests
+### Python tests (20 tests, both directions)
 
-Run the comprehensive Python test suite:
+Tests all types as Rust -> Python -> Rust roundtrips via PyArrow:
 
 ```bash
 cd pyo3
-python3 -m venv .venv
-source .venv/bin/activate
-pip install pyarrow maturin
-maturin develop
-python test_roundtrip.py
+maturin develop --all-features
+.venv/bin/python tests/test_roundtrip.py
 ```
 
-### Rust Tests
+### Rust tests (48 tests, both directions)
 
-Run the Rust roundtrip tests. These require special setup because PyO3's `extension-module`
-feature (default) doesn't link against libpython.
+Tests all types atomically in both directions - Rust -> Python -> Rust roundtrips, and separate Python -> Rust imports via the PyCapsule protocol:
 
 ```bash
 cd pyo3
 
-# 1. Find which Python library the binary links against:
-cargo build --example run_tests --no-default-features --features "datetime,extended_numeric_types,extended_categorical"
-ldd target/debug/examples/run_tests | grep python
+# PYO3_PYTHON MUST be an absolute path - relative paths fail in cargo build scripts.
+# Run cargo clean first if you previously built against a different Python or venv,
+# because PyO3 caches the Python path in build artefacts.
 
-# 2. Set PYTHONHOME to that Python's prefix:
-#    e.g., if it links to /usr/local/lib/libpython3.12.so, use PYTHONHOME=/usr/local
-#    You can verify with: /usr/local/bin/python3.12 -c "import sys; print(sys.prefix)"
-
-# 3. Run the tests:
-PYTHONHOME=/usr/local cargo run --example run_tests \
+PYO3_PYTHON=$(pwd)/.venv/bin/python \
+  PYTHONHOME=/usr \
+  PYTHONPATH=$(pwd)/.venv/lib/python3.12/site-packages \
+  LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu \
+  cargo run --example atomic_tests \
     --no-default-features \
     --features "datetime,extended_numeric_types,extended_categorical"
 ```
 
-The `--no-default-features` disables `extension-module`, allowing the binary to link
-against libpython for standalone execution.
+The `--no-default-features` disables `extension-module`, allowing the binary to link against libpython for standalone execution. `PYO3_PYTHON` must be an absolute path to the venv Python. `PYTHONHOME` must match your system Python prefix. `PYTHONPATH` must include the venv site-packages.
+
+### PyCapsule examples
+
+Python demo showing PyCapsule consumption by PyArrow, nanoarrow, and Polars:
+
+```bash
+cd pyo3
+maturin develop --all-features
+.venv/bin/python examples/pycapsule_demo.py
+```
+
+Rust demo showing PyCapsule export and import with an embedded Python interpreter:
+
+```bash
+cd pyo3
+
+PYO3_PYTHON=$(pwd)/.venv/bin/python \
+  PYTHONHOME=/usr \
+  PYTHONPATH=$(pwd)/.venv/lib/python3.12/site-packages \
+  LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu \
+  cargo run --example pycapsule_exchange \
+    --no-default-features \
+    --features "datetime,extended_numeric_types,extended_categorical"
+```
 
 ## Architecture
 
-The bindings use the Arrow C Data Interface for zero-copy data transfer:
+The bindings use two exchange protocols:
 
-1. **Rust -> Python**: MinArrow's `export_to_c()` exports to Arrow C format, PyArrow's `_import_from_c()` imports it
-2. **Python -> Rust**: PyArrow's `_export_to_c()` exports, MinArrow's `import_from_c()` imports
+1. **Arrow PyCapsule Interface** - the standard `__arrow_c_array__` / `__arrow_c_stream__` protocol. Import functions try this first. Works with any Arrow-compatible Python library.
 
-Memory is managed through reference counting - the Arrow release callbacks ensure proper cleanup when either side releases the data.
+2. **Legacy `_export_to_c`** - PyArrow-specific fallback using raw pointer integers for older PyArrow versions.
+
+Memory is managed through Arc reference counting. The Arrow release callbacks ensure the Rust-side buffers remain alive until the consumer is done with them. Buffer data is not copied during FFI transfer, however (relatively cheap) Field metadata is.
 
 ## License
 

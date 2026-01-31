@@ -73,7 +73,7 @@ fn test_array_to_arrow_datetime_infer_date32() {
 #[cfg(feature = "datetime")]
 #[test]
 fn test_array_to_arrow_datetime_infer_time32s() {
-    // Time32(Second) — use explicit Field so logical type matches Seconds
+    // Time32(Second) - use explicit Field so logical type matches Seconds
     let a = MArray::TemporalArray(TemporalArray::Datetime32(Arc::new(
         minarrow::DatetimeArray::<i32> {
             data: minarrow::Buffer::from_slice(&[1, 2, 3]),
@@ -110,7 +110,7 @@ fn test_array_to_arrow_datetime_infer_date64_and_ts_ns() {
     assert_eq!(c_ms.value(0), 1_600_000_000_000);
     assert_eq!(c_ms.value(1), 1_600_000_000_001);
 
-    // Timestamp(ns) — explicit Field
+    // Timestamp(ns) - explicit Field
     let a_ns = MArray::TemporalArray(TemporalArray::Datetime64(Arc::new(
         minarrow::DatetimeArray::<i64> {
             data: minarrow::Buffer::from_slice(&[1, 2, 3]),

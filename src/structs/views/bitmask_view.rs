@@ -6,24 +6,24 @@
 //! ## Purpose
 //! - **Indexable** and **bounds-checked** access to a subset of a bit-packed mask.
 //! - All logical indices are **relative to the window**.
-//! - Avoids copying — shares the parent mask buffer via `Arc`.
+//! - Avoids copying - shares the parent mask buffer via `Arc`.
 //!
 //! ## Behaviour
 //! - All operations remap indices internally to the correct positions in the parent mask.
-//! - Window slicing (`slice`) is O(1) — pointer and metadata updates only.
+//! - Window slicing (`slice`) is O(1) - pointer and metadata updates only.
 //! - Arc Clones cheaply.
 //! - Use [`to_bitmask`](BitmaskV::to_bitmask) for a materialised copy of the view.
 //!
 //! ## Threading
-//! - Thread-safe by virtue of immutability — no interior mutability.
+//! - Thread-safe by virtue of immutability - no interior mutability.
 //!
 //! ## Performance Notes
 //! - Before introducing a `BitmaskV`, consider whether simply cloning the [`Bitmask`]
 //!   would be sufficient, since cloning is already extremely cheap.
 //!
 //! ## Related
-//! - [`Bitmask`] — the full mask structure this views into.
-//! - [`BitmaskVT`] — the tuple form returned by [`as_tuple`](BitmaskV::as_tuple).
+//! - [`Bitmask`] - the full mask structure this views into.
+//! - [`BitmaskVT`] - the tuple form returned by [`as_tuple`](BitmaskV::as_tuple).
 
 use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::Index;

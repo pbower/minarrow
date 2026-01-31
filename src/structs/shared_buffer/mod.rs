@@ -219,7 +219,7 @@ impl SharedBuffer {
     ///   reference count is `1`.
     /// - **Static buffers** (`STATIC_VT`): Always returns `true`, as the memory is
     ///   immutable, globally shared, and never deallocated.  
-    ///   This does **not** imply transfer of ownership — only that no additional
+    ///   This does **not** imply transfer of ownership - only that no additional
     ///   runtime references are tracked.
     /// - **Foreign owners** (e.g., `Arc<[u8]>`): Returns `true` only when there are
     ///   no other references to the underlying allocation.

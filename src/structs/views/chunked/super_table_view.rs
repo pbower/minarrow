@@ -304,13 +304,13 @@ mod tests {
         let sub = full.slice(1, 3);
         assert_eq!(sub.len, 3); // The slice window length, not parent len
 
-        // row() — convert row TableSlice to Table, then inspect row 0
+        // row() - convert row TableSlice to Table, then inspect row 0
         let row_ts = sub.row(1);
         assert_eq!(row_ts.n_rows(), 1);
         let row_tbl = row_ts.to_table();
         assert_eq!(col_vals(&row_tbl)[0], 12);
 
-        // row_slice() — convert to Table, then inspect row 0
+        // row_slice() - convert to Table, then inspect row 0
         let single = sub.row_slice(2);
         assert_eq!(single.len, 1);
         let single_tbl = single.to_table();

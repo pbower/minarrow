@@ -71,7 +71,7 @@ pub mod tz;
 /// Arrow-style day counts (relative to 1970-01-01) into absolute Julian days.
 ///
 /// # Value
-/// `2_440_588` — the Julian day number for **1970-01-01 UTC**.
+/// `2_440_588` - the Julian day number for **1970-01-01 UTC**.
 pub const UNIX_EPOCH_JULIAN_DAY: i64 = 2_440_588;
 
 /// # DatetimeArray

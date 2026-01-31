@@ -4,8 +4,8 @@
 //! types inside [`enums::Value::Custom`] while maintaining a unified interface
 //! with scalars, arrays, and tables.
 //!
-//! This mechanism supports advanced or intermediate pipeline states—such as
-//! partial aggregates, sketches, or engine-specific outputs—that do not fit into
+//! This mechanism supports advanced or intermediate pipeline states-such as
+//! partial aggregates, sketches, or engine-specific outputs-that do not fit into
 //! the standard Arrow type system.
 //!
 //! Dynamic dispatch and `Any` downcasting allow recovery of the concrete type

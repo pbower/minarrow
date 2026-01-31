@@ -1,8 +1,8 @@
 //! # minarrow-pyo3 - PyO3 Bindings for MinArrow
 //!
-//! Zero-copy Python bindings for MinArrow via the Arrow C Data Interface.
+//! Zero-copy Python bindings for MinArrow via the Arrow C Data Interface and PyCapsules.
 //!
-//! This crate provides transparent wrapper types that enable seamless conversion
+//! This crate provides transparent wrapper types that enable zero-copy conversion
 //! between MinArrow's Rust types and PyArrow's Python types.
 //!
 //! ## Features
@@ -24,6 +24,22 @@
 //! | `Table` | `pa.RecordBatch` | `PyRecordBatch` |
 //! | `SuperTable` | `pa.Table` | `PyTable` |
 //! | `SuperArray` | `pa.ChunkedArray` | `PyChunkedArray` |
+//!
+//! ## Conversion Protocols
+//!
+//! Two protocols are supported for data exchange:
+//!
+//! 1. **Arrow PyCapsule Interface** - the standard `__arrow_c_array__` / `__arrow_c_stream__`
+//!    protocol. Works with any Arrow-compatible Python library including PyArrow, Polars,
+//!    DuckDB, nanoarrow, and pandas with ArrowDtype.
+//!
+//! 2. **Legacy `_export_to_c`** - PyArrow-specific fallback using raw pointer integers.
+//!
+//! Import functions try the PyCapsule protocol first, falling back to the legacy approach
+//! for older PyArrow versions.
+//!
+//! For the complete array data type mapping including numeric, temporal, boolean, text,
+//! and categorical types, see the [`ffi`] module documentation.
 //!
 //! ## Example
 //!
@@ -60,6 +76,7 @@
 
 use once_cell::sync::Lazy;
 use pyo3::prelude::*;
+use std::sync::Arc;
 
 pub mod error;
 pub mod ffi;
@@ -163,6 +180,191 @@ fn chunked_info(arr: PyChunkedArray) -> PyResult<String> {
     ))
 }
 
+/// Export a MinArrow array as a pair of Arrow PyCapsules (schema, array).
+///
+/// The returned tuple follows the Arrow PyCapsule Interface and can be
+/// consumed by any library supporting the protocol.
+#[pyfunction]
+fn export_array_capsule(py: Python, arr: PyArray) -> PyResult<ArrowArrayWrapper> {
+    let fa = arr.field_array();
+    let array = Arc::new(fa.array.clone());
+    let (schema_capsule, array_capsule) = ffi::to_py::array_to_capsules(array, &fa.field, py)?;
+    Ok(ArrowArrayWrapper {
+        schema_capsule: Some(schema_capsule),
+        array_capsule: Some(array_capsule),
+    })
+}
+
+/// Export a MinArrow RecordBatch as an ArrowArrayStream PyCapsule.
+///
+/// The stream yields one struct array representing the record batch.
+#[pyfunction]
+fn export_batch_stream_capsule(py: Python, batch: PyRecordBatch) -> PyResult<ArrowStream> {
+    let table = batch.inner();
+    let capsule = ffi::to_py::table_to_stream_capsule(table, py)?;
+    Ok(ArrowStream {
+        capsule: Some(capsule),
+    })
+}
+
+/// Export a MinArrow Table as an ArrowArrayStream PyCapsule.
+///
+/// The stream yields one struct array per batch in the table.
+#[pyfunction]
+fn export_table_stream_capsule(py: Python, table: PyTable) -> PyResult<ArrowStream> {
+    let super_table = table.inner();
+    let capsule = ffi::to_py::super_table_to_stream_capsule(super_table, py)?;
+    Ok(ArrowStream {
+        capsule: Some(capsule),
+    })
+}
+
+/// Export a MinArrow ChunkedArray as an ArrowArrayStream PyCapsule.
+///
+/// The stream yields one plain array per chunk.
+#[pyfunction]
+fn export_chunked_stream_capsule(py: Python, arr: PyChunkedArray) -> PyResult<ArrowStream> {
+    let super_array = arr.inner();
+    let capsule = ffi::to_py::super_array_to_stream_capsule(super_array, py)?;
+    Ok(ArrowStream {
+        capsule: Some(capsule),
+    })
+}
+
+// PyCapsule protocol wrapper types
+
+/// Python-visible wrapper implementing `__arrow_c_stream__`.
+///
+/// Any Arrow-compatible Python library can consume this object directly,
+/// e.g. `pa.RecordBatchReader.from_stream(obj)` or `nanoarrow.ArrayStream(obj)`.
+#[pyclass(name = "ArrowStream")]
+struct ArrowStream {
+    capsule: Option<PyObject>,
+}
+
+#[pymethods]
+impl ArrowStream {
+    /// Arrow PyCapsule stream protocol.
+    ///
+    /// Returns the underlying ArrowArrayStream capsule. The capsule can
+    /// only be consumed once - subsequent calls raise ValueError.
+    #[pyo3(signature = (requested_schema=None))]
+    fn __arrow_c_stream__(&mut self, requested_schema: Option<PyObject>) -> PyResult<PyObject> {
+        let _ = requested_schema;
+        self.capsule.take().ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(
+                "ArrowStream capsule has already been consumed",
+            )
+        })
+    }
+}
+
+/// Python-visible wrapper implementing `__arrow_c_array__`.
+///
+/// Any Arrow-compatible Python library can consume this object directly,
+/// e.g. `pa.array(obj)`.
+#[pyclass(name = "ArrowArray")]
+struct ArrowArrayWrapper {
+    schema_capsule: Option<PyObject>,
+    array_capsule: Option<PyObject>,
+}
+
+#[pymethods]
+impl ArrowArrayWrapper {
+    /// Arrow PyCapsule array protocol.
+    ///
+    /// Returns (schema_capsule, array_capsule). The capsules can only
+    /// be consumed once - subsequent calls raise ValueError.
+    #[pyo3(signature = (requested_schema=None))]
+    fn __arrow_c_array__(
+        &mut self,
+        requested_schema: Option<PyObject>,
+    ) -> PyResult<(PyObject, PyObject)> {
+        let _ = requested_schema;
+        let schema = self.schema_capsule.take();
+        let array = self.array_capsule.take();
+        match (schema, array) {
+            (Some(s), Some(a)) => Ok((s, a)),
+            _ => Err(pyo3::exceptions::PyValueError::new_err(
+                "ArrowArray capsules have already been consumed",
+            )),
+        }
+    }
+}
+
+// Data generators - these produce protocol-conforming objects
+
+/// Generate sample data entirely in Rust and return as an ArrowStream.
+///
+/// The returned object implements `__arrow_c_stream__` and can be consumed
+/// by any Arrow-compatible Python library. The consumer never touches
+/// minarrow types directly.
+///
+/// Contains a batch with columns: id (int64), score (float64), label (utf8).
+#[pyfunction]
+fn generate_sample_batch(py: Python) -> PyResult<ArrowStream> {
+    use minarrow::ffi::arrow_dtype::ArrowType;
+
+    let mut ids = minarrow::IntegerArray::<i64>::default();
+    let mut scores = minarrow::FloatArray::<f64>::default();
+    let mut labels = minarrow::StringArray::<u32>::default();
+    for i in 0..5 {
+        ids.push(i + 1);
+        scores.push((i as f64 + 1.0) * 1.1);
+        labels.push_str(&format!("item_{}", i + 1));
+    }
+
+    let table = Table::new(
+        "sample".to_string(),
+        Some(vec![
+            FieldArray::new(
+                Field::new("id", ArrowType::Int64, false, None),
+                Array::from_int64(ids),
+            ),
+            FieldArray::new(
+                Field::new("score", ArrowType::Float64, false, None),
+                Array::from_float64(scores),
+            ),
+            FieldArray::new(
+                Field::new("label", ArrowType::String, false, None),
+                Array::from_string32(labels),
+            ),
+        ]),
+    );
+
+    let capsule = ffi::to_py::table_to_stream_capsule(&table, py)?;
+    Ok(ArrowStream {
+        capsule: Some(capsule),
+    })
+}
+
+/// Generate a sample array with nulls in Rust and return as an ArrowArray.
+///
+/// The returned object implements `__arrow_c_array__` and can be consumed
+/// by `pa.array(obj)` or any Arrow-compatible library.
+///
+/// Contains a nullable int64 array: [10, null, 30, null, 50].
+#[pyfunction]
+fn generate_nullable_array(py: Python) -> PyResult<ArrowArrayWrapper> {
+    use minarrow::ffi::arrow_dtype::ArrowType;
+
+    let mut arr = minarrow::IntegerArray::<i64>::default();
+    arr.push(10);
+    arr.push_null();
+    arr.push(30);
+    arr.push_null();
+    arr.push(50);
+
+    let array = Array::from_int64(arr);
+    let field = Field::new("values", ArrowType::Int64, true, None);
+    let (schema_capsule, array_capsule) =
+        ffi::to_py::array_to_capsules(Arc::new(array), &field, py)?;
+    Ok(ArrowArrayWrapper {
+        schema_capsule: Some(schema_capsule),
+        array_capsule: Some(array_capsule),
+    })
+}
+
 /// Python module definition for minarrow_pyo3.
 ///
 /// This module primarily provides type conversion capabilities via the
@@ -184,6 +386,20 @@ fn minarrow_pyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(batch_info, m)?)?;
     m.add_function(wrap_pyfunction!(table_info, m)?)?;
     m.add_function(wrap_pyfunction!(chunked_info, m)?)?;
+
+    // PyCapsule export functions
+    m.add_function(wrap_pyfunction!(export_array_capsule, m)?)?;
+    m.add_function(wrap_pyfunction!(export_batch_stream_capsule, m)?)?;
+    m.add_function(wrap_pyfunction!(export_table_stream_capsule, m)?)?;
+    m.add_function(wrap_pyfunction!(export_chunked_stream_capsule, m)?)?;
+
+    // PyCapsule protocol wrapper types
+    m.add_class::<ArrowStream>()?;
+    m.add_class::<ArrowArrayWrapper>()?;
+
+    // Data generators (return protocol-conforming objects)
+    m.add_function(wrap_pyfunction!(generate_sample_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(generate_nullable_array, m)?)?;
 
     Ok(())
 }

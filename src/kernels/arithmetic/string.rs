@@ -392,7 +392,7 @@ fn intern(s: &str, dict: &mut HashMap<String, u32>, uniq: &mut Vec64<String>) ->
 /// - `Add`: Concatenates strings from `lhs` and `rhs`. Result is interned into the output dictionary.
 /// - `Subtract`: Removes the first occurrence of `rhs` from `lhs`. If `rhs` is empty or not found,
 ///               returns `lhs` unchanged.
-/// - `Multiply`: Returns `lhs` unchanged. No actual repetition occurs—identity operation.
+/// - `Multiply`: Returns `lhs` unchanged. No actual repetition occurs-identity operation.
 /// - `Divide`: Splits `lhs` by occurrences of `rhs`, and each resulting segment is interned separately.
 ///             If `rhs` is empty, `lhs` is returned unchanged.
 ///

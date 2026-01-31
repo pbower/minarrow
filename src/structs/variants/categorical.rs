@@ -1122,7 +1122,7 @@ impl<T: Integer + Send + Sync> CategoricalArray<T> {
         })
     }
 
-    /// `[start,end)` -> `&str` (null ⇒ `""`) — no bounds checks
+    /// `[start,end)` -> `&str` (null ⇒ `""`) - no bounds checks
     #[inline]
     pub fn par_iter_range_unchecked(
         &self,
@@ -1144,7 +1144,7 @@ impl<T: Integer + Send + Sync> CategoricalArray<T> {
         })
     }
 
-    /// `[start,end)` -> `Option<&str>` —  no bounds checks
+    /// `[start,end)` -> `Option<&str>` -  no bounds checks
     #[inline]
     pub fn par_iter_range_opt_unchecked(
         &self,

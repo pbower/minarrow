@@ -25,7 +25,7 @@
 //!
 //! ## Safety note
 //! Trait methods from `MaskedArray` that return `&'static str` are for trait
-//! compatibility only—the data actually borrows from `self`. Prefer the `*_str`
+//! compatibility only-the data actually borrows from `self`. Prefer the `*_str`
 //! methods in this module for correct lifetime management.
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -531,7 +531,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     ///     let arr = StringArray::<u32>::from_slice(&["a", "b"]);
     ///     s = unsafe { arr.get(0).unwrap() }; // Not truly static
     /// }
-    /// // ⚠️ Use-after-free — Undefined Behaviour
+    /// // ⚠️ Use-after-free - Undefined Behaviour
     /// println!("{}", s);
     /// ```
     ///
@@ -597,7 +597,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     ///     let arr = StringArray::<u32>::from_slice(&["a", "b"]);
     ///     s = unsafe { arr.get_unchecked(0).unwrap() }; // Not truly static
     /// }
-    /// // ⚠️ Use-after-free — Undefined Behaviour
+    /// // ⚠️ Use-after-free - Undefined Behaviour
     /// println!("{}", s);
     /// ```
     ///
@@ -665,7 +665,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     ///     let arr = StringArray::<u32>::from_slice(&["alpha", "beta"]);
     ///     data = arr.iter().next().unwrap(); // undefined behaviour
     /// }
-    /// println!("{}", data); // ⚠️ Bad: Use-after-free — compiler will not complain
+    /// println!("{}", data); // ⚠️ Bad: Use-after-free - compiler will not complain
     /// ```
     #[inline]
     fn iter(&self) -> impl Iterator<Item = &'static str> + '_ {
