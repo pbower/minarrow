@@ -239,12 +239,12 @@ pub fn array_to_rust(obj: &Bound<PyAny>) -> PyMinarrowResult<FieldArray> {
         return result;
     }
 
-    // Fall back to legacy _export_to_c approach
-    array_to_rust_legacy(obj)
+    // Fall back to _export_to_c approach
+    array_to_rust_c(obj)
 }
 
 /// Legacy import path using `_export_to_c` pointer integers.
-fn array_to_rust_legacy(obj: &Bound<PyAny>) -> PyMinarrowResult<FieldArray> {
+fn array_to_rust_c(obj: &Bound<PyAny>) -> PyMinarrowResult<FieldArray> {
     let array = Box::new(ArrowArray::empty());
     let schema = Box::new(ArrowSchema::empty());
 

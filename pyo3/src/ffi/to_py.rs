@@ -13,6 +13,9 @@ use minarrow::ffi::arrow_c_ffi::{
     export_array_stream, export_record_batch_stream_with_metadata, export_to_c, ArrowArray,
     ArrowArrayStream, ArrowSchema,
 };
+use minarrow::ffi::arrow_dtype::{ArrowType, CategoricalIndexType};
+#[cfg(feature = "datetime")]
+use minarrow::enums::time_units::TimeUnit;
 use minarrow::ffi::schema::Schema;
 use minarrow::{Array, Field, SuperArray, SuperTable, Table};
 use pyo3::ffi::Py_uintptr_t;
@@ -24,6 +27,103 @@ use crate::error::PyMinarrowError;
 
 /// Key used to store the MinArrow table name in Arrow schema metadata.
 pub(crate) const TABLE_NAME_KEY: &str = "minarrow:table_name";
+
+/// Converts a MinArrow TimeUnit to the PyArrow unit string.
+#[cfg(feature = "datetime")]
+fn time_unit_to_str(unit: &TimeUnit) -> &'static str {
+    match unit {
+        TimeUnit::Seconds => "s",
+        TimeUnit::Milliseconds => "ms",
+        TimeUnit::Microseconds => "us",
+        TimeUnit::Nanoseconds => "ns",
+        TimeUnit::Days => "s", // Days is not a PyArrow unit; fall back to seconds
+    }
+}
+
+/// Converts an ArrowType to the corresponding PyArrow DataType object.
+///
+/// This allows building PyArrow schemas from field metadata without
+/// needing to create actual zero-length arrays.
+fn arrow_type_to_pyarrow<'py>(
+    dtype: &ArrowType,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let pa = py.import("pyarrow")?;
+    match dtype {
+        ArrowType::Null => pa.call_method0("null"),
+        ArrowType::Boolean => pa.call_method0("bool_"),
+
+        #[cfg(feature = "extended_numeric_types")]
+        ArrowType::Int8 => pa.call_method0("int8"),
+        #[cfg(feature = "extended_numeric_types")]
+        ArrowType::Int16 => pa.call_method0("int16"),
+        ArrowType::Int32 => pa.call_method0("int32"),
+        ArrowType::Int64 => pa.call_method0("int64"),
+        #[cfg(feature = "extended_numeric_types")]
+        ArrowType::UInt8 => pa.call_method0("uint8"),
+        #[cfg(feature = "extended_numeric_types")]
+        ArrowType::UInt16 => pa.call_method0("uint16"),
+        ArrowType::UInt32 => pa.call_method0("uint32"),
+        ArrowType::UInt64 => pa.call_method0("uint64"),
+
+        ArrowType::Float32 => pa.call_method0("float32"),
+        ArrowType::Float64 => pa.call_method0("float64"),
+
+        ArrowType::String => pa.call_method0("utf8"),
+        ArrowType::LargeString => pa.call_method0("large_utf8"),
+
+        #[cfg(feature = "datetime")]
+        ArrowType::Date32 => pa.call_method0("date32"),
+        #[cfg(feature = "datetime")]
+        ArrowType::Date64 => pa.call_method0("date64"),
+
+        #[cfg(feature = "datetime")]
+        ArrowType::Time32(unit) => {
+            let unit_str = time_unit_to_str(unit);
+            pa.call_method1("time32", (unit_str,))
+        }
+        #[cfg(feature = "datetime")]
+        ArrowType::Time64(unit) => {
+            let unit_str = time_unit_to_str(unit);
+            pa.call_method1("time64", (unit_str,))
+        }
+        #[cfg(feature = "datetime")]
+        ArrowType::Duration32(unit) => {
+            let unit_str = time_unit_to_str(unit);
+            pa.call_method1("duration", (unit_str,))
+        }
+        #[cfg(feature = "datetime")]
+        ArrowType::Duration64(unit) => {
+            let unit_str = time_unit_to_str(unit);
+            pa.call_method1("duration", (unit_str,))
+        }
+        #[cfg(feature = "datetime")]
+        ArrowType::Timestamp(unit, tz) => {
+            let unit_str = time_unit_to_str(unit);
+            let tz_str = tz.as_deref().unwrap_or("");
+            pa.call_method1("timestamp", (unit_str, tz_str))
+        }
+        #[cfg(feature = "datetime")]
+        ArrowType::Interval(_) => {
+            // PyArrow doesn't have a direct interval type constructor — fall back to null
+            pa.call_method0("null")
+        }
+
+        ArrowType::Dictionary(key_type) => {
+            let index_ty = match key_type {
+                #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+                CategoricalIndexType::UInt8 => pa.call_method0("uint8")?,
+                #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+                CategoricalIndexType::UInt16 => pa.call_method0("uint16")?,
+                CategoricalIndexType::UInt32 => pa.call_method0("uint32")?,
+                #[cfg(feature = "extended_categorical")]
+                CategoricalIndexType::UInt64 => pa.call_method0("uint64")?,
+            };
+            let value_ty = pa.call_method0("utf8")?;
+            pa.call_method1("dictionary", (index_ty, value_ty))
+        }
+    }
+}
 
 /// Builds an Arrow metadata map containing the table name, if non-empty.
 fn table_name_metadata(name: &str) -> Option<std::collections::BTreeMap<String, String>> {
@@ -59,20 +159,36 @@ pub fn array_to_py<'py>(
     // Build schema from field
     let schema = Schema::from(vec![field.clone()]);
 
-    // Export to Arrow C format
+    // Export to Arrow C format (heap-allocates ArrowArray + ArrowSchema via Box)
     let (array_ptr, schema_ptr) = export_to_c(array, schema);
 
-    // Import into PyArrow via _import_from_c
-    // PyArrow takes ownership and will call the release callbacks when done.
-    pyarrow
+    // Import into PyArrow via _import_from_c.
+    // Arrow C++ moves struct contents and sets release=NULL on the originals.
+    let result = pyarrow
         .getattr("Array")?
         .call_method1(
             "_import_from_c",
             (array_ptr as Py_uintptr_t, schema_ptr as Py_uintptr_t),
         )
         .map_err(|e| {
-            PyMinarrowError::PyArrow(format!("Failed to import array into PyArrow: {}", e)).into()
-        })
+            PyMinarrowError::PyArrow(format!("Failed to import array into PyArrow: {}", e))
+        });
+
+    // Free the Box allocations for ArrowSchema and ArrowArray.
+    // On success: Arrow C++ moved contents and set release=NULL — just free the Boxes.
+    // On failure: release callbacks are still set — call them to clean up, then free.
+    unsafe {
+        if let Some(release) = (*schema_ptr).release {
+            release(schema_ptr);
+        }
+        let _ = Box::from_raw(schema_ptr);
+        if let Some(release) = (*array_ptr).release {
+            release(array_ptr);
+        }
+        let _ = Box::from_raw(array_ptr);
+    }
+
+    result.map_err(|e| e.into())
 }
 
 /// Converts a MinArrow Table to a PyArrow RecordBatch.
@@ -126,9 +242,25 @@ pub fn super_table_to_py<'py>(
     let pyarrow = py.import("pyarrow")?;
 
     if super_table.batches.is_empty() {
+        // Build a PyArrow schema from the field definitions and create
+        // an empty Table directly. This avoids constructing dummy arrays.
+        let mut py_fields = Vec::with_capacity(super_table.schema.len());
+        for f in &super_table.schema {
+            let pa_type = arrow_type_to_pyarrow(&f.dtype, py)?;
+            let pa_field = pyarrow.call_method1("field", (&f.name, pa_type))?;
+            py_fields.push(pa_field);
+        }
+        let py_fields_list = PyList::new(py, &py_fields)?;
+        let mut schema = pyarrow.call_method1("schema", (py_fields_list,))?;
+        if !super_table.name.is_empty() {
+            let metadata = [(TABLE_NAME_KEY, &super_table.name)].into_py_dict(py)?;
+            schema = schema.call_method1("with_metadata", (metadata,))?;
+        }
+        let empty_list = PyList::empty(py);
+        let kwargs = [("schema", schema)].into_py_dict(py)?;
         return pyarrow
             .getattr("Table")?
-            .call_method0("from_batches")
+            .call_method("from_batches", (empty_list,), Some(&kwargs))
             .map_err(|e| {
                 PyMinarrowError::PyArrow(format!(
                     "Failed to create empty PyArrow Table: {}",
@@ -176,9 +308,17 @@ pub fn super_array_to_py<'py>(
 
     let chunks = super_array.chunks();
     if chunks.is_empty() {
-        let empty_arr = pyarrow.call_method1("array", (Vec::<i32>::new(),))?;
+        // Build an empty ChunkedArray with the correct type from field metadata.
+        let pa_type = if let Some(field) = super_array.field() {
+            arrow_type_to_pyarrow(&field.dtype, py)?
+        } else {
+            // No field metadata — fall back to null type
+            pyarrow.call_method0("null")?
+        };
+        let empty_list = PyList::empty(py);
+        let kwargs = [("type", pa_type)].into_py_dict(py)?;
         return pyarrow
-            .call_method1("chunked_array", (vec![empty_arr],))
+            .call_method("chunked_array", (empty_list,), Some(&kwargs))
             .map_err(|e| {
                 PyMinarrowError::PyArrow(format!(
                     "Failed to create empty PyArrow ChunkedArray: {}",

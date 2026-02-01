@@ -58,7 +58,6 @@ name = "minarrow-pyo3"
 version = "0.1.0"
 dependencies = [
  "minarrow",
- "once_cell",
  "pyo3",
  "pyo3-build-config",
  "thiserror",

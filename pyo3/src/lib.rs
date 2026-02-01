@@ -7,9 +7,31 @@
 //!
 //! ## Features
 //!
-//! - **Zero-copy conversion** via Arrow C Data Interface where possible
+//! - **Zero-copy data transfer** via Arrow C Data Interface
 //! - **Transparent wrappers** (`PyArray`, `PyRecordBatch`) implementing PyO3 traits
 //! - **Idiomatic Rust API** for building Python extensions
+//!
+//! ## Copy Semantics
+//!
+//! ### Zero-copy
+//!
+//! All primary data buffers are transferred without copying in both directions.
+//! This applies to all export paths, single array imports, ChunkedArray chunk
+//! imports, and RecordBatch/Table column imports via both the PyCapsule stream
+//! and legacy `_import_from_c` paths.
+//!
+//! ### Copied by design
+//!
+//! The following are copied during import because they require structural
+//! transformation between MinArrow and Arrow representations:
+//!
+//! - **Null bitmasks** — reconstructed into MinArrow's `Bitmask` type on import.
+//!   These are small: ceil(N/8) bytes for N elements.
+//! - **String offsets** — reconstructed into MinArrow's offset representation.
+//! - **Categorical dictionary strings** — Arrow stores dictionaries as contiguous
+//!   offsets+data; MinArrow stores them as `Vec64<String>` with individual heap
+//!   allocations. The integer codes buffer is zero-copy.
+//! - **Field metadata** — names, types, and flags are lightweight and always copied.
 //!
 //! ## Type Mappings
 //! 
@@ -74,7 +96,6 @@
 #![feature(slice_ptr_get)]
 #![feature(portable_simd)]
 
-use once_cell::sync::Lazy;
 use pyo3::prelude::*;
 use std::sync::Arc;
 
@@ -91,17 +112,6 @@ pub use types::{PyArray, PyChunkedArray, PyField, PyRecordBatch, PyTable};
 
 // Re-export minarrow types that users might need
 pub use minarrow::{Array, Field, FieldArray, MaskedArray, NumericArray, SuperArray, SuperTable, Table, TextArray};
-
-/// Lazily-initialised reference to the pyarrow module.
-/// Used internally for efficient module lookup.
-#[allow(dead_code)]
-pub(crate) static PYARROW: Lazy<Py<PyModule>> = Lazy::new(|| {
-    Python::with_gil(|py| {
-        PyModule::import(py, "pyarrow")
-            .expect("pyarrow must be installed")
-            .unbind()
-    })
-});
 
 /// Echo back a PyArrow array after roundtrip through MinArrow.
 /// Used to test that conversion works correctly.

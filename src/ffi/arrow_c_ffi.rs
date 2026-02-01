@@ -733,7 +733,7 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
 
     if let Some(idx_ty) = maybe_cat_index {
         // SAFETY: we just verified pointers, types and dictionary presence
-        return unsafe { import_categorical(arr, sch, idx_ty) };
+        return unsafe { import_categorical(arr, sch, idx_ty, None) };
     }
 
     if is_dict {
@@ -745,6 +745,7 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
                     ArrowType::Dictionary(i) => i,
                     _ => panic!("Expected Dictionary type"),
                 },
+                None,
             )
         }
     } else {
@@ -803,7 +804,7 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
                         "FFI import_from_c: dictionary pointers missing for dictionary-encoded array"
                     );
                 }
-                unsafe { import_categorical(arr, sch, idx) }
+                unsafe { import_categorical(arr, sch, idx, None) }
             }
         }
     }
@@ -928,11 +929,11 @@ pub unsafe fn import_from_c_owned(
         o => panic!("unsupported format {:?}", o),
     };
 
-    // For categorical (dictionary-encoded) types, the nested dictionary array is owned
-    // by the parent's release callback. We can't take ownership of child arrays separately,
-    // so the dictionary import copies its data. After copying, we call release on the parent.
+    // For categorical (dictionary-encoded) types, the codes buffer is zero-copy
+    // via ForeignBuffer. Dictionary strings are copied due to structural mismatch
+    // between Arrow's contiguous offsets+data and MinArrow's Vec64<String>.
     if is_dict {
-        // Release the schema box (we don't need it for copying)
+        // Release the schema box (we don't need it for the categorical path)
         drop(sch_box);
         let result = unsafe {
             import_categorical(
@@ -970,16 +971,9 @@ pub unsafe fn import_from_c_owned(
                     }
                     _ => panic!("FFI: unsupported dictionary index type {:?}", dtype),
                 },
+                Some(arr_box),
             )
         };
-        // Release the array after copying
-        if let Some(release) = arr_box.release {
-            let arr_ptr = Box::into_raw(arr_box);
-            unsafe {
-                release(arr_ptr);
-                let _ = Box::from_raw(arr_ptr);
-            }
-        }
         let field = crate::Field::new(name, dtype, nullable, None);
         return (result, field);
     }
@@ -1038,6 +1032,95 @@ pub unsafe fn import_from_c_owned(
 
     let field = crate::Field::new(name, dtype, nullable, None);
     (array, field)
+}
+
+/// Imports an owned ArrowArray zero-copy using the given dtype.
+///
+/// This is used by the stream import path to take ownership of individual children
+/// stolen from a struct array. For dictionary/categorical types, falls back to the
+/// copying `import_from_c` path since dictionary children have nested ownership.
+///
+/// # Safety
+/// `arr_box` must contain a valid ArrowArray with valid buffers.
+/// `sch_ptr` must point to a valid ArrowSchema (borrowed, not consumed).
+unsafe fn import_array_zero_copy(
+    arr_box: Box<ArrowArray>,
+    dtype: ArrowType,
+    sch_ptr: *const ArrowSchema,
+) -> Arc<Array> {
+    let arr = unsafe { &*(&*arr_box as *const ArrowArray) };
+
+    // Dictionary types use the copying path since dictionary children
+    // have nested ownership that can't be split from the parent.
+    // Dictionary types: codes are zero-copy, dictionary strings are copied.
+    if !arr.dictionary.is_null() {
+        let sch = unsafe { &*sch_ptr };
+        let idx_type = match dtype.clone() {
+            ArrowType::Dictionary(idx) => idx,
+            _ => {
+                use crate::ffi::arrow_dtype::CategoricalIndexType;
+                match dtype {
+                    #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+                    ArrowType::Int8 | ArrowType::UInt8 => CategoricalIndexType::UInt8,
+                    #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+                    ArrowType::Int16 | ArrowType::UInt16 => CategoricalIndexType::UInt16,
+                    ArrowType::Int32 | ArrowType::UInt32 => CategoricalIndexType::UInt32,
+                    #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+                    ArrowType::Int64 | ArrowType::UInt64 => CategoricalIndexType::UInt64,
+                    _ => panic!("import_array_zero_copy: unsupported dictionary index type {:?}", dtype),
+                }
+            }
+        };
+        return unsafe { import_categorical(arr, sch, idx_type, Some(arr_box)) };
+    }
+
+    // Non-dict types: zero-copy via ForeignBuffer
+    unsafe {
+        match dtype {
+            ArrowType::Boolean => import_boolean(arr, Some(arr_box)),
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::Int8 => import_integer::<i8>(arr, Some(arr_box), Array::from_int8),
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::UInt8 => import_integer::<u8>(arr, Some(arr_box), Array::from_uint8),
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::Int16 => import_integer::<i16>(arr, Some(arr_box), Array::from_int16),
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::UInt16 => import_integer::<u16>(arr, Some(arr_box), Array::from_uint16),
+            ArrowType::Int32 => import_integer::<i32>(arr, Some(arr_box), Array::from_int32),
+            ArrowType::UInt32 => import_integer::<u32>(arr, Some(arr_box), Array::from_uint32),
+            ArrowType::Int64 => import_integer::<i64>(arr, Some(arr_box), Array::from_int64),
+            ArrowType::UInt64 => import_integer::<u64>(arr, Some(arr_box), Array::from_uint64),
+            ArrowType::Float32 => import_float::<f32>(arr, Some(arr_box), Array::from_float32),
+            ArrowType::Float64 => import_float::<f64>(arr, Some(arr_box), Array::from_float64),
+            ArrowType::String => import_utf8::<u32>(arr, Some(arr_box)),
+            #[cfg(feature = "large_string")]
+            ArrowType::LargeString => import_utf8::<u64>(arr, Some(arr_box)),
+            #[cfg(feature = "datetime")]
+            ArrowType::Date32 => import_datetime::<i32>(arr, Some(arr_box), crate::TimeUnit::Days),
+            #[cfg(feature = "datetime")]
+            ArrowType::Date64 => {
+                import_datetime::<i64>(arr, Some(arr_box), crate::TimeUnit::Milliseconds)
+            }
+            #[cfg(feature = "datetime")]
+            ArrowType::Time32(u) => import_datetime::<i32>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Time64(u) => import_datetime::<i64>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Timestamp(u, ref _tz) => import_datetime::<i64>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Duration32(u) => import_datetime::<i32>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Duration64(u) => import_datetime::<i64>(arr, Some(arr_box), u),
+            #[cfg(feature = "datetime")]
+            ArrowType::Interval(_u) => {
+                panic!("import_array_zero_copy: Interval types are not yet supported");
+            }
+            ArrowType::Null => {
+                panic!("import_array_zero_copy: Null array types are not yet supported");
+            }
+            ArrowType::Dictionary(_) => unreachable!("Dictionary handled above"),
+        }
+    }
 }
 
 /// Imports an integer array from Arrow C format using the given constructor.
@@ -1304,12 +1387,22 @@ unsafe fn import_utf8<T: Integer>(
 }
 
 /// Imports a categorical array and dictionary from Arrow C format.
+///
+/// When `ownership` is `Some`, the codes buffer is zero-copy: a `ForeignBuffer`
+/// wraps the raw pointer and keeps the ArrowArray alive via its release callback.
+/// When `ownership` is `None`, the codes are copied.
+///
+/// Dictionary strings are always copied because Arrow stores them as contiguous
+/// offsets+data while MinArrow stores them as `Vec64<String>` with individual
+/// heap allocations.
+///
 /// # Safety
 /// Caller must ensure dictionary pointers are valid and formatted correctly.
 unsafe fn import_categorical(
     arr: &ArrowArray,
     sch: &ArrowSchema,
     index_type: CategoricalIndexType,
+    ownership: Option<Box<ArrowArray>>,
 ) -> Arc<Array> {
     // buffers: [null, codes]
     let len = arr.length as usize;
@@ -1317,7 +1410,8 @@ unsafe fn import_categorical(
     let null_ptr = buffers[0];
     let codes_ptr = buffers[1];
 
-    // import dictionary recursively
+    // Import dictionary strings (always copied — structural mismatch between
+    // Arrow's contiguous offsets+data and MinArrow's Vec64<String>).
     let dict = unsafe { import_from_c(arr.dictionary as *const _, sch.dictionary as *const _) };
     let dict_strings = match dict.as_ref() {
         Array::TextArray(TextArray::String32(s)) => (0..s.len())
@@ -1335,36 +1429,56 @@ unsafe fn import_categorical(
         None
     };
 
-    // build codes & wrap
-    let arc: Arc<Array> = match index_type {
+    /// Builds a zero-copy or copied `Buffer<T>` for the codes.
+    unsafe fn build_codes<T: Integer>(
+        codes_ptr: *const u8,
+        len: usize,
+        ownership: Option<Box<ArrowArray>>,
+    ) -> Buffer<T> {
+        if let Some(arr_box) = ownership {
+            let data_len_bytes = len * std::mem::size_of::<T>();
+            let foreign = ForeignBuffer {
+                ptr: codes_ptr,
+                len: data_len_bytes,
+                array: Some(arr_box),
+            };
+            let shared = SharedBuffer::from_owner(foreign);
+            Buffer::from_shared(shared)
+        } else {
+            let data = unsafe { slice::from_raw_parts(codes_ptr as *const T, len) };
+            Vec64::from(data).into()
+        }
+    }
+
+    // Build codes & wrap
+    match index_type {
         #[cfg(feature = "extended_numeric_types")]
         #[cfg(feature = "extended_categorical")]
         CategoricalIndexType::UInt8 => {
-            let codes = unsafe { slice::from_raw_parts(codes_ptr as *const u8, len) };
-            let arr = CategoricalArray::<u8>::new(Vec64::from(codes), dict_strings, null_mask);
+            let codes_buf = unsafe { build_codes::<u8>(codes_ptr, len, ownership) };
+            let arr = CategoricalArray::<u8>::new(codes_buf, dict_strings, null_mask);
             Arc::new(Array::TextArray(TextArray::Categorical8(Arc::new(arr))))
         }
         #[cfg(feature = "extended_numeric_types")]
         #[cfg(feature = "extended_categorical")]
         CategoricalIndexType::UInt16 => {
-            let codes = unsafe { slice::from_raw_parts(codes_ptr as *const u16, len) };
-            let arr = CategoricalArray::<u16>::new(Vec64::from(codes), dict_strings, null_mask);
+            let codes_buf = unsafe { build_codes::<u16>(codes_ptr, len, ownership) };
+            let arr = CategoricalArray::<u16>::new(codes_buf, dict_strings, null_mask);
             Arc::new(Array::TextArray(TextArray::Categorical16(Arc::new(arr))))
         }
         CategoricalIndexType::UInt32 => {
-            let codes = unsafe { slice::from_raw_parts(codes_ptr as *const u32, len) };
-            let arr = CategoricalArray::<u32>::new(Vec64::from(codes), dict_strings, null_mask);
+            let codes_buf = unsafe { build_codes::<u32>(codes_ptr, len, ownership) };
+            let arr = CategoricalArray::<u32>::new(codes_buf, dict_strings, null_mask);
             Arc::new(Array::TextArray(TextArray::Categorical32(Arc::new(arr))))
         }
         #[cfg(feature = "extended_numeric_types")]
         #[cfg(feature = "extended_categorical")]
         CategoricalIndexType::UInt64 => {
-            let codes = unsafe { slice::from_raw_parts(codes_ptr as *const u64, len) };
-            let arr = CategoricalArray::<u64>::new(Vec64::from(codes), dict_strings, null_mask);
+            let codes_buf = unsafe { build_codes::<u64>(codes_ptr, len, ownership) };
+            let arr = CategoricalArray::<u64>::new(codes_buf, dict_strings, null_mask);
             Arc::new(Array::TextArray(TextArray::Categorical64(Arc::new(arr))))
         }
-    };
-    arc
+    }
 }
 
 /// Imports a datetime array from Arrow C format.
@@ -2105,9 +2219,9 @@ unsafe extern "C" fn stream_get_last_error<T: HasLastError>(
 /// Consumes an ArrowArrayStream that yields struct arrays (record batches)
 /// and returns a list of Tables.
 ///
-/// Each yielded struct array is decomposed into individual column arrays
-/// which are imported via the copying path, as child array memory is owned
-/// by the parent struct's release callback.
+/// Each yielded struct array is decomposed into individual column arrays.
+/// Children are stolen from the parent struct and imported zero-copy via
+/// `import_array_zero_copy`, which takes ownership of each child's ArrowArray.
 ///
 /// # Safety
 /// `stream` must be a valid, non-null pointer to an initialised ArrowArrayStream.
@@ -2121,6 +2235,13 @@ pub unsafe fn import_record_batch_stream(
 /// Like [`import_record_batch_stream`], but also returns the schema-level
 /// metadata as key-value pairs. Returns `None` for metadata when the schema
 /// has no metadata attached.
+///
+/// Column data buffers are imported zero-copy by stealing each child ArrowArray
+/// from the struct array and transferring ownership to the imported array via
+/// `ForeignBuffer`. Null bitmasks and string offsets are copied (small metadata).
+/// Dictionary/categorical columns use the copying import path due to the
+/// structural difference between Arrow's contiguous dictionary encoding and
+/// MinArrow's `Vec64<String>` dictionary storage.
 pub unsafe fn import_record_batch_stream_with_metadata(
     stream: *mut ArrowArrayStream,
 ) -> (
@@ -2161,7 +2282,11 @@ pub unsafe fn import_record_batch_stream_with_metadata(
                 break;
             }
 
-            // Decompose struct array into columns using the copying import path
+            // Decompose struct array into columns via zero-copy child stealing.
+            // Each child has its own release callback, so we move each child's
+            // ArrowArray out of the parent and replace it with an empty sentinel.
+            // The parent's release then skips the empty children and just frees
+            // its own allocations.
             let n_children = arr.n_children as usize;
             assert_eq!(
                 n_children, n_fields,
@@ -2171,11 +2296,9 @@ pub unsafe fn import_record_batch_stream_with_metadata(
 
             let mut columns = Vec::with_capacity(n_children);
             for i in 0..n_children {
-                let child_arr = &**arr.children.add(i);
                 let child_sch = child_schemas[i];
-                // Use copying import since children are owned by the parent's release
-                let imported = import_from_c(child_arr as *const _, child_sch as *const _);
-                // Extract field from child schema
+
+                // Extract field metadata from schema
                 let name = if child_sch.name.is_null() {
                     String::new()
                 } else {
@@ -2186,11 +2309,27 @@ pub unsafe fn import_record_batch_stream_with_metadata(
                 let nullable = (child_sch.flags & 2) != 0;
                 let fmt = std::ffi::CStr::from_ptr(child_sch.format).to_bytes();
                 let dtype = parse_arrow_format(fmt);
+
+                // Steal the child: move its ArrowArray out and replace with empty
+                let child_raw: *mut ArrowArray = *arr.children.add(i);
+                let child_content = ptr::read(child_raw);
+                ptr::write(child_raw, ArrowArray::empty());
+
+                // Import zero-copy with owned ArrowArray
+                let child_box = Box::new(child_content);
+                let imported = import_array_zero_copy(
+                    child_box,
+                    dtype.clone(),
+                    child_sch as *const ArrowSchema,
+                );
+
                 let field = crate::Field::new(name, dtype, nullable, None);
                 columns.push((imported, field));
             }
 
-            // Release the parent struct array, which frees children
+            // Release the parent struct array. Children are now empty (release=None),
+            // so release_struct_array skips their release callbacks but still frees
+            // their Box allocations and the children pointer array.
             if let Some(release) = arr.release {
                 release(&mut arr as *mut ArrowArray);
             }

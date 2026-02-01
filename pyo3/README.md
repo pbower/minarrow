@@ -96,6 +96,9 @@ With feature `extended_categorical`:
 |---------------------|-------------------|--------------|--------------|
 | `CategoricalArray<u64>` | `TextArray::Categorical64` | dictionary(int64, utf8) | `pa.DictionaryArray` |
 
+For categorical types, the integer buffer is zero-copy but we clone the (finite) dictionary categories.
+Unless you have a very large unique category count, this should not cause performance issues.
+
 ### Nullability
 
 All array types support null values via MinArrow's `MaskedArray` wrapper. The validity bitmap is transferred through the Arrow C Data Interface and PyArrow reconstructs the same null positions on import.
@@ -264,9 +267,25 @@ The bindings use two exchange protocols:
 
 1. **Arrow PyCapsule Interface** - the standard `__arrow_c_array__` / `__arrow_c_stream__` protocol. Import functions try this first. Works with any Arrow-compatible Python library.
 
-2. **Legacy `_export_to_c`** - PyArrow-specific fallback using raw pointer integers for older PyArrow versions.
+2. **`_export_to_c`** - PyArrow-specific fallback using raw pointer integers for older PyArrow versions.
 
-Memory is managed through Arc reference counting. The Arrow release callbacks ensure the Rust-side buffers remain alive until the consumer is done with them. Buffer data is not copied during FFI transfer, however (relatively cheap) Field metadata is.
+Memory is managed through Arc reference counting. The Arrow release callbacks ensure the Rust-side buffers remain alive until the consumer is done with them.
+
+## Copy Semantics
+
+### Zero-copy
+
+All primary data buffers are transferred without copying in both directions. This applies to all export paths, single array imports, ChunkedArray chunk imports, and RecordBatch/Table column imports via both the PyCapsule stream and legacy `_import_from_c` paths.
+
+### Copied
+
+The following are copied during import because they require structural transformation between MinArrow and Arrow representations:
+
+- **Null bitmasks** — reconstructed into MinArrow's `Bitmask` type on import. These are small: ceil(N/8) bytes for N elements.
+- **String offsets** — Minarrow currently uses `Vec64<T>` rather than `Buffer<T>` for storing offsets. This will be rectified in a future upgrade to support zero-copy, and is a temporary hangover from an earlier data model.
+- **Categorical dictionary strings** — Arrow stores dictionaries as contiguous offsets+data; MinArrow stores them as `Vec64<String>` with individual heap allocations (as for a categorical data use case, a relatively small number of categories is the norm). The integer codes buffer is zero-copy, which is the instances within the (potentially large) dataset.
+
+- **Field metadata** — names, types, and flags are lightweight and always copied.
 
 ## License
 

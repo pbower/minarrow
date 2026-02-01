@@ -146,6 +146,9 @@
 //! Dictionary-encoded arrays are exported as Arrow dictionary arrays where the indices
 //! correspond to the categorical key size and the values are utf8 strings.
 //!
+//! For categorical types, the integer buffer is zero-copy but we clone the (finite) dictionary categories.
+//! Unless you have a very large unique category count, this should not cause performance issues.
+//! 
 //! ## Nullability
 //!
 //! All array types support null values via MinArrow's `MaskedArray` wrapper. When an
