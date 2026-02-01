@@ -100,6 +100,7 @@ pub enum ArrowType {
     String,
     #[cfg(feature = "large_string")]
     LargeString,
+    Utf8View,
 
     // Integer size for the categorical dictionary key,
     // and therefore how much storage space for each entry there is,
@@ -272,6 +273,7 @@ impl Display for ArrowType {
             ArrowType::String => f.write_str("String"),
             #[cfg(feature = "large_string")]
             ArrowType::LargeString => f.write_str("LargeString"),
+            ArrowType::Utf8View => f.write_str("Utf8View"),
 
             ArrowType::Dictionary(key_type) => write!(f, "Dictionary({key_type})"),
         }

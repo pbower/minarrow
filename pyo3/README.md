@@ -54,6 +54,12 @@ Each inner MinArrow array type maps 1:1 to a specific PyArrow typed array. The A
 | `StringArray<u32>` | `TextArray::String32` | `u` | `pa.StringArray` |
 | `StringArray<u64>` | `TextArray::String64` | `U` | `pa.LargeStringArray` |
 
+#### Utf8View import
+
+Arrow and Polars define two distinct string layouts: the original **Utf8** format stores strings as a contiguous data buffer indexed by an offsets array, while the newer **Utf8View** format stores an array of 16-byte view structs that either inline short strings or reference slices of separate variadic data buffers. Utf8View avoids offset recomputation during operations like filtering and slicing, which benefits query engines that chain many such operations before materialising a result. The trade-off is a more complex physical layout and larger per-element overhead for short strings.
+
+MinArrow uses a single `StringArray<u32>` representation with contiguous offsets and data, and does not maintain a separate Utf8View layout internally. Utf8View's optimisation is most effective where the engine controls the full pipeline and can keep data in view form across many intermediate operations, deferring materialisation until the end. When a Utf8View array is received over the Arrow C Data Interface, e.g. from Polars `pl.Enum` which exports its dictionary values in Utf8View format, MinArrow reads the view structs and reassembles the string data into its standard offsets+data layout. The resulting array is a regular `StringArray<u32>` and is re-exported as Arrow `Utf8` on the way back out. This means Utf8View import is always a copy rather than zero-copy.
+
 ### Temporal types (feature `datetime`)
 
 MinArrow stores temporal data in `DatetimeArray<i32>` or `DatetimeArray<i64>` with a `TimeUnit` discriminator. The Arrow type is determined by the `ArrowType` in the `Field`, not the storage type alone.
@@ -283,6 +289,7 @@ The following are copied during import because they require structural transform
 
 - **Null bitmasks** — reconstructed into MinArrow's `Bitmask` type on import. These are small: ceil(N/8) bytes for N elements.
 - **String offsets** — Minarrow currently uses `Vec64<T>` rather than `Buffer<T>` for storing offsets. This will be rectified in a future upgrade to support zero-copy, and is a temporary hangover from an earlier data model.
+- **Utf8View strings** — Arrow's Utf8View layout uses 16-byte view structs and variadic data buffers, which is structurally incompatible with MinArrow's contiguous offsets+data string layout. The entire string content is copied and reassembled into a standard `StringArray<u32>`. See [Utf8View import](#utf8view-import) above for details.
 - **Categorical dictionary strings** — Arrow stores dictionaries as contiguous offsets+data; MinArrow stores them as `Vec64<String>` with individual heap allocations (as for a categorical data use case, a relatively small number of categories is the norm). The integer codes buffer is zero-copy, which is the instances within the (potentially large) dataset.
 
 - **Field metadata** — names, types, and flags are lightweight and always copied.

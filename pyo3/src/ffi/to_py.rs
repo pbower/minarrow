@@ -71,6 +71,8 @@ fn arrow_type_to_pyarrow<'py>(
 
         ArrowType::String => pa.call_method0("utf8"),
         ArrowType::LargeString => pa.call_method0("large_utf8"),
+        // Utf8View data is stored as regular Utf8 after import
+        ArrowType::Utf8View => pa.call_method0("utf8"),
 
         #[cfg(feature = "datetime")]
         ArrowType::Date32 => pa.call_method0("date32"),
