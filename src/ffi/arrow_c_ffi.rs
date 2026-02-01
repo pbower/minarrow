@@ -286,6 +286,7 @@ pub fn fmt_c(dtype: ArrowType) -> CString {
         ArrowType::String => b"u",
         #[cfg(feature = "large_string")]
         ArrowType::LargeString => b"U",
+        ArrowType::Utf8View => b"vu",
 
         // ---- datetime ----
         #[cfg(feature = "datetime")]
@@ -654,6 +655,7 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
         b"u" => ArrowType::String,
         #[cfg(feature = "large_string")]
         b"U" => ArrowType::LargeString,
+        b"vu" => ArrowType::Utf8View,
         #[cfg(feature = "datetime")]
         b"tdD" => ArrowType::Date32,
         #[cfg(feature = "datetime")]
@@ -773,6 +775,7 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
             ArrowType::String => unsafe { import_utf8::<u32>(arr, None) },
             #[cfg(feature = "large_string")]
             ArrowType::LargeString => unsafe { import_utf8::<u64>(arr, None) },
+            ArrowType::Utf8View => unsafe { import_utf8_view(arr, None) },
             #[cfg(feature = "datetime")]
             ArrowType::Date32 => unsafe {
                 import_datetime::<i32>(arr, None, crate::TimeUnit::Days)
@@ -874,6 +877,7 @@ pub unsafe fn import_from_c_owned(
         b"u" => ArrowType::String,
         #[cfg(feature = "large_string")]
         b"U" => ArrowType::LargeString,
+        b"vu" => ArrowType::Utf8View,
         #[cfg(feature = "datetime")]
         b"tdD" => ArrowType::Date32,
         #[cfg(feature = "datetime")]
@@ -1003,6 +1007,7 @@ pub unsafe fn import_from_c_owned(
             ArrowType::String => import_utf8::<u32>(arr, Some(arr_box)),
             #[cfg(feature = "large_string")]
             ArrowType::LargeString => import_utf8::<u64>(arr, Some(arr_box)),
+            ArrowType::Utf8View => import_utf8_view(arr, Some(arr_box)),
             #[cfg(feature = "datetime")]
             ArrowType::Date32 => import_datetime::<i32>(arr, Some(arr_box), crate::TimeUnit::Days),
             #[cfg(feature = "datetime")]
@@ -1030,7 +1035,12 @@ pub unsafe fn import_from_c_owned(
         }
     };
 
-    let field = crate::Field::new(name, dtype, nullable, None);
+    // Utf8View is stored internally as String since the data is converted during import
+    let field_dtype = match dtype {
+        ArrowType::Utf8View => ArrowType::String,
+        other => other,
+    };
+    let field = crate::Field::new(name, field_dtype, nullable, None);
     (array, field)
 }
 
@@ -1095,6 +1105,7 @@ unsafe fn import_array_zero_copy(
             ArrowType::String => import_utf8::<u32>(arr, Some(arr_box)),
             #[cfg(feature = "large_string")]
             ArrowType::LargeString => import_utf8::<u64>(arr, Some(arr_box)),
+            ArrowType::Utf8View => import_utf8_view(arr, Some(arr_box)),
             #[cfg(feature = "datetime")]
             ArrowType::Date32 => import_datetime::<i32>(arr, Some(arr_box), crate::TimeUnit::Days),
             #[cfg(feature = "datetime")]
@@ -1384,6 +1395,115 @@ unsafe fn import_utf8<T: Integer>(
     } else {
         panic!("Unsupported offset type for StringArray (expected u32 or u64)");
     }
+}
+
+/// Imports a Utf8View array from Arrow C format into a MinArrow StringArray.
+///
+/// Arrow's Utf8View layout uses 16-byte view structs per element plus variadic
+/// data buffers, which is structurally different from MinArrow's offsets+data
+/// representation. Data is always copied during this conversion.
+///
+/// Each view struct is either:
+/// - Short string (length <= 12): `[i32 length][12 bytes inline data]`
+/// - Long string (length > 12): `[i32 length][4 bytes prefix][i32 buf_index][i32 offset]`
+///
+/// In the Arrow C Data Interface, Utf8View arrays have buffers:
+/// `[validity, views, variadic_buf_0, ..., variadic_buf_n, variadic_sizes]`
+///
+/// # Safety
+/// `arr` must contain a valid Utf8View ArrowArray.
+unsafe fn import_utf8_view(
+    arr: &ArrowArray,
+    ownership: Option<Box<ArrowArray>>,
+) -> Arc<Array> {
+    let len = arr.length as usize;
+
+    if len == 0 {
+        // Clean up ownership if provided
+        if let Some(mut arr_box) = ownership {
+            if let Some(release) = arr_box.release {
+                unsafe { release(&mut *arr_box as *mut ArrowArray) };
+            }
+        }
+        return Arc::new(Array::from_string32(StringArray::<u32>::default()));
+    }
+
+    let n_buffers = arr.n_buffers as usize;
+    let buffers = unsafe { slice::from_raw_parts(arr.buffers, n_buffers) };
+    let null_ptr = buffers[0];
+    let views_ptr = buffers[1] as *const u8;
+
+    // Variadic data buffers are at indices 2..n_buffers-1
+    // The last buffer stores variadic buffer sizes as int64
+    let n_variadic = if n_buffers > 3 { n_buffers - 3 } else { 0 };
+
+    // Pre-read null bitmap so we can skip undefined views at null positions
+    let null_bitmap: Option<&[u8]> = if !null_ptr.is_null() {
+        let bitmap_bytes = (len + 7) / 8;
+        Some(unsafe { slice::from_raw_parts(null_ptr, bitmap_bytes) })
+    } else {
+        None
+    };
+
+    // Build offsets and contiguous data from views
+    let mut offsets = Vec64::<u32>::with_capacity(len + 1);
+    let mut data = Vec64::<u8>::new();
+    offsets.push(0u32);
+
+    for i in 0..len {
+        // Check null bitmap — view bytes are undefined for null elements
+        if let Some(bitmap) = null_bitmap {
+            let byte_idx = i / 8;
+            let bit_idx = i % 8;
+            if (bitmap[byte_idx] & (1 << bit_idx)) == 0 {
+                // Null element: skip view, push same offset (empty string)
+                offsets.push(data.len() as u32);
+                continue;
+            }
+        }
+
+        let view = unsafe { views_ptr.add(i * 16) };
+        let str_len = unsafe { *(view as *const i32) } as usize;
+
+        if str_len <= 12 {
+            // Short string: inline data at bytes 4..4+str_len
+            let inline_data = unsafe { slice::from_raw_parts(view.add(4), str_len) };
+            data.extend_from_slice(inline_data);
+        } else {
+            // Long string: buf_index at bytes 8..12, offset at bytes 12..16
+            let buf_index = unsafe { *(view.add(8) as *const i32) } as usize;
+            let buf_offset = unsafe { *(view.add(12) as *const i32) } as usize;
+            assert!(
+                buf_index < n_variadic,
+                "Utf8View: buf_index {} out of range (have {} variadic buffers)",
+                buf_index,
+                n_variadic
+            );
+            let data_buf = buffers[2 + buf_index] as *const u8;
+            let str_data = unsafe { slice::from_raw_parts(data_buf.add(buf_offset), str_len) };
+            data.extend_from_slice(str_data);
+        }
+
+        offsets.push(data.len() as u32);
+    }
+
+    // Null mask
+    let null_mask = if !null_ptr.is_null() {
+        Some(unsafe { Bitmask::from_raw_slice(null_ptr, len) })
+    } else {
+        None
+    };
+
+    let str_arr = StringArray::<u32>::new(data, null_mask, offsets);
+
+    // Clean up ownership if provided — data was copied, so we can release now
+    if let Some(mut arr_box) = ownership {
+        if let Some(release) = arr_box.release {
+            unsafe { release(&mut *arr_box as *mut ArrowArray) };
+        }
+    }
+
+    Arc::new(Array::TextArray(TextArray::String32(Arc::new(str_arr))))
 }
 
 /// Imports a categorical array and dictionary from Arrow C format.
@@ -2323,7 +2443,13 @@ pub unsafe fn import_record_batch_stream_with_metadata(
                     child_sch as *const ArrowSchema,
                 );
 
-                let field = crate::Field::new(name, dtype, nullable, None);
+                // Utf8View is stored internally as String since the data is
+                // restructured during import from views to offsets+data.
+                let field_dtype = match dtype {
+                    ArrowType::Utf8View => ArrowType::String,
+                    other => other,
+                };
+                let field = crate::Field::new(name, field_dtype, nullable, None);
                 columns.push((imported, field));
             }
 
@@ -2455,6 +2581,7 @@ fn parse_arrow_format(fmt: &[u8]) -> ArrowType {
         b"u" => ArrowType::String,
         #[cfg(feature = "large_string")]
         b"U" => ArrowType::LargeString,
+        b"vu" => ArrowType::Utf8View,
         #[cfg(feature = "datetime")]
         b"tdD" => ArrowType::Date32,
         #[cfg(feature = "datetime")]

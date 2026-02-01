@@ -195,7 +195,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT. See [LICENSE](LICENSE) for details.
+Copyright Peter Garfield Bower 2025-2026. 
+
+Released under MIT. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgements
 

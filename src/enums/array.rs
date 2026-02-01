@@ -1963,6 +1963,10 @@ impl Array {
             crate::ffi::arrow_dtype::ArrowType::LargeString => {
                 polars_arrow::datatypes::ArrowDataType::LargeUtf8
             }
+            // Utf8View is converted to regular Utf8 during import, so map to Utf8
+            crate::ffi::arrow_dtype::ArrowType::Utf8View => {
+                polars_arrow::datatypes::ArrowDataType::Utf8
+            }
 
             #[cfg(feature = "datetime")]
             crate::ffi::arrow_dtype::ArrowType::Date32 => {
