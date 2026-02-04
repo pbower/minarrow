@@ -57,6 +57,8 @@ Six array types cover standard workloads:
 
 Semantic groupings (`NumericArray`, `TextArray`, `TemporalArray`) let you write generic functions while keeping static dispatch.
 
+`Array` and `Table` complete the story, with chunked `Super` versions for streaming.
+
 ### Fast Compilation
 
 | Metric | Time |
@@ -174,7 +176,7 @@ Enable what you need:
 | Crate | Purpose |
 |-------|---------|
 | `minarrow-pyo3` | Zero-copy Python interop via PyArrow. See [pyo3/README.md](pyo3/README.md) |
-| `lightstream` | Tokio async IPC with maintained SIMD alignment |
+| `lightstream` | Zero-copy Arrow streaming over Tokio, TCP, QUIC, WebSocket, Unix sockets, and Stdio |
 | `simd-kernels` | 60+ SIMD kernels including statistical distributions |
 | `vec64` | 64-byte aligned Vec for optimal SIMD |
 
@@ -195,7 +197,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-Copyright Peter Garfield Bower 2025-2026. 
+Copyright Peter Garfield Bower 2025-2026.
 
 Released under MIT. See [LICENSE](LICENSE) for details.
 
