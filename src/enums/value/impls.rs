@@ -490,6 +490,74 @@ pub(crate) fn value_variant_name(value: &Value) -> &'static str {
     }
 }
 
+// Consolidate for Vec<Value>
+
+use crate::traits::consolidate::Consolidate;
+
+impl Consolidate for Vec<Value> {
+    type Output = Value;
+
+    /// Consolidate a vector of Values into a single Value.
+    ///
+    /// Uses `Concatenate` to fold matching-typed Values together.
+    /// A single-element vector returns the element directly.
+    /// An empty vector returns an empty VecValue.
+    ///
+    /// All Values should be the same variant. Panics if concatenation
+    /// fails due to type mismatch, as this indicates a programming error
+    /// in the parallel execution that produced the chunks.
+    fn consolidate(self) -> Value {
+        match self.len() {
+            0 => Value::VecValue(Arc::new(vec![])),
+            1 => self.into_iter().next().unwrap(),
+            _ => {
+                let mut iter = self.into_iter();
+                let first = iter.next().unwrap();
+                iter.fold(first, |acc, val| {
+                    acc.concat(val).expect("consolidate: all Values must be the same variant")
+                })
+            }
+        }
+    }
+}
+
+// IntoIterator / FromIterator for streaming filter support
+
+/// Iterate over the elements of a Value.
+///
+/// VecValue yields its inner items. All other variants yield themselves
+/// as a single element, supporting keep-or-drop filter semantics.
+impl IntoIterator for Value {
+    type Item = Value;
+    type IntoIter = std::vec::IntoIter<Value>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Value::VecValue(items) => {
+                Arc::try_unwrap(items)
+                    .unwrap_or_else(|arc| (*arc).clone())
+                    .into_iter()
+            }
+            other => vec![other].into_iter(),
+        }
+    }
+}
+
+/// Collect Values back from an iterator.
+///
+/// Zero items produces an empty VecValue. A single item is returned
+/// directly. Multiple items are wrapped in VecValue.
+impl FromIterator<Value> for Value {
+    fn from_iter<I: IntoIterator<Item = Value>>(iter: I) -> Self {
+        let items: Vec<Value> = iter.into_iter().collect();
+        match items.len() {
+            0 => Value::VecValue(Arc::new(vec![])),
+            1 => items.into_iter().next().unwrap(),
+            _ => Value::VecValue(Arc::new(items)),
+        }
+    }
+}
+
 // Tests
 
 #[cfg(test)]

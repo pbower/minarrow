@@ -56,6 +56,9 @@ use num_traits::FromPrimitive;
 #[cfg(feature = "datetime")]
 use crate::{DatetimeArray, TemporalArray};
 
+#[cfg(feature = "scalar_type")]
+use crate::Scalar;
+
 // Integer <-> Float
 
 macro_rules! int_to_float_from {
@@ -1235,4 +1238,42 @@ impl From<BooleanArray<()>> for Array {
 #[cfg(feature = "views")]
 impl View for BooleanArray<()> {
     type BufferT = u8;
+}
+
+// --------------------------------
+//      From Scalar for Array
+// --------------------------------
+
+#[cfg(feature = "scalar_type")]
+impl From<Scalar> for Array {
+    fn from(scalar: Scalar) -> Self {
+        use crate::Scalar::*;
+        match scalar {
+            Null => Array::from_int32(IntegerArray::from_slice(&[0i32])),
+            Boolean(v) => Array::from_bool(BooleanArray::from_slice(&[v])),
+            #[cfg(feature = "extended_numeric_types")]
+            Int8(v) => Array::from_int8(IntegerArray::from_slice(&[v])),
+            #[cfg(feature = "extended_numeric_types")]
+            Int16(v) => Array::from_int16(IntegerArray::from_slice(&[v])),
+            Int32(v) => Array::from_int32(IntegerArray::from_slice(&[v])),
+            Int64(v) => Array::from_int64(IntegerArray::from_slice(&[v])),
+            #[cfg(feature = "extended_numeric_types")]
+            UInt8(v) => Array::from_uint8(IntegerArray::from_slice(&[v])),
+            #[cfg(feature = "extended_numeric_types")]
+            UInt16(v) => Array::from_uint16(IntegerArray::from_slice(&[v])),
+            UInt32(v) => Array::from_uint32(IntegerArray::from_slice(&[v])),
+            UInt64(v) => Array::from_uint64(IntegerArray::from_slice(&[v])),
+            Float32(v) => Array::from_float32(FloatArray::from_slice(&[v])),
+            Float64(v) => Array::from_float64(FloatArray::from_slice(&[v])),
+            String32(v) => Array::from_string32(StringArray::from_slice(&[v.as_str()])),
+            #[cfg(feature = "large_string")]
+            String64(v) => Array::from_string64(StringArray::from_slice(&[v.as_str()])),
+            #[cfg(feature = "datetime")]
+            Datetime32(v) => Array::from_datetime_i32(DatetimeArray::from_slice(&[v], None)),
+            #[cfg(feature = "datetime")]
+            Datetime64(v) => Array::from_datetime_i64(DatetimeArray::from_slice(&[v], None)),
+            #[cfg(feature = "datetime")]
+            Interval => Array::from_int32(IntegerArray::from_slice(&[0i32])),
+        }
+    }
 }

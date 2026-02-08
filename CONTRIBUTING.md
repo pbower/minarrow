@@ -2,6 +2,14 @@
 
 Thank you for your interest in contributing to Minarrow! We welcome contributions from the community and appreciate your help!
 
+## Contributor Licence Agreement
+
+By submitting a contribution to this repository, you agree to the Contributor Licence Agreement (`CLA.md`).
+
+Under the CLA, copyright in your contribution is assigned to the project maintainer. Contributors retain a licence to use their contributions under the project’s open-source licence.
+
+This ensures clear and consistent IP ownership and avoids ambiguity when accepting contributions from multiple authors, including cases where the maintainer cannot reasonably verify the original provenance of all submitted code.
+
 ## Getting Started
 
 ### Prerequisites
@@ -192,11 +200,11 @@ When fixing bugs:
    - Address feedback promptly
    - Maintain discussion in PR comments
 
-4. **Licensing**
-    - Please ensure no code is copied or pulled from other repositories,
-    including MIT-licensed ones. This is to help ensure the codebase
-    remains license-compliant, as even Apache-Licensed projects can
-    experience legal challenges.
+4. ### Licensing
+
+- All contributions are accepted under the project’s MIT licence.
+- By submitting a contribution, you confirm that you have the legal right to do so and agree to the Contributor Licence Agreement (`CLA.md`).
+- Please ensure no code is copied or derived from other repositories or source without appropriate rights or permissions.
 
 ### Review Criteria
 

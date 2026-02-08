@@ -186,20 +186,21 @@ Minarrow focuses on flat columnar data and 80/20. Nested types (List, Struct) ar
 
 ## Contributing
 
-Contributions welcome:
+Contributions are welcome, particularly in the following areas:
 
-1. **Connectors** - Data source/sink integrations
-2. **Optimisations** - Performance improvements
-3. **Nested types** - List and Struct support (PRs welcome)
+1. **Connectors** – Data source and sink integrations
+2. **Optimisations** – Performance improvements
+3. **Nested types** – List and Struct support
 4. **Bug fixes**
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+All contributions are subject to the Contributor Licence Agreement (CLA).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## License
 
-Copyright Peter Garfield Bower 2025-2026.
+Copyright © 2025–2026 Peter Garfield Bower.
 
-Released under MIT. See [LICENSE](LICENSE) for details.
+Released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgements
 
