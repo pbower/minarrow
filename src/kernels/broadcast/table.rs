@@ -12,8 +12,6 @@ use crate::kernels::broadcast::broadcast_value;
 use crate::kernels::broadcast::table_view::broadcast_tableview_to_arrayview;
 use crate::kernels::routing::arithmetic::resolve_binary_arithmetic;
 use crate::structs::field_array::create_field_for_array;
-#[cfg(feature = "select")]
-use crate::traits::selection::ColumnSelection;
 use crate::{Array, ArrayV, Bitmask, Field, FieldArray, Table, TableV, Value};
 #[cfg(feature = "chunked")]
 use crate::{SuperArray, SuperArrayV, SuperTable, SuperTableV};
@@ -378,6 +376,7 @@ pub fn broadcast_table_to_superarray(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::selection::ColumnSelection;
     use crate::{Array, FieldArray, IntegerArray, vec64};
 
     fn create_test_table(name: &str, data1: &[i32], data2: &[i32]) -> Table {

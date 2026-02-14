@@ -251,7 +251,7 @@ mod avg_simd {
                 data: Buffer::from(v64_int_data.clone()),
                 null_mask: None,
             };
-            let slice = &int_arr[..];
+            let slice = int_arr.as_ref();
             (slice.as_ptr() as usize) % std::mem::align_of::<Simd<i64, SIMD_LANES>>() == 0
         };
 
@@ -351,7 +351,7 @@ mod avg_simd {
                 data: Buffer::from(data),
                 null_mask: None,
             };
-            let sum = simd_sum_i64_runtime(&int_arr[..], simd_lanes);
+            let sum = simd_sum_i64_runtime(int_arr.as_ref(), simd_lanes);
             let dur = start.elapsed();
             total_minarrow_direct += dur;
             black_box(sum);
@@ -373,7 +373,7 @@ mod avg_simd {
                 null_mask: None,
             })));
             let int_arr = array.num().i64().unwrap();
-            let sum = simd_sum_i64_runtime(&int_arr[..], simd_lanes);
+            let sum = simd_sum_i64_runtime(int_arr.as_ref(), simd_lanes);
             let dur = start.elapsed();
             total_minarrow_enum += dur;
             black_box(sum);
@@ -413,7 +413,7 @@ mod avg_simd {
                 data: Buffer::from(data),
                 null_mask: None,
             };
-            let sum = simd_sum_f64_runtime(&float_arr[..], simd_lanes);
+            let sum = simd_sum_f64_runtime(float_arr.as_ref(), simd_lanes);
             let dur = start.elapsed();
             total_minarrow_direct_f64 += dur;
             black_box(sum);
@@ -435,7 +435,7 @@ mod avg_simd {
                 null_mask: None,
             })));
             let float_arr = array.num().f64().unwrap();
-            let sum = simd_sum_f64_runtime(&float_arr[..], simd_lanes);
+            let sum = simd_sum_f64_runtime(float_arr.as_ref(), simd_lanes);
             let dur = start.elapsed();
             total_minarrow_enum_f64 += dur;
             black_box(sum);

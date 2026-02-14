@@ -20,17 +20,11 @@ mod conversions;
 
 #[cfg(feature = "cube")]
 use crate::Cube;
-#[cfg(feature = "datetime")]
-use crate::DatetimeArray;
 #[cfg(feature = "matrix")]
 use crate::Matrix;
 #[cfg(feature = "scalar_type")]
 use crate::Scalar;
-use crate::{
-    Array, BooleanArray, FieldArray, FloatArray, IntegerArray, StringArray, Table,
-    enums::error::MinarrowError, enums::shape_dim::ShapeDim, traits::concatenate::Concatenate,
-    traits::custom_value::CustomValue, traits::shape::Shape,
-};
+use crate::{Array, FieldArray, Table, traits::custom_value::CustomValue};
 use std::sync::Arc;
 
 #[cfg(feature = "chunked")]

@@ -427,18 +427,6 @@ impl ArrayV {
                     }
                     Array::from_uint16(new_arr)
                 }
-                #[cfg(feature = "extended_numeric_types")]
-                NumericArray::UInt64(_) => {
-                    let mut new_arr = IntegerArray::<u64>::with_capacity(indices.len(), true);
-                    for &idx in indices {
-                        if let Some(val) = self.get::<IntegerArray<u64>>(idx) {
-                            new_arr.push(val);
-                        } else {
-                            new_arr.push_null();
-                        }
-                    }
-                    Array::from_uint64(new_arr)
-                }
                 NumericArray::Null => Array::Null,
             },
             Array::TextArray(text_arr) => match text_arr {
