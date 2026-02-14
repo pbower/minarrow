@@ -26,7 +26,6 @@ use polars::prelude::Column;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use super::field_array::FieldArray;
-use crate::traits::consolidate::Consolidate;
 #[cfg(all(feature = "views", feature = "select"))]
 use crate::ArrayV;
 use crate::Field;
@@ -35,6 +34,7 @@ use crate::SuperTable;
 #[cfg(feature = "views")]
 use crate::TableV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
+use crate::traits::consolidate::Consolidate;
 #[cfg(all(feature = "views", feature = "select"))]
 use crate::traits::selection::{ColumnSelection, DataSelector, FieldSelector, RowSelection};
 use crate::traits::{
