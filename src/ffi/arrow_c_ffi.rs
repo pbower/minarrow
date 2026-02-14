@@ -1070,14 +1070,26 @@ unsafe fn import_array_zero_copy(
             _ => {
                 use crate::ffi::arrow_dtype::CategoricalIndexType;
                 match dtype {
-                    #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+                    #[cfg(all(
+                        feature = "extended_numeric_types",
+                        feature = "extended_categorical"
+                    ))]
                     ArrowType::Int8 | ArrowType::UInt8 => CategoricalIndexType::UInt8,
-                    #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+                    #[cfg(all(
+                        feature = "extended_numeric_types",
+                        feature = "extended_categorical"
+                    ))]
                     ArrowType::Int16 | ArrowType::UInt16 => CategoricalIndexType::UInt16,
                     ArrowType::Int32 | ArrowType::UInt32 => CategoricalIndexType::UInt32,
-                    #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+                    #[cfg(all(
+                        feature = "extended_numeric_types",
+                        feature = "extended_categorical"
+                    ))]
                     ArrowType::Int64 | ArrowType::UInt64 => CategoricalIndexType::UInt64,
-                    _ => panic!("import_array_zero_copy: unsupported dictionary index type {:?}", dtype),
+                    _ => panic!(
+                        "import_array_zero_copy: unsupported dictionary index type {:?}",
+                        dtype
+                    ),
                 }
             }
         };
@@ -1412,10 +1424,7 @@ unsafe fn import_utf8<T: Integer>(
 ///
 /// # Safety
 /// `arr` must contain a valid Utf8View ArrowArray.
-unsafe fn import_utf8_view(
-    arr: &ArrowArray,
-    ownership: Option<Box<ArrowArray>>,
-) -> Arc<Array> {
+unsafe fn import_utf8_view(arr: &ArrowArray, ownership: Option<Box<ArrowArray>>) -> Arc<Array> {
     let len = arr.length as usize;
 
     if len == 0 {
@@ -1980,7 +1989,11 @@ unsafe extern "C" fn release_struct_array(arr: *mut ArrowArray) {
             }
         }
         // Free the children pointer array
-        let _ = unsafe { Box::from_raw(slice::from_raw_parts_mut(a.children, n_children) as *mut [*mut ArrowArray]) };
+        let _ = unsafe {
+            Box::from_raw(
+                slice::from_raw_parts_mut(a.children, n_children) as *mut [*mut ArrowArray]
+            )
+        };
     }
 
     // Free the buffers pointer (single null bitmap)
@@ -2011,7 +2024,11 @@ unsafe extern "C" fn release_struct_schema(sch: *mut ArrowSchema) {
                 let _ = unsafe { Box::from_raw(*child_ptr) };
             }
         }
-        let _ = unsafe { Box::from_raw(slice::from_raw_parts_mut(s.children, n_children) as *mut [*mut ArrowSchema]) };
+        let _ = unsafe {
+            Box::from_raw(
+                slice::from_raw_parts_mut(s.children, n_children) as *mut [*mut ArrowSchema]
+            )
+        };
     }
 
     // Free the private data
@@ -2162,10 +2179,7 @@ unsafe extern "C" fn rb_stream_get_next(
         ptr::write(out, ptr::read(arr_ptr));
         // Free the box wrapper without running drop on the ArrowArray itself
         // (caller now owns the data through the out pointer)
-        std::alloc::dealloc(
-            arr_ptr as *mut u8,
-            std::alloc::Layout::for_value(&*arr_ptr),
-        );
+        std::alloc::dealloc(arr_ptr as *mut u8, std::alloc::Layout::for_value(&*arr_ptr));
     }
 
     // Release the schema (get_next only returns arrays, schema came from get_schema)
@@ -2199,10 +2213,7 @@ unsafe extern "C" fn rb_stream_release(stream: *mut ArrowArrayStream) {
 ///
 /// # Returns
 /// A heap-allocated ArrowArrayStream.
-pub fn export_array_stream(
-    chunks: Vec<Arc<Array>>,
-    field: crate::Field,
-) -> Box<ArrowArrayStream> {
+pub fn export_array_stream(chunks: Vec<Arc<Array>>, field: crate::Field) -> Box<ArrowArrayStream> {
     let holder = Box::new(ArrayStreamHolder {
         field,
         chunks,
@@ -2274,10 +2285,7 @@ unsafe extern "C" fn arr_stream_get_next(
     // Move the exported array into the caller's out pointer
     unsafe {
         ptr::write(out, ptr::read(arr_ptr));
-        std::alloc::dealloc(
-            arr_ptr as *mut u8,
-            std::alloc::Layout::for_value(&*arr_ptr),
-        );
+        std::alloc::dealloc(arr_ptr as *mut u8, std::alloc::Layout::for_value(&*arr_ptr));
     }
 
     // Release the schema (not needed for get_next)
@@ -2373,7 +2381,11 @@ pub unsafe fn import_record_batch_stream_with_metadata(
         let mut schema = ArrowSchema::empty();
         let get_schema = ((*stream).get_schema).expect("stream has no get_schema callback");
         let rc = get_schema(stream, &mut schema);
-        assert_eq!(rc, 0, "ArrowArrayStream get_schema returned error code {}", rc);
+        assert_eq!(
+            rc, 0,
+            "ArrowArrayStream get_schema returned error code {}",
+            rc
+        );
 
         // Extract metadata before parsing children
         let metadata = decode_arrow_metadata(schema.metadata);
@@ -2381,9 +2393,7 @@ pub unsafe fn import_record_batch_stream_with_metadata(
         // Parse child field info from the struct schema
         let n_fields = schema.n_children as usize;
         let child_schemas: Vec<&ArrowSchema> = if n_fields > 0 && !schema.children.is_null() {
-            (0..n_fields)
-                .map(|i| &**schema.children.add(i))
-                .collect()
+            (0..n_fields).map(|i| &**schema.children.add(i)).collect()
         } else {
             Vec::new()
         };
@@ -2395,7 +2405,11 @@ pub unsafe fn import_record_batch_stream_with_metadata(
         loop {
             let mut arr = ArrowArray::empty();
             let rc = get_next(stream, &mut arr);
-            assert_eq!(rc, 0, "ArrowArrayStream get_next returned error code {}", rc);
+            assert_eq!(
+                rc, 0,
+                "ArrowArrayStream get_next returned error code {}",
+                rc
+            );
 
             // End of stream: release is None
             if arr.release.is_none() {
@@ -2493,7 +2507,11 @@ pub unsafe fn import_array_stream(
         let mut schema_c = ArrowSchema::empty();
         let get_schema = ((*stream).get_schema).expect("stream has no get_schema callback");
         let rc = get_schema(stream, &mut schema_c);
-        assert_eq!(rc, 0, "ArrowArrayStream get_schema returned error code {}", rc);
+        assert_eq!(
+            rc, 0,
+            "ArrowArrayStream get_schema returned error code {}",
+            rc
+        );
 
         // Extract field info
         let name = if schema_c.name.is_null() {
@@ -2520,7 +2538,11 @@ pub unsafe fn import_array_stream(
         loop {
             let mut arr = ArrowArray::empty();
             let rc = get_next(stream, &mut arr);
-            assert_eq!(rc, 0, "ArrowArrayStream get_next returned error code {}", rc);
+            assert_eq!(
+                rc, 0,
+                "ArrowArrayStream get_next returned error code {}",
+                rc
+            );
 
             if arr.release.is_none() {
                 break;
@@ -2635,7 +2657,10 @@ fn parse_arrow_format(fmt: &[u8]) -> ArrowType {
             };
             ArrowType::Timestamp(unit, tz)
         }
-        o => panic!("unsupported Arrow format {:?}", std::str::from_utf8(o).unwrap_or("??")),
+        o => panic!(
+            "unsupported Arrow format {:?}",
+            std::str::from_utf8(o).unwrap_or("??")
+        ),
     }
 }
 

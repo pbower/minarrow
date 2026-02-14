@@ -558,6 +558,18 @@ impl<T: Integer> MaskedArray for StringArray<T> {
         })
     }
 
+    #[inline]
+    fn get_raw(&self, idx: usize) -> &'static str {
+        let start = self.offsets[idx].to_usize();
+        let end = self.offsets[idx + 1].to_usize();
+        // Same transmute as get() — required because CopyType is &'static str
+        unsafe {
+            std::mem::transmute::<&str, &'static str>(std::str::from_utf8_unchecked(
+                &self.data[start..end],
+            ))
+        }
+    }
+
     /// Sets the string at the given index, updating offsets, data buffer, and null mask.
     ///
     /// # ⚠️ Prefer `set_str` as it avoids a reallocation.
@@ -1486,13 +1498,18 @@ impl<T> AsMut<[u8]> for StringArray<T> {
     }
 }
 
+/// Returns the string at the specified index.
+///
+/// Requires the `unchecked_index` feature. This does not check the null mask,
+/// so null elements return raw buffer values. Use `.get(i)` for null-safe
+/// access or `.get_raw(i)` for explicit raw buffer access.
+///
+/// # Panics
+/// Panics if the index is out-of-bounds or the data is not valid UTF-8.
+#[cfg(feature = "unchecked_index")]
 impl<T: Integer> Index<usize> for StringArray<T> {
     type Output = str;
 
-    /// Returns the string at the specified index.
-    ///
-    /// # Panics
-    /// Panics if the index is out-of-bounds or the data is not valid UTF-8.
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         let start = self.offsets[index].to_usize();
@@ -2005,5 +2022,25 @@ mod parallel_tests {
         assert!(!arr1.null_mask.as_ref().unwrap().get(3)); // 3rd appended value is null
         assert!(arr1.null_mask.as_ref().unwrap().get(2));
         assert!(arr1.null_mask.as_ref().unwrap().get(4));
+    }
+
+    #[test]
+    fn test_get_raw_returns_buffer_value_regardless_of_null() {
+        let mut arr = StringArray::<u32>::from_values(vec!["hello", "world", "foo"]);
+        arr.push_null();
+        assert_eq!(arr.get(3), None);
+        // get_raw bypasses null mask and returns the raw buffer value
+        let raw = arr.get_raw(3);
+        assert_eq!(raw, "");
+    }
+
+    #[cfg(feature = "unchecked_index")]
+    #[test]
+    fn test_index_bypasses_null_mask() {
+        let mut arr = StringArray::<u32>::from_values(vec!["hello", "world", "foo"]);
+        arr.set_null(1);
+        assert_eq!(arr.get(1), None);
+        // Index bypasses the null mask and returns the raw buffer value
+        assert_eq!(&arr[1], "world");
     }
 }

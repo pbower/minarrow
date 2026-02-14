@@ -182,6 +182,16 @@ broadcast = []
 # Adds byte size trait for best-effort size calculation
 size = []
 
+# Enables `arr[i]` indexing on MaskedArray types via Index<usize>.
+#
+# Without this feature, use `.get(i)` for null-safe access returning Option<T>,
+# or `.get_raw(i)` for direct buffer access bypassing null checks.
+#
+# The Index trait does not check null masks, so enabling this on nullable arrays
+# will silently return raw buffer values for null elements. Enable if you
+# understand the implications and prefer the ergonomic `[]` syntax.
+unchecked_index = []
+
 # Adds pandas-style selection for Table and TableV with .c() and .r() methods
 select = []
 
