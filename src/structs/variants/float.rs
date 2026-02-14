@@ -400,6 +400,25 @@ mod tests {
         assert_eq!(result.get(4), None);
         assert_eq!(result.null_count(), 2);
     }
+
+    #[test]
+    fn test_get_raw_returns_buffer_value_regardless_of_null() {
+        let mut arr = FloatArray::<f64>::from_slice(&[1.1, 2.2, 3.3]);
+        arr.push_null();
+        assert_eq!(arr.get(3), None);
+        let raw = arr.get_raw(3);
+        assert_eq!(raw, f64::default());
+    }
+
+    #[cfg(feature = "unchecked_index")]
+    #[test]
+    fn test_index_bypasses_null_mask() {
+        let mut arr = FloatArray::<f64>::from_slice(&[1.1, 2.2, 3.3]);
+        arr.set_null(1);
+        assert_eq!(arr.get(1), None);
+        // Index bypasses the null mask and returns the raw buffer value
+        assert_eq!(arr[1], 2.2);
+    }
 }
 
 #[cfg(test)]

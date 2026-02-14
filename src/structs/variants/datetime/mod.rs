@@ -836,6 +836,32 @@ mod tests {
             crate::enums::error::MinarrowError::IncompatibleTypeError { .. }
         ));
     }
+
+    #[test]
+    fn test_get_raw_returns_buffer_value_regardless_of_null() {
+        let mut arr = DatetimeArray::<i64>::from_slice(
+            &[100, 200, 300],
+            Some(crate::enums::time_units::TimeUnit::Milliseconds),
+        );
+        arr.push_null();
+        assert_eq!(arr.get(3), None);
+        // get_raw bypasses null mask and returns the raw buffer value
+        let raw = arr.get_raw(3);
+        assert_eq!(raw, i64::default());
+    }
+
+    #[cfg(feature = "unchecked_index")]
+    #[test]
+    fn test_index_bypasses_null_mask() {
+        let mut arr = DatetimeArray::<i64>::from_slice(
+            &[100, 200, 300],
+            Some(crate::enums::time_units::TimeUnit::Milliseconds),
+        );
+        arr.set_null(1);
+        assert_eq!(arr.get(1), None);
+        // Index bypasses the null mask and returns the raw buffer value
+        assert_eq!(arr[1], 200);
+    }
 }
 
 #[cfg(test)]

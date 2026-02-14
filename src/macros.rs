@@ -249,6 +249,11 @@ macro_rules! impl_masked_array {
                 if self.is_null(idx) { None } else { self.data().get(idx).copied() }
             }
 
+            #[inline]
+            fn get_raw(&self, idx: usize) -> T {
+                self.data[idx]
+            }
+
             /// Like `get`, but skips the `idx >= len()` check.
                     #[inline(always)]
             unsafe fn get_unchecked(&self, idx: usize) -> Option<T> {
@@ -626,10 +631,24 @@ macro_rules! impl_masked_array {
                 })
             }
         }
+
+        /// Single-index returns a reference to the value at position `i`.
+        ///
+        /// Requires the `unchecked_index` feature. This does not check the null mask,
+        /// so null elements return raw buffer values. Use `.get(i)` for null-safe
+        /// access or `.get_raw(i)` for explicit raw buffer access.
+        #[cfg(feature = "unchecked_index")]
+        impl<T: $bound> ::std::ops::Index<usize> for $array<T> {
+            type Output = T;
+            #[inline]
+            fn index(&self, i: usize) -> &T {
+                &self.data[i]
+            }
+        }
     };
 }
 
-/// Implement `from_vec` + `from_std_vec` for the “numeric-shaped” arrays
+/// Implement `from_vec` + `from_std_vec` for the "numeric-shaped" arrays
 /// (IntegerArray / FloatArray / DatetimeArray).
 #[macro_export]
 macro_rules! impl_from_vec_primitive {
@@ -880,6 +899,9 @@ macro_rules! impl_arc_masked_array {
             fn get(&self, idx: usize) -> Option<Self::CopyType> {
                 (**self).get(idx)
             }
+            fn get_raw(&self, idx: usize) -> Self::CopyType {
+                (**self).get_raw(idx)
+            }
             fn set(&mut self, idx: usize, value: Self::LogicalType) {
                 ::std::sync::Arc::make_mut(self).set(idx, value)
             }
@@ -1000,6 +1022,9 @@ macro_rules! impl_arc_masked_array {
             }
             fn get(&self, idx: usize) -> Option<Self::CopyType> {
                 (**self).get(idx)
+            }
+            fn get_raw(&self, idx: usize) -> Self::CopyType {
+                (**self).get_raw(idx)
             }
             fn set(&mut self, idx: usize, value: Self::LogicalType) {
                 ::std::sync::Arc::make_mut(self).set(idx, value)

@@ -61,6 +61,15 @@ pub trait MaskedArray {
     /// Retrieves the value at the given index, or None if null or beyond length.
     fn get(&self, idx: usize) -> Option<Self::CopyType>;
 
+    /// Returns the raw buffer value at `idx` without checking the null mask.
+    ///
+    /// Use this when you intentionally need the underlying buffer value
+    /// regardless of null status, e.g. in performance-critical loops
+    /// where you handle nulls separately via the bitmask.
+    ///
+    /// For null-safe access, use `.get(i)` which returns `Option<T>`.
+    fn get_raw(&self, idx: usize) -> Self::CopyType;
+
     /// Sets the value at the given index, updating the null‐mask.
     fn set(&mut self, idx: usize, value: Self::LogicalType);
 

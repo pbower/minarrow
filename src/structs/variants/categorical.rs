@@ -528,6 +528,13 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
         Some(unsafe { std::mem::transmute::<&str, &'static str>(&self.unique_values[dict_idx]) })
     }
 
+    #[inline]
+    fn get_raw(&self, idx: usize) -> &'static str {
+        let dict_idx = self.data[idx].to_usize();
+        // Same transmute as get() — required because CopyType is &'static str
+        unsafe { std::mem::transmute::<&str, &'static str>(&self.unique_values[dict_idx]) }
+    }
+
     /// Sets the value at `idx`. Marks as valid.
     ///
     /// # ⚠️ Prefer `set_str`, which avoids a reallocation.
@@ -1257,6 +1264,21 @@ impl_arc_masked_array!(
 
 impl_array_ref_deref!(CategoricalArray<T>: Integer);
 
+/// Single-index resolves the dictionary code at position `i` to a string reference.
+///
+/// Requires the `unchecked_index` feature. This does not check the null mask,
+/// so null elements return raw buffer values. Use `.get(i)` for null-safe
+/// access or `.get_raw(i)` for explicit raw buffer access.
+#[cfg(feature = "unchecked_index")]
+impl<T: Integer> std::ops::Index<usize> for CategoricalArray<T> {
+    type Output = str;
+    #[inline]
+    fn index(&self, i: usize) -> &str {
+        let code = self.data[i].to_usize();
+        &self.unique_values[code]
+    }
+}
+
 impl<T> Display for CategoricalArray<T>
 where
     T: Integer + std::fmt::Debug,
@@ -1757,6 +1779,27 @@ mod parallel_tests {
         let arr = CategoricalArray::<u32>::from_parts(vec64![0, 2, 1, 0, 2], dict, None);
         let out: Vec<&str> = arr.par_iter_range_unchecked(1, 4).collect();
         assert_eq!(out, vec!["three", "two", "one"]);
+    }
+
+    #[test]
+    fn test_get_raw_returns_buffer_value_regardless_of_null() {
+        let arr = CategoricalArray::<u32>::from_values(vec!["apple", "banana", "cherry"]);
+        let mut arr_with_null = arr.clone();
+        arr_with_null.set_null(1);
+        assert_eq!(arr_with_null.get(1), None);
+        // get_raw bypasses null mask and returns the resolved string
+        let raw = arr_with_null.get_raw(1);
+        assert_eq!(raw, "banana");
+    }
+
+    #[cfg(feature = "unchecked_index")]
+    #[test]
+    fn test_index_bypasses_null_mask() {
+        let mut arr = CategoricalArray::<u32>::from_values(vec!["apple", "banana", "cherry"]);
+        arr.set_null(1);
+        assert_eq!(arr.get(1), None);
+        // Index bypasses the null mask and returns the resolved string
+        assert_eq!(&arr[1], "banana");
     }
 
     #[test]
