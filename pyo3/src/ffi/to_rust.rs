@@ -7,7 +7,8 @@
 //! Each import function tries the modern PyCapsule protocol first
 //! (`__arrow_c_array__` / `__arrow_c_stream__`), falling back to the legacy
 //! `_export_to_c` pointer-integer approach for older PyArrow versions.
-
+//! 
+use minarrow::Consolidate;
 use minarrow::ffi::arrow_c_ffi::{
     ArrowArray, ArrowArrayStream, ArrowSchema, import_from_c_owned,
     import_record_batch_stream_with_metadata,
@@ -286,13 +287,19 @@ pub fn record_batch_to_rust(obj: &Bound<PyAny>) -> PyMinarrowResult<minarrow::Ta
         if batches.is_empty() {
             return Ok(minarrow::Table::new(table_name, None));
         }
-        // Take the first batch as the Table
-        let columns = batches.into_iter().next().unwrap();
-        let cols: Vec<FieldArray> = columns
+        // Build a Table from each batch, then consolidate into one.
+        // For a single batch this returns it directly without copying.
+        let tables: Vec<minarrow::Table> = batches
             .into_iter()
-            .map(|(array, field)| FieldArray::new(field, (*array).clone()))
+            .map(|columns| {
+                let cols: Vec<FieldArray> = columns
+                    .into_iter()
+                    .map(|(array, field)| FieldArray::new(field, (*array).clone()))
+                    .collect();
+                minarrow::Table::new(table_name.clone(), Some(cols))
+            })
             .collect();
-        return Ok(minarrow::Table::new(table_name, Some(cols)));
+        return Ok(tables.consolidate());
     }
 
     // Fall back to legacy approach
@@ -392,6 +399,8 @@ pub fn table_to_rust(obj: &Bound<PyAny>) -> PyMinarrowResult<SuperTable> {
 }
 
 /// Legacy Table import using `to_batches()`.
+/// 
+/// For old PyArrow versions where __arrow_c_stream__ is unsupported
 fn table_to_rust_legacy(obj: &Bound<PyAny>) -> PyMinarrowResult<SuperTable> {
     // Try to recover the table name from schema metadata
     let table_name = obj
