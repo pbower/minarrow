@@ -881,7 +881,6 @@ impl Default for SuperArray {
     }
 }
 
-
 // Vec<Array> -> SuperArray
 //
 // Multiple chunks without field metadata

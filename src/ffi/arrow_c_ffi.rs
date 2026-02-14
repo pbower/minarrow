@@ -172,18 +172,18 @@ unsafe impl Sync for ArrowArrayStream {}
 
 /// Keep buffers and data alive for the C Data Interface.
 /// Ensures backing data and all pointers while referenced by ArrowArray.private_data.
+/// Keeps export buffers and metadata alive for the lifetime of an ArrowArray/ArrowSchema pair.
+/// Fields are never read directly but must remain allocated so that raw pointers
+/// in the exported ArrowArray and ArrowSchema stay valid.
+#[allow(dead_code)]
 struct Holder {
-    #[allow(dead_code)] // These hold values at runtime
     array: Arc<Array>,
     _schema: Box<ArrowSchema>,
-    #[allow(dead_code)]
     buf_ptrs: Vec64<*const u8>,
-    #[allow(dead_code)]
     name_cstr: CString,
-    #[allow(dead_code)]
     format_cstr: CString,
-    #[allow(dead_code)]
-    metadata_cstr: Option<CString>,
+    /// Encoded Arrow metadata bytes kept alive for the pointer in ArrowSchema.metadata.
+    metadata_bytes: Option<Vec<u8>>,
 }
 
 /// Wrapper that owns a foreign ArrowArray's buffer memory and calls release on drop.
@@ -565,20 +565,14 @@ fn export_categorical_array_to_c(
     let format_cstr = fmt_c(field.dtype.clone());
     let format_ptr = format_cstr.as_ptr();
 
-    let metadata_cstr = if field.metadata.is_empty() {
+    let metadata_bytes = if field.metadata.is_empty() {
         None
     } else {
-        let flat = field
-            .metadata
-            .iter()
-            .flat_map(|(k, v)| vec![k.as_str(), v.as_str()])
-            .collect::<Vec64<_>>()
-            .join("\u{0001}");
-        Some(CString::new(flat).unwrap())
+        Some(encode_arrow_metadata(&field.metadata))
     };
-    let metadata_ptr = metadata_cstr
+    let metadata_ptr = metadata_bytes
         .as_ref()
-        .map(|c| c.as_ptr())
+        .map(|b| b.as_ptr() as *const i8)
         .unwrap_or(ptr::null());
 
     let arr = Box::new(ArrowArray {
@@ -613,7 +607,7 @@ fn export_categorical_array_to_c(
         buf_ptrs,
         name_cstr,
         format_cstr,
-        metadata_cstr,
+        metadata_bytes,
     });
 
     let arr_ptr = Box::into_raw(arr);
@@ -842,102 +836,15 @@ pub unsafe fn import_from_c_owned(
         panic!("FFI import_from_c_owned: ArrowArray has no release callback");
     }
 
-    // Extract field name from schema
-    let name = if sch.name.is_null() {
-        String::new()
-    } else {
-        unsafe { std::ffi::CStr::from_ptr(sch.name) }
-            .to_string_lossy()
-            .into_owned()
-    };
-
-    // Check nullability from schema flags (ARROW_FLAG_NULLABLE = 2)
-    let nullable = (sch.flags & 2) != 0;
-
-    let fmt = unsafe { std::ffi::CStr::from_ptr(sch.format) }.to_bytes();
+    // Extract complete field including metadata before dropping sch_box
+    let mut field = unsafe { field_from_c_schema(sch) };
+    let dtype = field.dtype.clone();
     let is_dict = !arr.dictionary.is_null() || !sch.dictionary.is_null();
-
-    let dtype = match fmt {
-        b"n" => ArrowType::Null,
-        b"b" => ArrowType::Boolean,
-        #[cfg(feature = "extended_numeric_types")]
-        b"c" => ArrowType::Int8,
-        #[cfg(feature = "extended_numeric_types")]
-        b"C" => ArrowType::UInt8,
-        #[cfg(feature = "extended_numeric_types")]
-        b"s" => ArrowType::Int16,
-        #[cfg(feature = "extended_numeric_types")]
-        b"S" => ArrowType::UInt16,
-        b"i" => ArrowType::Int32,
-        b"I" => ArrowType::UInt32,
-        b"l" => ArrowType::Int64,
-        b"L" => ArrowType::UInt64,
-        b"f" => ArrowType::Float32,
-        b"g" => ArrowType::Float64,
-        b"u" => ArrowType::String,
-        #[cfg(feature = "large_string")]
-        b"U" => ArrowType::LargeString,
-        b"vu" => ArrowType::Utf8View,
-        #[cfg(feature = "datetime")]
-        b"tdD" => ArrowType::Date32,
-        #[cfg(feature = "datetime")]
-        b"tdm" => ArrowType::Date64,
-        #[cfg(feature = "datetime")]
-        b"tts" => ArrowType::Time32(crate::TimeUnit::Seconds),
-        #[cfg(feature = "datetime")]
-        b"ttm" => ArrowType::Time32(crate::TimeUnit::Milliseconds),
-        #[cfg(feature = "datetime")]
-        b"ttu" => ArrowType::Time64(crate::TimeUnit::Microseconds),
-        #[cfg(feature = "datetime")]
-        b"ttn" => ArrowType::Time64(crate::TimeUnit::Nanoseconds),
-        #[cfg(feature = "datetime")]
-        b"tDs" => ArrowType::Duration32(crate::TimeUnit::Seconds),
-        #[cfg(feature = "datetime")]
-        b"tDm" => ArrowType::Duration32(crate::TimeUnit::Milliseconds),
-        #[cfg(feature = "datetime")]
-        b"tDu" => ArrowType::Duration64(crate::TimeUnit::Microseconds),
-        #[cfg(feature = "datetime")]
-        b"tDn" => ArrowType::Duration64(crate::TimeUnit::Nanoseconds),
-        #[cfg(feature = "datetime")]
-        b"tiM" => ArrowType::Interval(IntervalUnit::YearMonth),
-        #[cfg(feature = "datetime")]
-        b"tiD" => ArrowType::Interval(IntervalUnit::DaysTime),
-        #[cfg(feature = "datetime")]
-        b"tin" => ArrowType::Interval(IntervalUnit::MonthDaysNs),
-        #[cfg(feature = "datetime")]
-        _ if fmt.starts_with(b"tss")
-            || fmt.starts_with(b"tsm")
-            || fmt.starts_with(b"tsu")
-            || fmt.starts_with(b"tsn") =>
-        {
-            let unit = match &fmt[..3] {
-                b"tss" => crate::TimeUnit::Seconds,
-                b"tsm" => crate::TimeUnit::Milliseconds,
-                b"tsu" => crate::TimeUnit::Microseconds,
-                b"tsn" => crate::TimeUnit::Nanoseconds,
-                _ => unreachable!(),
-            };
-            let tz = if fmt.len() > 4 {
-                let tz_bytes = &fmt[4..];
-                let tz_str = String::from_utf8_lossy(tz_bytes).into_owned();
-                if tz_str.is_empty() {
-                    None
-                } else {
-                    Some(tz_str)
-                }
-            } else {
-                None
-            };
-            ArrowType::Timestamp(unit, tz)
-        }
-        o => panic!("unsupported format {:?}", o),
-    };
 
     // For categorical (dictionary-encoded) types, the codes buffer is zero-copy
     // via ForeignBuffer. Dictionary strings are copied due to structural mismatch
     // between Arrow's contiguous offsets+data and MinArrow's Vec64<String>.
     if is_dict {
-        // Release the schema box (we don't need it for the categorical path)
         drop(sch_box);
         let result = unsafe {
             import_categorical(
@@ -978,15 +885,12 @@ pub unsafe fn import_from_c_owned(
                 Some(arr_box),
             )
         };
-        let field = crate::Field::new(name, dtype, nullable, None);
         return (result, field);
     }
 
-    // Drop schema box - we've extracted what we need
     drop(sch_box);
 
     // Pass ownership for zero-copy import
-    // SAFETY: All import_* functions are unsafe and we're in an unsafe fn
     let array = unsafe {
         match dtype {
             ArrowType::Boolean => import_boolean(arr, Some(arr_box)),
@@ -1036,11 +940,9 @@ pub unsafe fn import_from_c_owned(
     };
 
     // Utf8View is stored internally as String since the data is converted during import
-    let field_dtype = match dtype {
-        ArrowType::Utf8View => ArrowType::String,
-        other => other,
-    };
-    let field = crate::Field::new(name, field_dtype, nullable, None);
+    if field.dtype == ArrowType::Utf8View {
+        field.dtype = ArrowType::String;
+    }
     (array, field)
 }
 
@@ -1070,14 +972,26 @@ unsafe fn import_array_zero_copy(
             _ => {
                 use crate::ffi::arrow_dtype::CategoricalIndexType;
                 match dtype {
-                    #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+                    #[cfg(all(
+                        feature = "extended_numeric_types",
+                        feature = "extended_categorical"
+                    ))]
                     ArrowType::Int8 | ArrowType::UInt8 => CategoricalIndexType::UInt8,
-                    #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+                    #[cfg(all(
+                        feature = "extended_numeric_types",
+                        feature = "extended_categorical"
+                    ))]
                     ArrowType::Int16 | ArrowType::UInt16 => CategoricalIndexType::UInt16,
                     ArrowType::Int32 | ArrowType::UInt32 => CategoricalIndexType::UInt32,
-                    #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+                    #[cfg(all(
+                        feature = "extended_numeric_types",
+                        feature = "extended_categorical"
+                    ))]
                     ArrowType::Int64 | ArrowType::UInt64 => CategoricalIndexType::UInt64,
-                    _ => panic!("import_array_zero_copy: unsupported dictionary index type {:?}", dtype),
+                    _ => panic!(
+                        "import_array_zero_copy: unsupported dictionary index type {:?}",
+                        dtype
+                    ),
                 }
             }
         };
@@ -1412,10 +1326,7 @@ unsafe fn import_utf8<T: Integer>(
 ///
 /// # Safety
 /// `arr` must contain a valid Utf8View ArrowArray.
-unsafe fn import_utf8_view(
-    arr: &ArrowArray,
-    ownership: Option<Box<ArrowArray>>,
-) -> Arc<Array> {
+unsafe fn import_utf8_view(arr: &ArrowArray, ownership: Option<Box<ArrowArray>>) -> Arc<Array> {
     let len = arr.length as usize;
 
     if len == 0 {
@@ -1709,20 +1620,14 @@ fn create_arrow_export(
     let format_ptr = format_cstr.as_ptr();
 
     // Metadata
-    let metadata_cstr = if field.metadata.is_empty() {
+    let metadata_bytes = if field.metadata.is_empty() {
         None
     } else {
-        let flat = field
-            .metadata
-            .iter()
-            .flat_map(|(k, v)| vec![k.as_str(), v.as_str()])
-            .collect::<Vec64<_>>()
-            .join("\u{0001}");
-        Some(CString::new(flat).unwrap())
+        Some(encode_arrow_metadata(&field.metadata))
     };
-    let metadata_ptr = metadata_cstr
+    let metadata_ptr = metadata_bytes
         .as_ref()
-        .map(|c| c.as_ptr())
+        .map(|b| b.as_ptr() as *const i8)
         .unwrap_or(ptr::null());
 
     // ArrowArray
@@ -1759,7 +1664,7 @@ fn create_arrow_export(
         buf_ptrs,
         name_cstr,
         format_cstr,
-        metadata_cstr,
+        metadata_bytes,
     });
 
     let arr_ptr = Box::into_raw(arr);
@@ -1880,13 +1785,12 @@ pub fn export_struct_to_c(
     (Box::into_raw(struct_arr), Box::into_raw(struct_sch))
 }
 
+/// Keeps struct-level schema strings and metadata alive for ArrowSchema pointers.
+#[allow(dead_code)]
 struct StructSchemaHolder {
-    #[allow(dead_code)]
     format_cstr: CString,
-    #[allow(dead_code)]
     name_cstr: CString,
     /// Encoded Arrow metadata bytes kept alive for the pointer in ArrowSchema.metadata.
-    #[allow(dead_code)]
     metadata_bytes: Option<Vec<u8>>,
 }
 
@@ -1980,7 +1884,11 @@ unsafe extern "C" fn release_struct_array(arr: *mut ArrowArray) {
             }
         }
         // Free the children pointer array
-        let _ = unsafe { Box::from_raw(slice::from_raw_parts_mut(a.children, n_children) as *mut [*mut ArrowArray]) };
+        let _ = unsafe {
+            Box::from_raw(
+                slice::from_raw_parts_mut(a.children, n_children) as *mut [*mut ArrowArray]
+            )
+        };
     }
 
     // Free the buffers pointer (single null bitmap)
@@ -2011,7 +1919,11 @@ unsafe extern "C" fn release_struct_schema(sch: *mut ArrowSchema) {
                 let _ = unsafe { Box::from_raw(*child_ptr) };
             }
         }
-        let _ = unsafe { Box::from_raw(slice::from_raw_parts_mut(s.children, n_children) as *mut [*mut ArrowSchema]) };
+        let _ = unsafe {
+            Box::from_raw(
+                slice::from_raw_parts_mut(s.children, n_children) as *mut [*mut ArrowSchema]
+            )
+        };
     }
 
     // Free the private data
@@ -2085,16 +1997,26 @@ unsafe extern "C" fn rb_stream_get_schema(
         let name_cstr = CString::new(field.name.clone()).unwrap_or_default();
         let flags = if field.nullable { 2 } else { 0 };
 
+        let metadata_bytes = if field.metadata.is_empty() {
+            None
+        } else {
+            Some(encode_arrow_metadata(&field.metadata))
+        };
+        let metadata_ptr = metadata_bytes
+            .as_ref()
+            .map(|b| b.as_ptr() as *const i8)
+            .unwrap_or(ptr::null());
+
         let child_holder = Box::new(StructSchemaHolder {
             format_cstr,
             name_cstr,
-            metadata_bytes: None,
+            metadata_bytes,
         });
 
         let child = Box::new(ArrowSchema {
             format: child_holder.format_cstr.as_ptr(),
             name: child_holder.name_cstr.as_ptr(),
-            metadata: ptr::null(),
+            metadata: metadata_ptr,
             flags,
             n_children: 0,
             children: ptr::null_mut(),
@@ -2162,10 +2084,7 @@ unsafe extern "C" fn rb_stream_get_next(
         ptr::write(out, ptr::read(arr_ptr));
         // Free the box wrapper without running drop on the ArrowArray itself
         // (caller now owns the data through the out pointer)
-        std::alloc::dealloc(
-            arr_ptr as *mut u8,
-            std::alloc::Layout::for_value(&*arr_ptr),
-        );
+        std::alloc::dealloc(arr_ptr as *mut u8, std::alloc::Layout::for_value(&*arr_ptr));
     }
 
     // Release the schema (get_next only returns arrays, schema came from get_schema)
@@ -2199,10 +2118,7 @@ unsafe extern "C" fn rb_stream_release(stream: *mut ArrowArrayStream) {
 ///
 /// # Returns
 /// A heap-allocated ArrowArrayStream.
-pub fn export_array_stream(
-    chunks: Vec<Arc<Array>>,
-    field: crate::Field,
-) -> Box<ArrowArrayStream> {
+pub fn export_array_stream(chunks: Vec<Arc<Array>>, field: crate::Field) -> Box<ArrowArrayStream> {
     let holder = Box::new(ArrayStreamHolder {
         field,
         chunks,
@@ -2274,10 +2190,7 @@ unsafe extern "C" fn arr_stream_get_next(
     // Move the exported array into the caller's out pointer
     unsafe {
         ptr::write(out, ptr::read(arr_ptr));
-        std::alloc::dealloc(
-            arr_ptr as *mut u8,
-            std::alloc::Layout::for_value(&*arr_ptr),
-        );
+        std::alloc::dealloc(arr_ptr as *mut u8, std::alloc::Layout::for_value(&*arr_ptr));
     }
 
     // Release the schema (not needed for get_next)
@@ -2373,7 +2286,11 @@ pub unsafe fn import_record_batch_stream_with_metadata(
         let mut schema = ArrowSchema::empty();
         let get_schema = ((*stream).get_schema).expect("stream has no get_schema callback");
         let rc = get_schema(stream, &mut schema);
-        assert_eq!(rc, 0, "ArrowArrayStream get_schema returned error code {}", rc);
+        assert_eq!(
+            rc, 0,
+            "ArrowArrayStream get_schema returned error code {}",
+            rc
+        );
 
         // Extract metadata before parsing children
         let metadata = decode_arrow_metadata(schema.metadata);
@@ -2381,9 +2298,7 @@ pub unsafe fn import_record_batch_stream_with_metadata(
         // Parse child field info from the struct schema
         let n_fields = schema.n_children as usize;
         let child_schemas: Vec<&ArrowSchema> = if n_fields > 0 && !schema.children.is_null() {
-            (0..n_fields)
-                .map(|i| &**schema.children.add(i))
-                .collect()
+            (0..n_fields).map(|i| &**schema.children.add(i)).collect()
         } else {
             Vec::new()
         };
@@ -2395,7 +2310,11 @@ pub unsafe fn import_record_batch_stream_with_metadata(
         loop {
             let mut arr = ArrowArray::empty();
             let rc = get_next(stream, &mut arr);
-            assert_eq!(rc, 0, "ArrowArrayStream get_next returned error code {}", rc);
+            assert_eq!(
+                rc, 0,
+                "ArrowArrayStream get_next returned error code {}",
+                rc
+            );
 
             // End of stream: release is None
             if arr.release.is_none() {
@@ -2418,17 +2337,9 @@ pub unsafe fn import_record_batch_stream_with_metadata(
             for i in 0..n_children {
                 let child_sch = child_schemas[i];
 
-                // Extract field metadata from schema
-                let name = if child_sch.name.is_null() {
-                    String::new()
-                } else {
-                    std::ffi::CStr::from_ptr(child_sch.name)
-                        .to_string_lossy()
-                        .into_owned()
-                };
-                let nullable = (child_sch.flags & 2) != 0;
-                let fmt = std::ffi::CStr::from_ptr(child_sch.format).to_bytes();
-                let dtype = parse_arrow_format(fmt);
+                // Extract complete field including metadata from schema
+                let mut field = field_from_c_schema(child_sch);
+                let dtype = field.dtype.clone();
 
                 // Steal the child: move its ArrowArray out and replace with empty
                 let child_raw: *mut ArrowArray = *arr.children.add(i);
@@ -2437,19 +2348,14 @@ pub unsafe fn import_record_batch_stream_with_metadata(
 
                 // Import zero-copy with owned ArrowArray
                 let child_box = Box::new(child_content);
-                let imported = import_array_zero_copy(
-                    child_box,
-                    dtype.clone(),
-                    child_sch as *const ArrowSchema,
-                );
+                let imported =
+                    import_array_zero_copy(child_box, dtype, child_sch as *const ArrowSchema);
 
                 // Utf8View is stored internally as String since the data is
                 // restructured during import from views to offsets+data.
-                let field_dtype = match dtype {
-                    ArrowType::Utf8View => ArrowType::String,
-                    other => other,
-                };
-                let field = crate::Field::new(name, field_dtype, nullable, None);
+                if field.dtype == ArrowType::Utf8View {
+                    field.dtype = ArrowType::String;
+                }
                 columns.push((imported, field));
             }
 
@@ -2493,20 +2399,14 @@ pub unsafe fn import_array_stream(
         let mut schema_c = ArrowSchema::empty();
         let get_schema = ((*stream).get_schema).expect("stream has no get_schema callback");
         let rc = get_schema(stream, &mut schema_c);
-        assert_eq!(rc, 0, "ArrowArrayStream get_schema returned error code {}", rc);
+        assert_eq!(
+            rc, 0,
+            "ArrowArrayStream get_schema returned error code {}",
+            rc
+        );
 
-        // Extract field info
-        let name = if schema_c.name.is_null() {
-            String::new()
-        } else {
-            std::ffi::CStr::from_ptr(schema_c.name)
-                .to_string_lossy()
-                .into_owned()
-        };
-        let nullable = (schema_c.flags & 2) != 0;
-        let fmt = std::ffi::CStr::from_ptr(schema_c.format).to_bytes();
-        let dtype = parse_arrow_format(fmt);
-        let field = crate::Field::new(name, dtype, nullable, None);
+        // Extract complete field including metadata before releasing the schema
+        let field = field_from_c_schema(&schema_c);
 
         // Release the schema as we have extracted what we need
         if let Some(release) = schema_c.release {
@@ -2520,7 +2420,11 @@ pub unsafe fn import_array_stream(
         loop {
             let mut arr = ArrowArray::empty();
             let rc = get_next(stream, &mut arr);
-            assert_eq!(rc, 0, "ArrowArrayStream get_next returned error code {}", rc);
+            assert_eq!(
+                rc, 0,
+                "ArrowArrayStream get_next returned error code {}",
+                rc
+            );
 
             if arr.release.is_none() {
                 break;
@@ -2556,6 +2460,25 @@ pub unsafe fn import_array_stream(
 
         (arrays, field)
     }
+}
+
+/// Extracts a complete Field from an ArrowSchema, including metadata.
+///
+/// # Safety
+/// `schema` must point to a valid ArrowSchema with valid name and format pointers.
+unsafe fn field_from_c_schema(schema: &ArrowSchema) -> crate::Field {
+    let name = if schema.name.is_null() {
+        String::new()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(schema.name) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    let nullable = (schema.flags & 2) != 0;
+    let fmt = unsafe { std::ffi::CStr::from_ptr(schema.format).to_bytes() };
+    let dtype = parse_arrow_format(fmt);
+    let metadata = unsafe { decode_arrow_metadata(schema.metadata) };
+    crate::Field::new(name, dtype, nullable, metadata)
 }
 
 /// Parses an Arrow C format string into an ArrowType.
@@ -2635,7 +2558,10 @@ fn parse_arrow_format(fmt: &[u8]) -> ArrowType {
             };
             ArrowType::Timestamp(unit, tz)
         }
-        o => panic!("unsupported Arrow format {:?}", std::str::from_utf8(o).unwrap_or("??")),
+        o => panic!(
+            "unsupported Arrow format {:?}",
+            std::str::from_utf8(o).unwrap_or("??")
+        ),
     }
 }
 
@@ -3035,6 +2961,94 @@ mod tests {
 
             ((*arr_ptr).release.unwrap())(arr_ptr);
             ((*sch_ptr).release.unwrap())(sch_ptr);
+        }
+    }
+
+    #[test]
+    fn test_field_metadata_round_trip_via_export_import() {
+        use super::import_from_c_owned;
+        use std::collections::BTreeMap;
+
+        let mut meta = BTreeMap::new();
+        meta.insert("source".to_string(), "test_db".to_string());
+        meta.insert("units".to_string(), "kg".to_string());
+
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(1);
+        arr.push(2);
+
+        let array = Arc::new(Array::from_int32(arr));
+        let schema = Schema {
+            fields: vec![Field::new(
+                "col",
+                ArrowType::Int32,
+                false,
+                Some(meta.clone()),
+            )],
+            metadata: Default::default(),
+        };
+
+        let (arr_ptr, sch_ptr) = export_to_c(array, schema);
+
+        unsafe {
+            let arr_box = Box::from_raw(arr_ptr);
+            let sch_box = Box::from_raw(sch_ptr);
+            let (_, field) = import_from_c_owned(arr_box, sch_box);
+            assert_eq!(
+                field.metadata, meta,
+                "Field metadata should survive round-trip"
+            );
+        }
+    }
+
+    #[test]
+    fn test_field_metadata_round_trip_record_batch_stream() {
+        use super::{
+            export_record_batch_stream_with_metadata, import_record_batch_stream_with_metadata,
+        };
+        use std::collections::BTreeMap;
+
+        let mut field_meta = BTreeMap::new();
+        field_meta.insert("origin".to_string(), "sensor_1".to_string());
+
+        let field = Field::new("vals", ArrowType::Int32, false, Some(field_meta.clone()));
+
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(10);
+        arr.push(20);
+        let array = Arc::new(Array::from_int32(arr));
+        let col_schema = Schema {
+            fields: vec![field.clone()],
+            metadata: Default::default(),
+        };
+
+        let batches = vec![vec![(array, col_schema)]];
+        let fields = vec![field];
+
+        let mut table_meta = BTreeMap::new();
+        table_meta.insert("table_name".to_string(), "test_tbl".to_string());
+
+        let stream =
+            export_record_batch_stream_with_metadata(batches, fields, Some(table_meta.clone()));
+        let stream_ptr = Box::into_raw(stream);
+
+        unsafe {
+            let (columns_batches, schema_meta) =
+                import_record_batch_stream_with_metadata(stream_ptr);
+
+            assert_eq!(
+                schema_meta,
+                Some(table_meta),
+                "Schema metadata should survive round-trip"
+            );
+            assert_eq!(columns_batches.len(), 1);
+            let batch = &columns_batches[0];
+            assert_eq!(batch.len(), 1);
+            let (_, imported_field) = &batch[0];
+            assert_eq!(
+                imported_field.metadata, field_meta,
+                "Field metadata should survive record batch stream round-trip"
+            );
         }
     }
 }

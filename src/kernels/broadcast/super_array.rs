@@ -275,8 +275,10 @@ pub fn broadcast_arrayview_to_superarray(
 
         match result {
             Value::Array(arr) => {
-                let field_array =
-                    FieldArray::new_arc(super_array.field.clone().unwrap(), Arc::unwrap_or_clone(arr));
+                let field_array = FieldArray::new_arc(
+                    super_array.field.clone().unwrap(),
+                    Arc::unwrap_or_clone(arr),
+                );
                 result_chunks.push(field_array);
             }
             _ => {
@@ -329,8 +331,10 @@ pub fn broadcast_superarray_to_arrayview(
 
         match result {
             Value::Array(arr) => {
-                let field_array =
-                    FieldArray::new_arc(super_array.field.clone().unwrap(), Arc::unwrap_or_clone(arr));
+                let field_array = FieldArray::new_arc(
+                    super_array.field.clone().unwrap(),
+                    Arc::unwrap_or_clone(arr),
+                );
                 result_chunks.push(field_array);
             }
             _ => {

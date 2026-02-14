@@ -514,7 +514,8 @@ impl Consolidate for Vec<Value> {
                 let mut iter = self.into_iter();
                 let first = iter.next().unwrap();
                 iter.fold(first, |acc, val| {
-                    acc.concat(val).expect("consolidate: all Values must be the same variant")
+                    acc.concat(val)
+                        .expect("consolidate: all Values must be the same variant")
                 })
             }
         }
@@ -533,11 +534,9 @@ impl IntoIterator for Value {
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            Value::VecValue(items) => {
-                Arc::try_unwrap(items)
-                    .unwrap_or_else(|arc| (*arc).clone())
-                    .into_iter()
-            }
+            Value::VecValue(items) => Arc::try_unwrap(items)
+                .unwrap_or_else(|arc| (*arc).clone())
+                .into_iter(),
             other => vec![other].into_iter(),
         }
     }

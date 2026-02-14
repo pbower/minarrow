@@ -34,6 +34,7 @@ use crate::SuperTable;
 #[cfg(feature = "views")]
 use crate::TableV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
+use crate::traits::consolidate::Consolidate;
 #[cfg(all(feature = "views", feature = "select"))]
 use crate::traits::selection::{ColumnSelection, DataSelector, FieldSelector, RowSelection};
 use crate::traits::{
@@ -678,6 +679,48 @@ impl Concatenate for Table {
             n_rows,
             name,
         })
+    }
+}
+
+impl Consolidate for Vec<Table> {
+    type Output = Table;
+
+    /// Consolidate a vector of tables with the same schema into a single table.
+    ///
+    /// Returns an empty table if the input is empty. For a single table,
+    /// returns it directly without copying.
+    fn consolidate(self) -> Table {
+        if self.is_empty() {
+            return Table::new_empty();
+        }
+        if self.len() == 1 {
+            return self.into_iter().next().unwrap();
+        }
+
+        let n_cols = self[0].cols.len();
+        let mut unified_cols = Vec::with_capacity(n_cols);
+
+        for col_idx in 0..n_cols {
+            let field = self[0].cols[col_idx].field.clone();
+            let mut arr = self[0].cols[col_idx].array.clone();
+            for table in self.iter().skip(1) {
+                arr.concat_array(&table.cols[col_idx].array);
+            }
+            let null_count = arr.null_count();
+            unified_cols.push(FieldArray {
+                field,
+                array: arr,
+                null_count,
+            });
+        }
+
+        let n_rows = unified_cols.first().map(|c| c.len()).unwrap_or(0);
+        let name = self[0].name.clone();
+        Table {
+            cols: unified_cols,
+            n_rows,
+            name,
+        }
     }
 }
 
