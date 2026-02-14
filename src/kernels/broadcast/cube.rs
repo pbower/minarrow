@@ -8,9 +8,6 @@ use crate::Bitmask;
 use crate::Cube;
 use crate::enums::error::KernelError;
 use crate::kernels::broadcast::table::broadcast_table_add;
-#[cfg(all(feature = "cube", feature = "views", feature = "select"))]
-use crate::traits::selection::ColumnSelection;
-
 #[cfg(all(feature = "cube", feature = "scalar_type"))]
 use crate::Scalar;
 
@@ -1065,6 +1062,7 @@ pub fn broadcast_cube_to_supertableview(
 #[cfg(all(test, feature = "cube"))]
 mod tests {
     use super::*;
+    use crate::traits::selection::ColumnSelection;
     use crate::{Array, FieldArray, IntegerArray, Table, vec64};
 
     fn create_test_table(name: &str, base_val: i32) -> Table {

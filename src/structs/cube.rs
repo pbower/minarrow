@@ -35,8 +35,6 @@ use crate::TableV;
 use crate::aliases::CubeV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
 use crate::ffi::arrow_dtype::ArrowType;
-#[cfg(all(feature = "views", feature = "select"))]
-use crate::traits::selection::ColumnSelection;
 use crate::traits::{concatenate::Concatenate, shape::Shape};
 use crate::{Field, Table};
 
@@ -604,6 +602,7 @@ mod tests {
     use super::*;
     use crate::structs::field_array::field_array;
     use crate::traits::masked_array::MaskedArray;
+    use crate::traits::selection::ColumnSelection;
     use crate::{Array, BooleanArray, IntegerArray, NumericArray};
 
     fn build_test_table(name: &str, vals: &[i32], bools: &[bool]) -> Table {

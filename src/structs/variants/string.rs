@@ -2026,7 +2026,7 @@ mod parallel_tests {
 
     #[test]
     fn test_get_raw_returns_buffer_value_regardless_of_null() {
-        let mut arr = StringArray::<u32>::from_values(vec!["hello", "world", "foo"]);
+        let mut arr = StringArray::<u32>::from_slice(&["hello", "world", "foo"]);
         arr.push_null();
         assert_eq!(arr.get(3), None);
         // get_raw bypasses null mask and returns the raw buffer value
@@ -2037,7 +2037,7 @@ mod parallel_tests {
     #[cfg(feature = "unchecked_index")]
     #[test]
     fn test_index_bypasses_null_mask() {
-        let mut arr = StringArray::<u32>::from_values(vec!["hello", "world", "foo"]);
+        let mut arr = StringArray::<u32>::from_slice(&["hello", "world", "foo"]);
         arr.set_null(1);
         assert_eq!(arr.get(1), None);
         // Index bypasses the null mask and returns the raw buffer value

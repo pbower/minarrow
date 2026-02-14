@@ -24,8 +24,6 @@ use crate::Cube;
 use crate::kernels::broadcast::{
     value_add, value_divide, value_multiply, value_remainder, value_subtract,
 };
-#[cfg(all(feature = "views", feature = "select"))]
-use crate::traits::selection::ColumnSelection;
 use crate::{Array, FieldArray, Table};
 
 use crate::enums::error::MinarrowError;
@@ -906,6 +904,7 @@ impl Rem for Cube {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::selection::ColumnSelection;
     use crate::{Array, IntegerArray, NumericArray, vec64};
 
     #[test]

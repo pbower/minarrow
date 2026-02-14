@@ -224,7 +224,7 @@ mod benchmarks_simd {
             data: Buffer::from(data),
             null_mask: None,
         };
-        let slice = &int_arr[..];
+        let slice = int_arr.as_ref();
         let sum = simd_sum_i64_runtime(slice, simd_lanes);
         let dur_minarrow_direct = start.elapsed();
         println!(
@@ -264,7 +264,7 @@ mod benchmarks_simd {
             null_mask: None,
         })));
         let int_arr = array.num().i64().unwrap();
-        let slice = &int_arr[..];
+        let slice = int_arr.as_ref();
         let sum = simd_sum_i64_runtime(slice, simd_lanes);
         let dur_minarrow_enum = start.elapsed();
         println!(
@@ -335,7 +335,7 @@ mod benchmarks_simd {
             data: Buffer::from(data),
             null_mask: None,
         };
-        let sum = simd_sum_f64_runtime(&float_arr[..], simd_lanes);
+        let sum = simd_sum_f64_runtime(float_arr.as_ref(), simd_lanes);
         let dur_minarrow_direct_f64 = start.elapsed();
         println!(
             "minarrow direct: FloatArray sum = {}, {:?}",
@@ -373,7 +373,7 @@ mod benchmarks_simd {
             null_mask: None,
         })));
         let float_arr = array.num().f64().unwrap();
-        let sum = simd_sum_f64_runtime(&float_arr[..], simd_lanes);
+        let sum = simd_sum_f64_runtime(float_arr.as_ref(), simd_lanes);
         let dur_minarrow_enum_f64 = start.elapsed();
         println!(
             "minarrow enum: FloatArray sum = {}, {:?}",
