@@ -243,25 +243,25 @@ mod tests {
     fn test_supertableview_to_scalar_add() {
         // Create SuperTableView with 2 slices
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view1 = TableV::from_table(table1, 0, 3);
 
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![4, 5, 6]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr2,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view2 = TableV::from_table(table2, 0, 3);
 
         let super_table_view = SuperTableV {
@@ -299,25 +299,25 @@ mod tests {
     fn test_supertableview_to_arrayview_multiply() {
         // Create SuperTableView with 2 slices
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![2, 3, 4]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view1 = TableV::from_table(table1, 0, 3);
 
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![5, 6, 7]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr2,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view2 = TableV::from_table(table2, 0, 3);
 
         let super_table_view = SuperTableV {
@@ -360,25 +360,25 @@ mod tests {
     fn test_supertableview_to_arrayview_length_mismatch() {
         // Create SuperTableView with 6 elements
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view1 = TableV::from_table(table1, 0, 3);
 
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![4, 5, 6]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr2,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view2 = TableV::from_table(table2, 0, 3);
 
         let super_table_view = SuperTableV {
@@ -422,14 +422,14 @@ mod tests {
 
         // Create Table: [[10, 20, 30, 40, 50, 60]]
         let arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30, 40, 50, 60]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr,
             )],
-            n_rows: 6,
-            name: "test".to_string(),
-        };
+            6,
+            "test".to_string(),
+        );
 
         let result = broadcast_superarrayview_to_table(
             ArithmeticOperator::Subtract,
@@ -476,14 +476,14 @@ mod tests {
 
         // Create Table with 5 rows (mismatch)
         let arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30, 40, 50]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr,
             )],
-            n_rows: 5,
-            name: "test".to_string(),
-        };
+            5,
+            "test".to_string(),
+        );
 
         let result =
             broadcast_superarrayview_to_table(ArithmeticOperator::Add, &super_array_view, &table);
@@ -500,25 +500,25 @@ mod tests {
     fn test_supertableview_to_array_divide() {
         // Create SuperTableView with 2 slices
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![100, 200, 300]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view1 = TableV::from_table(table1, 0, 3);
 
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![400, 500, 600]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr2,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view2 = TableV::from_table(table2, 0, 3);
 
         let super_table_view = SuperTableV {

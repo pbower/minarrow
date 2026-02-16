@@ -192,6 +192,11 @@ size = []
 # understand the implications and prefer the ergonomic `[]` syntax.
 unchecked_index = []
 
+# Adds an optional `metadata: BTreeMap<String, String>` field to `Table`.
+# Captures schema-level metadata that Arrow producers like PyArrow embed
+# in the top-level ArrowSchema.metadata, e.g. pandas categorical ordering.
+table_metadata = []
+
 # Adds pandas-style selection for Table and TableV with .c() and .r() methods
 select = []
 

@@ -186,8 +186,8 @@ mod tests {
         // Create two tables
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3]));
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
-        let table1 = Table {
-            cols: vec![
+        let table1 = Table::build(
+            vec![
                 FieldArray::new(
                     Field::new("col1".to_string(), ArrowType::Int32, false, None),
                     arr1,
@@ -197,15 +197,15 @@ mod tests {
                     arr2,
                 ),
             ],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view1 = TableV::from_table(table1, 0, 3);
 
         let arr3 = Array::from_int32(IntegerArray::from_slice(&vec64![5, 5, 5]));
         let arr4 = Array::from_int32(IntegerArray::from_slice(&vec64![100, 100, 100]));
-        let table2 = Table {
-            cols: vec![
+        let table2 = Table::build(
+            vec![
                 FieldArray::new(
                     Field::new("col1".to_string(), ArrowType::Int32, false, None),
                     arr3,
@@ -215,9 +215,9 @@ mod tests {
                     arr4,
                 ),
             ],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view2 = TableV::from_table(table2, 0, 3);
 
         let result =
@@ -246,20 +246,20 @@ mod tests {
     fn test_tableview_to_tableview_column_mismatch() {
         // Create tables with different numbers of columns
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view1 = TableV::from_table(table1, 0, 3);
 
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![5, 5, 5]));
         let arr3 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 10, 10]));
-        let table2 = Table {
-            cols: vec![
+        let table2 = Table::build(
+            vec![
                 FieldArray::new(
                     Field::new("col1".to_string(), ArrowType::Int32, false, None),
                     arr2,
@@ -269,9 +269,9 @@ mod tests {
                     arr3,
                 ),
             ],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view2 = TableV::from_table(table2, 0, 3);
 
         let result =
@@ -290,8 +290,8 @@ mod tests {
     fn test_tableview_to_scalar_multiply() {
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![2, 3, 4]));
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![5, 6, 7]));
-        let table = Table {
-            cols: vec![
+        let table = Table::build(
+            vec![
                 FieldArray::new(
                     Field::new("col1".to_string(), ArrowType::Int32, false, None),
                     arr1,
@@ -301,9 +301,9 @@ mod tests {
                     arr2,
                 ),
             ],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 3);
 
         let scalar = Scalar::Int32(10);
@@ -330,14 +330,14 @@ mod tests {
     #[test]
     fn test_tableview_to_arrayview_subtract() {
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![100, 200, 300]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 3);
 
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
@@ -369,14 +369,14 @@ mod tests {
 
         // Create table with 6 rows
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3, 4, 5, 6]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 6,
-            name: "test".to_string(),
-        };
+            6,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 6);
 
         // Create SuperArrayView with 2 chunks of 3 elements each
@@ -426,14 +426,14 @@ mod tests {
         use crate::{FieldArray as FA, SuperArray, SuperArrayV};
 
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3, 4, 5]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 5,
-            name: "test".to_string(),
-        };
+            5,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 5);
 
         // Create SuperArrayView with 6 elements (mismatch)

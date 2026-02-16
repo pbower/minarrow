@@ -49,6 +49,35 @@ fn extract_table_name_from_pyarrow_schema(schema: &Bound<PyAny>) -> String {
         .unwrap_or_default()
 }
 
+/// Splits imported stream metadata into the table name and remaining entries.
+///
+/// The `minarrow:table_name` key is extracted as the table name. All other
+/// entries are returned as remaining metadata for `Table::new_with_metadata`.
+#[cfg(feature = "table_metadata")]
+fn split_stream_metadata(
+    metadata: Option<std::collections::BTreeMap<String, String>>,
+) -> (String, std::collections::BTreeMap<String, String>) {
+    match metadata {
+        None => (String::new(), std::collections::BTreeMap::new()),
+        Some(mut m) => {
+            let name = m.remove(TABLE_NAME_KEY).unwrap_or_default();
+            (name, m)
+        }
+    }
+}
+
+/// Extracts the table name from imported stream metadata.
+#[cfg(not(feature = "table_metadata"))]
+fn extract_table_name(
+    metadata: &Option<std::collections::BTreeMap<String, String>>,
+) -> String {
+    metadata
+        .as_ref()
+        .and_then(|m| m.get(TABLE_NAME_KEY))
+        .cloned()
+        .unwrap_or_default()
+}
+
 // PyCapsule helpers
 
 /// Attempts to import a single array via the `__arrow_c_array__` PyCapsule protocol.
@@ -279,11 +308,12 @@ pub fn record_batch_to_rust(obj: &Bound<PyAny>) -> PyMinarrowResult<minarrow::Ta
     // Try PyCapsule stream (RecordBatch may support __arrow_c_stream__)
     if let Some(result) = try_capsule_record_batch_stream(obj) {
         let (batches, metadata) = result?;
-        let table_name = metadata
-            .as_ref()
-            .and_then(|m| m.get(TABLE_NAME_KEY))
-            .cloned()
-            .unwrap_or_default();
+
+        #[cfg(feature = "table_metadata")]
+        let (table_name, remaining_meta) = split_stream_metadata(metadata);
+        #[cfg(not(feature = "table_metadata"))]
+        let table_name = extract_table_name(&metadata);
+
         if batches.is_empty() {
             return Ok(minarrow::Table::new(table_name, None));
         }
@@ -296,7 +326,19 @@ pub fn record_batch_to_rust(obj: &Bound<PyAny>) -> PyMinarrowResult<minarrow::Ta
                     .into_iter()
                     .map(|(array, field)| FieldArray::new(field, (*array).clone()))
                     .collect();
-                minarrow::Table::new(table_name.clone(), Some(cols))
+                #[cfg(feature = "table_metadata")]
+                let table = if remaining_meta.is_empty() {
+                    minarrow::Table::new(table_name.clone(), Some(cols))
+                } else {
+                    minarrow::Table::new_with_metadata(
+                        table_name.clone(),
+                        Some(cols),
+                        remaining_meta.clone(),
+                    )
+                };
+                #[cfg(not(feature = "table_metadata"))]
+                let table = minarrow::Table::new(table_name.clone(), Some(cols));
+                table
             })
             .collect();
         return Ok(tables.consolidate());
@@ -373,11 +415,12 @@ pub fn table_to_rust(obj: &Bound<PyAny>) -> PyMinarrowResult<SuperTable> {
     // Try PyCapsule stream
     if let Some(result) = try_capsule_record_batch_stream(obj) {
         let (batches, metadata) = result?;
-        let table_name = metadata
-            .as_ref()
-            .and_then(|m| m.get(TABLE_NAME_KEY))
-            .cloned()
-            .unwrap_or_default();
+
+        #[cfg(feature = "table_metadata")]
+        let (table_name, remaining_meta) = split_stream_metadata(metadata);
+        #[cfg(not(feature = "table_metadata"))]
+        let table_name = extract_table_name(&metadata);
+
         if batches.is_empty() {
             return Ok(SuperTable::new(table_name));
         }
@@ -388,7 +431,19 @@ pub fn table_to_rust(obj: &Bound<PyAny>) -> PyMinarrowResult<SuperTable> {
                 .into_iter()
                 .map(|(array, field)| FieldArray::new(field, (*array).clone()))
                 .collect();
-            tables.push(Arc::new(minarrow::Table::new(table_name.clone(), Some(cols))));
+            #[cfg(feature = "table_metadata")]
+            let table = if remaining_meta.is_empty() {
+                minarrow::Table::new(table_name.clone(), Some(cols))
+            } else {
+                minarrow::Table::new_with_metadata(
+                    table_name.clone(),
+                    Some(cols),
+                    remaining_meta.clone(),
+                )
+            };
+            #[cfg(not(feature = "table_metadata"))]
+            let table = minarrow::Table::new(table_name.clone(), Some(cols));
+            tables.push(Arc::new(table));
         }
 
         return Ok(SuperTable::from_batches(tables, None));

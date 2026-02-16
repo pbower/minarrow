@@ -676,14 +676,14 @@ mod tests {
 
         // Create a single-column table: [[10, 20, 30]]
         let table_arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table_arr,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         let result =
             broadcast_superarray_to_table(ArithmeticOperator::Add, &super_array, &table).unwrap();

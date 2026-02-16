@@ -91,9 +91,28 @@ pub struct Table {
     pub n_rows: usize,
     /// Table name
     pub name: String,
+    /// Schema-level metadata as key-value pairs.
+    /// Captures metadata that Arrow producers like PyArrow embed
+    /// in the top-level ArrowSchema.metadata, e.g. pandas categorical ordering.
+    #[cfg(feature = "table_metadata")]
+    pub metadata: std::collections::BTreeMap<String, String>,
 }
 
 impl Table {
+    /// Internal constructor handling the conditional metadata field.
+    /// All code paths that build a `Table` from parts should go through here
+    /// so the `#[cfg]` lives in one place.
+    #[inline(always)]
+    pub(crate) fn build(cols: Vec<FieldArray>, n_rows: usize, name: String) -> Self {
+        Self {
+            cols,
+            n_rows,
+            name,
+            #[cfg(feature = "table_metadata")]
+            metadata: std::collections::BTreeMap::new(),
+        }
+    }
+
     /// Constructs a new Table with a specified name and optional columns.
     /// If `cols` is provided, the number of rows will be inferred from the first column.
     pub fn new(name: String, cols: Option<Vec<FieldArray>>) -> Self {
@@ -107,19 +126,35 @@ impl Table {
             name
         };
 
-        Self { cols, n_rows, name }
+        Self::build(cols, n_rows, name)
+    }
+
+    /// Constructs a new Table with schema-level metadata.
+    ///
+    /// Use this when importing data from Arrow producers that embed metadata
+    /// in the top-level schema, e.g. pandas categorical ordering via PyArrow.
+    #[cfg(feature = "table_metadata")]
+    pub fn new_with_metadata(
+        name: String,
+        cols: Option<Vec<FieldArray>>,
+        metadata: std::collections::BTreeMap<String, String>,
+    ) -> Self {
+        let mut table = Self::new(name, cols);
+        table.metadata = metadata;
+        table
+    }
+
+    /// Returns a reference to the schema-level metadata.
+    #[cfg(feature = "table_metadata")]
+    pub fn metadata(&self) -> &std::collections::BTreeMap<String, String> {
+        &self.metadata
     }
 
     /// Constructs a new, empty Table with a globally unique name.
     pub fn new_empty() -> Self {
         let id = UNNAMED_COUNTER.fetch_add(1, Ordering::Relaxed);
         let name = format!("UnnamedTable{}", id);
-
-        Self {
-            cols: Vec::new(),
-            n_rows: 0,
-            name,
-        }
+        Self::build(Vec::new(), 0, name)
     }
 
     /// Adds a column with a name.
@@ -251,11 +286,13 @@ impl Table {
             .map(|fa| fa.slice_clone(offset, len))
             .collect();
         let name = format!("{}[{}, {})", self.name, offset, offset + len);
-        Table {
-            cols,
-            n_rows: len,
-            name,
+        #[allow(unused_mut)]
+        let mut table = Table::build(cols, len, name);
+        #[cfg(feature = "table_metadata")]
+        {
+            table.metadata = self.metadata.clone();
         }
+        table
     }
 
     /// Returns a zero-copy view over rows `[offset, offset+len)`.
@@ -467,16 +504,23 @@ impl Table {
             right_cols.push(right_field);
         }
 
-        let left_table = Table {
-            cols: left_cols,
-            n_rows: index,
-            name: format!("{}_left", self.name),
+        let left_table = Table::build(left_cols, index, format!("{}_left", self.name));
+        let right_table = Table::build(
+            right_cols,
+            self.n_rows - index,
+            format!("{}_right", self.name),
+        );
+        #[cfg(feature = "table_metadata")]
+        let left_table = {
+            let mut t = left_table;
+            t.metadata = self.metadata.clone();
+            t
         };
-
-        let right_table = Table {
-            cols: right_cols,
-            n_rows: self.n_rows - index,
-            name: format!("{}_right", self.name),
+        #[cfg(feature = "table_metadata")]
+        let right_table = {
+            let mut t = right_table;
+            t.metadata = self.metadata.clone();
+            t
         };
 
         Ok(SuperTable::from_batches(
@@ -673,12 +717,15 @@ impl Concatenate for Table {
         // Create result table
         let n_rows = result_cols.first().map(|c| c.len()).unwrap_or(0);
         let name = format!("{}+{}", self.name, other.name);
+        let table = Table::build(result_cols, n_rows, name);
+        #[cfg(feature = "table_metadata")]
+        let table = {
+            let mut t = table;
+            t.metadata = self.metadata;
+            t
+        };
 
-        Ok(Table {
-            cols: result_cols,
-            n_rows,
-            name,
-        })
+        Ok(table)
     }
 }
 
@@ -716,11 +763,14 @@ impl Consolidate for Vec<Table> {
 
         let n_rows = unified_cols.first().map(|c| c.len()).unwrap_or(0);
         let name = self[0].name.clone();
-        Table {
-            cols: unified_cols,
-            n_rows,
-            name,
-        }
+        let table = Table::build(unified_cols, n_rows, name);
+        #[cfg(feature = "table_metadata")]
+        let table = {
+            let mut t = table;
+            t.metadata = self[0].metadata.clone();
+            t
+        };
+        table
     }
 }
 

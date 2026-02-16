@@ -915,8 +915,8 @@ mod tests {
         // Create a table with 2 columns
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3]));
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
-        let table = Table {
-            cols: vec![
+        let table = Table::build(
+            vec![
                 FieldArray::new(
                     Field::new("col1".to_string(), ArrowType::Int32, false, None),
                     arr1,
@@ -926,9 +926,9 @@ mod tests {
                     arr2,
                 ),
             ],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         // Create a scalar: 5
         let scalar = Scalar::Int32(5);
@@ -956,14 +956,14 @@ mod tests {
     #[test]
     fn test_scalar_to_table_multiply() {
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![2, 3, 4]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         let scalar = Scalar::Int32(10);
 
@@ -983,14 +983,14 @@ mod tests {
     fn test_scalar_to_tableview_subtract() {
         // Create a table
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![100, 200, 300]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 3);
 
         let scalar = Scalar::Int32(50);
@@ -1012,8 +1012,8 @@ mod tests {
     fn test_scalar_to_tableview_divide() {
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![100, 200, 300]));
-        let table = Table {
-            cols: vec![
+        let table = Table::build(
+            vec![
                 FieldArray::new(
                     Field::new("col1".to_string(), ArrowType::Int32, false, None),
                     arr1,
@@ -1023,9 +1023,9 @@ mod tests {
                     arr2,
                 ),
             ],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 3);
 
         let scalar = Scalar::Int32(1000);
@@ -1174,24 +1174,24 @@ mod tests {
     #[test]
     fn test_scalar_to_supertable() {
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![4, 5, 6]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr2,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         let super_table = SuperTable::from_batches(
             vec![Arc::new(table1), Arc::new(table2)],

@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "minarrow"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "libc",
  "num-traits",
