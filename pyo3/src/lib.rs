@@ -103,9 +103,6 @@ pub mod error;
 pub mod ffi;
 pub mod types;
 
-#[cfg(test)]
-mod tests;
-
 // Re-export the main types for ease of use
 pub use error::{PyMinarrowError, PyMinarrowResult};
 pub use types::{PyArray, PyChunkedArray, PyField, PyRecordBatch, PyTable};

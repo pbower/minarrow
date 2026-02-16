@@ -248,7 +248,7 @@ fn example_4_import_from_pyarrow_table(py: Python<'_>) -> PyResult<()> {
     let result = to_rust::try_capsule_record_batch_stream(&py_table);
 
     match result {
-        Some(Ok(batches)) => {
+        Some(Ok((batches, _metadata))) => {
             println!("  Imported {} batch(es) into MinArrow", batches.len());
             for (batch_idx, batch) in batches.iter().enumerate() {
                 println!("  Batch {}: {} columns", batch_idx, batch.len());
