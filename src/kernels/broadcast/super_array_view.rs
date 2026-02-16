@@ -80,14 +80,14 @@ mod tests {
 
         // TableView: [[10, 20, 30]] (1 column, 3 rows)
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 3);
 
         let result = broadcast_superarrayview_to_tableview(
@@ -116,14 +116,14 @@ mod tests {
 
         // Create TableView with 5 rows (mismatched)
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30, 40, 50]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 5,
-            name: "test".to_string(),
-        };
+            5,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 5);
 
         let result = broadcast_superarrayview_to_tableview(

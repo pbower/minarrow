@@ -127,15 +127,20 @@ fn arrow_type_to_pyarrow<'py>(
     }
 }
 
-/// Builds an Arrow metadata map containing the table name, if non-empty.
-fn table_name_metadata(name: &str) -> Option<std::collections::BTreeMap<String, String>> {
-    if name.is_empty() {
-        None
-    } else {
-        let mut m = std::collections::BTreeMap::new();
-        m.insert(TABLE_NAME_KEY.to_string(), name.to_string());
-        Some(m)
+/// Builds the Arrow schema metadata map for a stream export.
+///
+/// Always includes the table name when non-empty. When the `table_metadata`
+/// feature is enabled, the table's metadata entries are included too.
+fn build_stream_metadata(table: &Table) -> Option<std::collections::BTreeMap<String, String>> {
+    #[cfg(feature = "table_metadata")]
+    let mut m = table.metadata.clone();
+    #[cfg(not(feature = "table_metadata"))]
+    let mut m = std::collections::BTreeMap::new();
+
+    if !table.name.is_empty() {
+        m.insert(TABLE_NAME_KEY.to_string(), table.name.clone());
     }
+    if m.is_empty() { None } else { Some(m) }
 }
 
 // PyArrow conversion - legacy C data interface
@@ -218,8 +223,24 @@ pub fn table_to_py<'py>(table: &Table, py: Python<'py>) -> PyResult<Bound<'py, P
 
     let py_fields_list = PyList::new(py, &py_fields)?;
 
-    // Build schema, attaching table name as metadata if present
+    // Build schema, attaching table name and metadata if present
     let mut schema = pyarrow.call_method1("schema", (py_fields_list,))?;
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut meta_entries: Vec<(String, String)> = table
+            .metadata
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        if !table.name.is_empty() {
+            meta_entries.push((TABLE_NAME_KEY.to_string(), table.name.clone()));
+        }
+        if !meta_entries.is_empty() {
+            let metadata = meta_entries.into_py_dict(py)?;
+            schema = schema.call_method1("with_metadata", (metadata,))?;
+        }
+    }
+    #[cfg(not(feature = "table_metadata"))]
     if !table.name.is_empty() {
         let metadata = [(TABLE_NAME_KEY, &table.name)].into_py_dict(py)?;
         schema = schema.call_method1("with_metadata", (metadata,))?;
@@ -254,6 +275,22 @@ pub fn super_table_to_py<'py>(
         }
         let py_fields_list = PyList::new(py, &py_fields)?;
         let mut schema = pyarrow.call_method1("schema", (py_fields_list,))?;
+        #[cfg(feature = "table_metadata")]
+        {
+            let mut meta_entries: Vec<(String, String)> = super_table
+                .metadata()
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            if !super_table.name.is_empty() {
+                meta_entries.push((TABLE_NAME_KEY.to_string(), super_table.name.clone()));
+            }
+            if !meta_entries.is_empty() {
+                let metadata = meta_entries.into_py_dict(py)?;
+                schema = schema.call_method1("with_metadata", (metadata,))?;
+            }
+        }
+        #[cfg(not(feature = "table_metadata"))]
         if !super_table.name.is_empty() {
             let metadata = [(TABLE_NAME_KEY, &super_table.name)].into_py_dict(py)?;
             schema = schema.call_method1("with_metadata", (metadata,))?;
@@ -287,7 +324,28 @@ pub fn super_table_to_py<'py>(
             PyMinarrowError::PyArrow(format!("Failed to create PyArrow Table: {}", e))
         })?;
 
-    // Attach table name as schema metadata if present
+    // Attach table name and metadata as schema metadata if present
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut meta_entries: Vec<(String, String)> = super_table
+            .metadata()
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        if !super_table.name.is_empty() {
+            meta_entries.push((TABLE_NAME_KEY.to_string(), super_table.name.clone()));
+        }
+        if !meta_entries.is_empty() {
+            let metadata = meta_entries.into_py_dict(py)?;
+            return py_table
+                .call_method1("replace_schema_metadata", (metadata,))
+                .map_err(|e| {
+                    PyMinarrowError::PyArrow(format!("Failed to set schema metadata: {}", e))
+                        .into()
+                });
+        }
+    }
+    #[cfg(not(feature = "table_metadata"))]
     if !super_table.name.is_empty() {
         let metadata = [(TABLE_NAME_KEY, &super_table.name)]
             .into_py_dict(py)?;
@@ -477,7 +535,7 @@ pub fn table_to_stream_capsule<'py>(table: &Table, py: Python<'py>) -> PyResult<
         })
         .collect();
 
-    let metadata = table_name_metadata(&table.name);
+    let metadata = build_stream_metadata(table);
     let stream = export_record_batch_stream_with_metadata(vec![columns], fields, metadata);
     let stream_ptr = Box::into_raw(stream);
 
@@ -543,7 +601,7 @@ pub fn super_table_to_stream_capsule<'py>(
         })
         .collect();
 
-    let metadata = table_name_metadata(&super_table.name);
+    let metadata = build_stream_metadata(&super_table.batches[0]);
     let stream = export_record_batch_stream_with_metadata(batches, fields, metadata);
     let stream_ptr = Box::into_raw(stream);
 

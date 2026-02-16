@@ -348,6 +348,15 @@ impl SuperTable {
         self.batches.get(idx)
     }
 
+    /// Returns the schema-level metadata from the first batch, or an empty map
+    /// if there are no batches.
+    #[cfg(feature = "table_metadata")]
+    pub fn metadata(&self) -> &std::collections::BTreeMap<String, String> {
+        static EMPTY: std::sync::LazyLock<std::collections::BTreeMap<String, String>> =
+            std::sync::LazyLock::new(std::collections::BTreeMap::new);
+        self.batches.first().map(|b| b.metadata()).unwrap_or(&EMPTY)
+    }
+
     // Return a new BatchedTable over a sub-range of rows.
     #[cfg(feature = "views")]
     pub fn view(&self, offset: usize, len: usize) -> SuperTableV {
@@ -688,11 +697,13 @@ impl SuperTable {
             });
         }
 
-        Table {
-            cols: unified_cols,
-            n_rows: self.n_rows,
-            name: self.name,
+        #[allow(unused_mut)]
+        let mut table = Table::build(unified_cols, self.n_rows, self.name);
+        #[cfg(feature = "table_metadata")]
+        {
+            table.metadata = self.batches[0].metadata.clone();
         }
+        table
     }
 
     /// Arena-based consolidation: writes all column buffers into a single
@@ -874,11 +885,7 @@ mod tests {
         for c in &cols {
             assert_eq!(c.len(), n_rows, "all columns must have same len for Table");
         }
-        Table {
-            cols,
-            n_rows,
-            name: "batch".to_string(),
-        }
+        Table::build(cols, n_rows, "batch".to_string())
     }
 
     #[test]
@@ -1460,6 +1467,8 @@ mod tests {
             ],
             n_rows: 2,
             name: "batch".into(),
+            #[cfg(feature = "table_metadata")]
+            metadata: std::collections::BTreeMap::new(),
         });
         let b2 = Arc::new(Table {
             cols: vec![
@@ -1482,6 +1491,8 @@ mod tests {
             ],
             n_rows: 1,
             name: "batch".into(),
+            #[cfg(feature = "table_metadata")]
+            metadata: std::collections::BTreeMap::new(),
         });
         let st = SuperTable::from_batches(vec![b1, b2], None);
         let result = st.consolidate();

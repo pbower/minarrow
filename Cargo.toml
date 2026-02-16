@@ -195,6 +195,11 @@ size = []
 # Adds Arena, Table::from_arena, and an optimised consolidate path.
 arena = []
 
+# Adds an optional `metadata: BTreeMap<String, String>` field to `Table`.
+# Captures schema-level metadata that Arrow producers like PyArrow embed
+# in the top-level ArrowSchema.metadata, e.g. pandas categorical ordering.
+table_metadata = []
+
 # Adds pandas-style selection for Table and TableV with .c() and .r() methods
 select = []
 
