@@ -6,10 +6,10 @@ use std::sync::Arc;
 use crate::Bitmask;
 #[cfg(feature = "cube")]
 use crate::Cube;
-use crate::enums::error::KernelError;
-use crate::kernels::broadcast::table::broadcast_table_add;
 #[cfg(all(feature = "cube", feature = "scalar_type"))]
 use crate::Scalar;
+use crate::enums::error::KernelError;
+use crate::kernels::broadcast::table::broadcast_table_add;
 
 #[cfg(feature = "cube")]
 use crate::{Array, FieldArray, Table};
