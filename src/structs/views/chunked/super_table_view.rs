@@ -256,11 +256,7 @@ mod tests {
 
     /// One-column `Table` with Int32 data
     fn table(name: &str, vals: &[i32]) -> Table {
-        Table {
-            cols: Vec::from(vec![fa_i32(name, vals)]),
-            n_rows: vals.len(),
-            name: name.to_string(),
-        }
+        Table::build(vec![fa_i32(name, vals)], vals.len(), name.to_string())
     }
     /// Handy lens into the first column of a 1-column table
     fn col_vals(t: &Table) -> Vec<i32> {

@@ -630,14 +630,14 @@ mod tests {
         use crate::ffi::arrow_dtype::ArrowType;
 
         // Table with 3 rows to match each chunk size
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 Array::from_int32(IntegerArray::from_slice(&vec64![2, 3, 4])),
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         let field = Field::new("data".to_string(), ArrowType::Int32, false, None);
         let chunks = vec![
@@ -676,14 +676,14 @@ mod tests {
     fn test_broadcast_table_to_superarrayview() {
         use crate::ffi::arrow_dtype::ArrowType;
 
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3, 4, 5, 6])),
             )],
-            n_rows: 6,
-            name: "test".to_string(),
-        };
+            6,
+            "test".to_string(),
+        );
 
         let arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30, 40, 50, 60]));
         let field = Field::new("data".to_string(), ArrowType::Int32, false, None);

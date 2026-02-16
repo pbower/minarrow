@@ -261,12 +261,7 @@ impl TableV {
             .collect();
 
         let n_rows = self.len;
-
-        Table {
-            cols,
-            n_rows,
-            name: self.name.clone(),
-        }
+        Table::build(cols, n_rows, self.name.clone())
     }
 
     /// Gather specific rows from an ArrayV window
@@ -650,11 +645,7 @@ impl TableV {
             })
             .collect();
 
-        Table {
-            cols,
-            n_rows: indices.len(),
-            name: self.name.clone(),
-        }
+        Table::build(cols, indices.len(), self.name.clone())
     }
 }
 

@@ -546,8 +546,8 @@ mod tests {
 
         let table_arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
         let table_arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![100, 200, 300]));
-        let table = Table {
-            cols: vec![
+        let table = Table::build(
+            vec![
                 FieldArray::new(
                     Field::new("col1".to_string(), ArrowType::Int32, false, None),
                     table_arr1,
@@ -557,9 +557,9 @@ mod tests {
                     table_arr2,
                 ),
             ],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         let result = broadcast_array_to_table(ArithmeticOperator::Add, &arr, &table).unwrap();
 
@@ -587,14 +587,14 @@ mod tests {
         let arr = Array::from_int32(IntegerArray::from_slice(&vec64![2, 3, 4]));
 
         let table_arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 10, 10]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table_arr,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         let result = broadcast_array_to_table(ArithmeticOperator::Multiply, &arr, &table).unwrap();
 
@@ -616,25 +616,25 @@ mod tests {
 
         // Create SuperTableView with 2 slices
         let table1_arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table1_arr,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view1 = TableV::from_table(table1, 0, 3);
 
         let table2_arr = Array::from_int32(IntegerArray::from_slice(&vec64![40, 50, 60]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table2_arr,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view2 = TableV::from_table(table2, 0, 3);
 
         let super_table_view = SuperTableV {
@@ -690,24 +690,24 @@ mod tests {
 
         // Create SuperTable with 2 batches
         let table1_arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table1_arr,
             )],
-            n_rows: 3,
-            name: "batch1".to_string(),
-        };
+            3,
+            "batch1".to_string(),
+        );
 
         let table2_arr = Array::from_int32(IntegerArray::from_slice(&vec64![100, 200, 300]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table2_arr,
             )],
-            n_rows: 3,
-            name: "batch2".to_string(),
-        };
+            3,
+            "batch2".to_string(),
+        );
 
         let super_table = SuperTable::from_batches(
             vec![Arc::new(table1), Arc::new(table2)],
@@ -744,24 +744,24 @@ mod tests {
 
         // Create Cube with 2 tables
         let table1_arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table1_arr,
             )],
-            n_rows: 3,
-            name: "table1".to_string(),
-        };
+            3,
+            "table1".to_string(),
+        );
 
         let table2_arr = Array::from_int32(IntegerArray::from_slice(&vec64![100, 200, 300]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table2_arr,
             )],
-            n_rows: 3,
-            name: "table2".to_string(),
-        };
+            3,
+            "table2".to_string(),
+        );
 
         let cube = Cube {
             tables: vec![table1, table2],
