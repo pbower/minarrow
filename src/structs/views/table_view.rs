@@ -972,7 +972,9 @@ mod tests {
         let fa_a = FieldArray::new(field_a, arr_a);
 
         let field_b = Field::new("b", ArrowType::Int32, false, None);
-        let arr_b = Array::from_int32(IntegerArray::from_slice(&[10, 20, 30, 40, 50, 60, 70, 80, 90, 100]));
+        let arr_b = Array::from_int32(IntegerArray::from_slice(&[
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
+        ]));
         let fa_b = FieldArray::new(field_b, arr_b);
 
         let mut tbl = Table::new_empty();
@@ -988,7 +990,12 @@ mod tests {
         let result = selected.to_table();
         assert_eq!(result.n_rows(), 5);
         for col in &result.cols {
-            assert_eq!(col.array.len(), 5, "Column '{}' should have 5 elements", col.field.name);
+            assert_eq!(
+                col.array.len(),
+                5,
+                "Column '{}' should have 5 elements",
+                col.field.name
+            );
         }
 
         // Select from an already-sliced view

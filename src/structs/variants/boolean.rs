@@ -283,16 +283,12 @@ impl DerefMut for BooleanArray<()> {
     }
 }
 
-/// Single-index returns the logical bit value.
-///
-/// Requires the `unchecked_index` feature. This does not check the null mask,
-/// so null elements return raw buffer values. Use `.get(i)` for null-safe
-/// access or `.get_raw(i)` for explicit raw buffer access.
-#[cfg(feature = "unchecked_index")]
+/// Single‐index -> logical bit
 impl Index<usize> for BooleanArray<()> {
     type Output = bool;
     #[inline]
     fn index(&self, i: usize) -> &bool {
+        // Return a reference to a static `true`/`false`
         if self.data.get(i) { &true } else { &false }
     }
 }
@@ -369,11 +365,6 @@ impl MaskedArray for BooleanArray<()> {
         } else {
             Some(self.data.get(idx))
         }
-    }
-
-    #[inline]
-    fn get_raw(&self, idx: usize) -> bool {
-        self.data.get(idx)
     }
 
     /// Sets the value at `idx`. Marks as valid.
@@ -1427,25 +1418,5 @@ mod tests_parallel {
         assert!(null_mask.get(3));
         assert!(!null_mask.get(4)); // Last entry is null
         assert_eq!(arr1.null_count(), 1);
-    }
-
-    #[test]
-    fn test_get_raw_returns_buffer_value_regardless_of_null() {
-        let mut arr = BooleanArray::from_slice(&[true, false, true]);
-        arr.push_null();
-        assert_eq!(arr.get(3), None);
-        // get_raw bypasses null mask and returns the raw buffer value
-        let raw = arr.get_raw(3);
-        assert_eq!(raw, bool::default());
-    }
-
-    #[cfg(feature = "unchecked_index")]
-    #[test]
-    fn test_index_bypasses_null_mask() {
-        let mut arr = BooleanArray::from_slice(&[true, false, true]);
-        arr.set_null(1);
-        assert_eq!(arr.get(1), None);
-        // Index bypasses the null mask and returns the raw buffer value
-        assert_eq!(arr[1], false);
     }
 }
