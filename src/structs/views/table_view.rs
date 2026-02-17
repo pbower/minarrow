@@ -875,26 +875,12 @@ impl RowSelection for TableV {
 
     fn r<S: DataSelector>(&self, selection: S) -> TableV {
         if selection.is_contiguous() {
-            // Contiguous selection (ranges): adjust offset and len
+            // Contiguous selection (ranges): derive a properly windowed subview
             let indices = selection.resolve_indices(self.len);
             if indices.is_empty() {
-                return TableV {
-                    name: self.name.clone(),
-                    fields: self.fields.clone(),
-                    cols: self.cols.clone(),
-                    offset: self.offset,
-                    len: 0,
-                };
+                return self.from_self(0, 0);
             }
-            let new_offset = self.offset + indices[0];
-            let new_len = indices.len();
-            TableV {
-                name: self.name.clone(),
-                fields: self.fields.clone(),
-                cols: self.cols.clone(),
-                offset: new_offset,
-                len: new_len,
-            }
+            self.from_self(indices[0], indices.len())
         } else {
             // Non-contiguous selection (index arrays): materialise into Table
             let indices = selection.resolve_indices(self.len);
@@ -974,5 +960,75 @@ mod tests {
         assert_eq!(slice.n_cols(), 0);
         assert_eq!(slice.n_rows(), 0);
         assert!(slice.is_empty());
+    }
+
+    #[cfg(feature = "select")]
+    #[test]
+    fn test_tablev_row_selection_to_table_column_lengths() {
+        use crate::{NumericArray, traits::selection::RowSelection};
+
+        let field_a = Field::new("a", ArrowType::Int32, false, None);
+        let arr_a = Array::from_int32(IntegerArray::from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
+        let fa_a = FieldArray::new(field_a, arr_a);
+
+        let field_b = Field::new("b", ArrowType::Int32, false, None);
+        let arr_b = Array::from_int32(IntegerArray::from_slice(&[10, 20, 30, 40, 50, 60, 70, 80, 90, 100]));
+        let fa_b = FieldArray::new(field_b, arr_b);
+
+        let mut tbl = Table::new_empty();
+        tbl.add_col(fa_a);
+        tbl.add_col(fa_b);
+
+        // Create a view of the full table, then select rows via r()
+        let full_view = TableV::from_table(tbl, 0, 10);
+
+        // Select first 5 rows from view
+        let selected = full_view.r(0..5);
+        assert_eq!(selected.len(), 5);
+        let result = selected.to_table();
+        assert_eq!(result.n_rows(), 5);
+        for col in &result.cols {
+            assert_eq!(col.array.len(), 5, "Column '{}' should have 5 elements", col.field.name);
+        }
+
+        // Select from an already-sliced view
+        let partial_view = TableV::from_table(result.clone(), 0, 5);
+        let sub_selected = partial_view.r(1..4);
+        assert_eq!(sub_selected.len(), 3);
+        let sub_result = sub_selected.to_table();
+        assert_eq!(sub_result.n_rows(), 3);
+        for col in &sub_result.cols {
+            assert_eq!(col.array.len(), 3);
+        }
+        // Verify values: column "a" should be [2, 3, 4]
+        match &sub_result.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(a)) => {
+                let vals: Vec<i32> = (0..a.len()).map(|i| *a.get(i).unwrap()).collect();
+                assert_eq!(vals, vec![2, 3, 4]);
+            }
+            _ => panic!("unexpected type"),
+        }
+
+        // Chained selection: view.r().r() should work correctly
+        let chained = full_view.r(2..8).r(1..4);
+        assert_eq!(chained.len(), 3);
+        let chained_result = chained.to_table();
+        assert_eq!(chained_result.n_rows(), 3);
+        for col in &chained_result.cols {
+            assert_eq!(col.array.len(), 3);
+        }
+        // Values: indices 2..8 gives [3,4,5,6,7,8], then 1..4 gives [4,5,6]
+        match &chained_result.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(a)) => {
+                let vals: Vec<i32> = (0..a.len()).map(|i| *a.get(i).unwrap()).collect();
+                assert_eq!(vals, vec![4, 5, 6]);
+            }
+            _ => panic!("unexpected type"),
+        }
+
+        // Empty selection
+        let empty = full_view.r(0..0);
+        assert_eq!(empty.len(), 0);
+        assert_eq!(empty.to_table().n_rows(), 0);
     }
 }
