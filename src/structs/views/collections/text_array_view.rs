@@ -33,7 +33,9 @@ use crate::enums::shape_dim::ShapeDim;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::{Array, ArrayV, BitmaskV, TextArray};
+use std::sync::Arc;
+
+use crate::{Array, ArrayV, BitmaskV, StringArray, TextArray};
 
 /// # TextArrayView
 ///
@@ -244,6 +246,29 @@ impl From<ArrayV> for TextArrayV {
             },
             _ => panic!("From<ArrayView>: expected TextArray variant"),
         }
+    }
+}
+
+impl From<vec64::Vec64<String>> for TextArrayV {
+    fn from(strings: vec64::Vec64<String>) -> Self {
+        let array = TextArray::String64(Arc::new(StringArray::<u64>::from_vec64_owned(
+            strings, None,
+        )));
+        TextArrayV::from(array)
+    }
+}
+
+impl From<Vec<String>> for TextArrayV {
+    fn from(strings: Vec<String>) -> Self {
+        let v64: vec64::Vec64<String> = strings.into();
+        TextArrayV::from(v64)
+    }
+}
+
+impl<'a> From<&'a [&'a str]> for TextArrayV {
+    fn from(strings: &'a [&'a str]) -> Self {
+        let array = TextArray::String64(Arc::new(StringArray::<u64>::from_slice(strings)));
+        TextArrayV::from(array)
     }
 }
 

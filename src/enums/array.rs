@@ -1409,6 +1409,200 @@ impl Array {
         }
     }
 
+    // ───────────── Type Predicates ─────────────
+
+    /// Returns true if this is a categorical array.
+    #[inline]
+    pub fn is_categorical_array(&self) -> bool {
+        match self {
+            Array::TextArray(text) => match text {
+                TextArray::Categorical32(_) => true,
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical8(_) => true,
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical16(_) => true,
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(_) => true,
+                TextArray::String32(_) => false,
+                #[cfg(feature = "large_string")]
+                TextArray::String64(_) => false,
+                TextArray::Null => false,
+            },
+            Array::NumericArray(_) => false,
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(_) => false,
+            Array::BooleanArray(_) => false,
+            Array::Null => false,
+        }
+    }
+
+    /// Returns true if this is a string array i.e. non-categorical text.
+    #[inline]
+    pub fn is_string_array(&self) -> bool {
+        match self {
+            Array::TextArray(text) => match text {
+                TextArray::String32(_) => true,
+                #[cfg(feature = "large_string")]
+                TextArray::String64(_) => true,
+                TextArray::Categorical32(_) => false,
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical8(_) => false,
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical16(_) => false,
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(_) => false,
+                TextArray::Null => false,
+            },
+            Array::NumericArray(_) => false,
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(_) => false,
+            Array::BooleanArray(_) => false,
+            Array::Null => false,
+        }
+    }
+
+    /// Returns true if this is any text array, string or categorical.
+    #[inline]
+    pub fn is_text_array(&self) -> bool {
+        match self {
+            Array::TextArray(text) => match text {
+                TextArray::String32(_) => true,
+                #[cfg(feature = "large_string")]
+                TextArray::String64(_) => true,
+                TextArray::Categorical32(_) => true,
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical8(_) => true,
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical16(_) => true,
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(_) => true,
+                TextArray::Null => false,
+            },
+            Array::NumericArray(_) => false,
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(_) => false,
+            Array::BooleanArray(_) => false,
+            Array::Null => false,
+        }
+    }
+
+    /// Returns true if this is a boolean array.
+    #[inline]
+    pub fn is_boolean_array(&self) -> bool {
+        match self {
+            Array::BooleanArray(_) => true,
+            Array::NumericArray(_) => false,
+            Array::TextArray(_) => false,
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(_) => false,
+            Array::Null => false,
+        }
+    }
+
+    /// Returns true if this is an integer array.
+    #[inline]
+    pub fn is_integer_array(&self) -> bool {
+        match self {
+            Array::NumericArray(num) => match num {
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(_) => true,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(_) => true,
+                NumericArray::Int32(_) => true,
+                NumericArray::Int64(_) => true,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(_) => true,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(_) => true,
+                NumericArray::UInt32(_) => true,
+                NumericArray::UInt64(_) => true,
+                NumericArray::Float32(_) => false,
+                NumericArray::Float64(_) => false,
+                NumericArray::Null => false,
+            },
+            Array::TextArray(_) => false,
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(_) => false,
+            Array::BooleanArray(_) => false,
+            Array::Null => false,
+        }
+    }
+
+    /// Returns true if this is a floating-point array.
+    #[inline]
+    pub fn is_float_array(&self) -> bool {
+        match self {
+            Array::NumericArray(num) => match num {
+                NumericArray::Float32(_) => true,
+                NumericArray::Float64(_) => true,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(_) => false,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(_) => false,
+                NumericArray::Int32(_) => false,
+                NumericArray::Int64(_) => false,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(_) => false,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(_) => false,
+                NumericArray::UInt32(_) => false,
+                NumericArray::UInt64(_) => false,
+                NumericArray::Null => false,
+            },
+            Array::TextArray(_) => false,
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(_) => false,
+            Array::BooleanArray(_) => false,
+            Array::Null => false,
+        }
+    }
+
+    /// Returns true if this is any numeric array, integer or float.
+    #[inline]
+    pub fn is_numerical_array(&self) -> bool {
+        match self {
+            Array::NumericArray(num) => match num {
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(_) => true,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(_) => true,
+                NumericArray::Int32(_) => true,
+                NumericArray::Int64(_) => true,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(_) => true,
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(_) => true,
+                NumericArray::UInt32(_) => true,
+                NumericArray::UInt64(_) => true,
+                NumericArray::Float32(_) => true,
+                NumericArray::Float64(_) => true,
+                NumericArray::Null => false,
+            },
+            Array::TextArray(_) => false,
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(_) => false,
+            Array::BooleanArray(_) => false,
+            Array::Null => false,
+        }
+    }
+
+    /// Returns true if this is a datetime/temporal array.
+    #[inline]
+    #[cfg(feature = "datetime")]
+    pub fn is_datetime_array(&self) -> bool {
+        match self {
+            Array::TemporalArray(temp) => match temp {
+                TemporalArray::Datetime32(_) => true,
+                TemporalArray::Datetime64(_) => true,
+                TemporalArray::Null => false,
+            },
+            Array::NumericArray(_) => false,
+            Array::TextArray(_) => false,
+            Array::BooleanArray(_) => false,
+            Array::Null => false,
+        }
+    }
+
     /// Returns the underlying null mask of the array
     pub fn null_mask(&self) -> Option<&Bitmask> {
         match self {
