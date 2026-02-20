@@ -1397,8 +1397,8 @@ impl Array {
     }
 
     /// Set null mask on Array by matching on variants
-    pub fn set_null_mask(&self, array: &mut Array, mask: Bitmask) {
-        match array {
+    pub fn set_null_mask(&mut self, mask: Bitmask) {
+        match self {
             Array::NumericArray(num_arr) => {
                 match num_arr {
                     NumericArray::Int32(arr) => {

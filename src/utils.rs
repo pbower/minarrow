@@ -394,7 +394,7 @@ pub fn create_aligned_chunks_from_array(
                 let chunk_mask_bits: Vec<bool> =
                     (mask_start..mask_end).map(|i| mask.get(i)).collect();
                 let chunk_mask = Bitmask::from_bools(&chunk_mask_bits);
-                array.set_null_mask(&mut array_chunk, chunk_mask);
+                array_chunk.set_null_mask(chunk_mask);
                 mask_start = mask_end;
             }
 
