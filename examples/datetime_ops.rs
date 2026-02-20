@@ -9,7 +9,7 @@
 #[cfg(feature = "datetime_ops")]
 fn main() {
     use minarrow::ffi::arrow_dtype::ArrowType;
-    use minarrow::{DatetimeArray, FieldArray, MaskedArray, Print, TimeUnit};
+    use minarrow::{DatetimeArray, DatetimeOps, FieldArray, MaskedArray, Print, TimeUnit};
     use time::Duration;
 
     println!("  Minarrow Datetime Operations Example");

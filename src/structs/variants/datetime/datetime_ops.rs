@@ -36,7 +36,7 @@ use num_traits::FromPrimitive;
 impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     /// Convert i64 value to OffsetDateTime based on time unit.
     #[inline(always)]
-    fn i64_to_datetime(val_i64: i64, time_unit: TimeUnit) -> Option<time::OffsetDateTime> {
+    pub(crate) fn i64_to_datetime(val_i64: i64, time_unit: TimeUnit) -> Option<time::OffsetDateTime> {
         use time::OffsetDateTime;
         match time_unit {
             TimeUnit::Seconds => OffsetDateTime::from_unix_timestamp(val_i64).ok(),
@@ -58,7 +58,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
 
     /// Convert OffsetDateTime back to i64 value based on time unit.
     #[inline(always)]
-    fn datetime_to_i64(dt: time::OffsetDateTime, time_unit: TimeUnit) -> i64 {
+    pub(crate) fn datetime_to_i64(dt: time::OffsetDateTime, time_unit: TimeUnit) -> i64 {
         match time_unit {
             TimeUnit::Seconds => dt.unix_timestamp(),
             TimeUnit::Milliseconds => {
@@ -85,20 +85,14 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
         let val_i64 = self.data[i].to_i64()?;
         Self::i64_to_datetime(val_i64, self.time_unit)
     }
+}
 
-    // Arithmetic Operations
+#[cfg(feature = "datetime_ops")]
+use crate::DatetimeOps;
 
-    /// Adds a duration to all datetime values in the array.
-    ///
-    /// # Example
-    /// ```ignore
-    /// use minarrow::{DatetimeArray, TimeUnit};
-    /// use time::Duration;
-    ///
-    /// let arr = DatetimeArray::<i64>::from_slice(&[1000, 2000], Some(TimeUnit::Milliseconds));
-    /// let result = arr.add_duration(Duration::seconds(5)).unwrap();
-    /// ```
-    pub fn add_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
+#[cfg(feature = "datetime_ops")]
+impl<T: Integer + FromPrimitive> DatetimeOps for DatetimeArray<T> {
+    fn add_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
         let mut result = self.clone();
         let len = result.len();
         let data = &self.data[..];
@@ -157,12 +151,12 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Subtracts a duration from all datetime values in the array.
-    pub fn sub_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
+    fn sub_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
         self.add_duration(-duration)
     }
 
     /// Adds a number of days to all datetime values.
-    pub fn add_days(&self, days: i64) -> Result<Self, MinarrowError> {
+    fn add_days(&self, days: i64) -> Result<Self, MinarrowError> {
         self.add_duration(Duration::days(days))
     }
 
@@ -171,7 +165,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     /// Variable month length handling - if the day would be invalid in the target month
     /// (e.g., Jan 31 + 1 month), the day is clamped to the last valid day (Feb 28/29).
     /// Time-of-day is preserved.
-    pub fn add_months(&self, months: i32) -> Result<Self, MinarrowError> {
+    fn add_months(&self, months: i32) -> Result<Self, MinarrowError> {
         let mut result = self.clone();
         let len = result.len();
         let data = &self.data[..];
@@ -226,7 +220,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Adds a number of years to all datetime values.
-    pub fn add_years(&self, years: i32) -> Result<Self, MinarrowError> {
+    fn add_years(&self, years: i32) -> Result<Self, MinarrowError> {
         self.add_months(years * 12)
     }
 
@@ -238,7 +232,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     /// # Arguments
     /// * `other` - The datetime array to subtract from self
     /// * `unit` - The TimeUnit for the result (Seconds, Milliseconds, Microseconds, Nanoseconds)
-    pub fn diff(&self, other: &Self, unit: TimeUnit) -> Result<IntegerArray<i64>, MinarrowError> {
+    fn diff(&self, other: &Self, unit: TimeUnit) -> Result<IntegerArray<i64>, MinarrowError> {
         if self.len() != other.len() {
             return Err(MinarrowError::TypeError {
                 from: "DatetimeArray",
@@ -283,7 +277,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Calculate the absolute duration between elements (always positive).
-    pub fn abs_diff(
+    fn abs_diff(
         &self,
         other: &Self,
         unit: TimeUnit,
@@ -306,7 +300,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
 
     /// Compares this array with another, returning a boolean array indicating
     /// where values in `self` are before values in `other`.
-    pub fn is_before(&self, other: &Self) -> Result<BooleanArray<()>, MinarrowError> {
+    fn is_before(&self, other: &Self) -> Result<BooleanArray<()>, MinarrowError> {
         if self.len() != other.len() {
             return Err(MinarrowError::TypeError {
                 from: "DatetimeArray",
@@ -340,7 +334,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Returns a boolean array indicating where values are after `other`.
-    pub fn is_after(&self, other: &Self) -> Result<BooleanArray<()>, MinarrowError> {
+    fn is_after(&self, other: &Self) -> Result<BooleanArray<()>, MinarrowError> {
         if self.len() != other.len() {
             return Err(MinarrowError::TypeError {
                 from: "DatetimeArray",
@@ -374,7 +368,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Returns a boolean array indicating where values fall within the range [start, end].
-    pub fn between(&self, start: &Self, end: &Self) -> Result<BooleanArray<()>, MinarrowError> {
+    fn between(&self, start: &Self, end: &Self) -> Result<BooleanArray<()>, MinarrowError> {
         if self.len() != start.len() || self.len() != end.len() {
             return Err(MinarrowError::TypeError {
                 from: "DatetimeArray",
@@ -407,7 +401,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     // Component Extraction Operations
 
     /// Extracts the year component from all datetime values.
-    pub fn year(&self) -> IntegerArray<i32> {
+    fn year(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -424,7 +418,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the month component (1-12) from all datetime values.
-    pub fn month(&self) -> IntegerArray<i32> {
+    fn month(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -441,7 +435,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the day of month (1-31) from all datetime values.
-    pub fn day(&self) -> IntegerArray<i32> {
+    fn day(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -458,7 +452,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the hour component (0-23) from all datetime values.
-    pub fn hour(&self) -> IntegerArray<i32> {
+    fn hour(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -475,7 +469,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the minute component (0-59) from all datetime values.
-    pub fn minute(&self) -> IntegerArray<i32> {
+    fn minute(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -492,7 +486,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the second component (0-59) from all datetime values.
-    pub fn second(&self) -> IntegerArray<i32> {
+    fn second(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -509,7 +503,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the weekday (1=Sunday, 2=Monday, ..., 7=Saturday) from all datetime values.
-    pub fn weekday(&self) -> IntegerArray<i32> {
+    fn weekday(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -526,7 +520,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the day of year (1-366) from all datetime values.
-    pub fn day_of_year(&self) -> IntegerArray<i32> {
+    fn day_of_year(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -543,7 +537,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the ISO week number (1-53) from all datetime values.
-    pub fn iso_week(&self) -> IntegerArray<i32> {
+    fn iso_week(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -560,7 +554,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Extracts the quarter (1-4) from all datetime values.
-    pub fn quarter(&self) -> IntegerArray<i32> {
+    fn quarter(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -580,7 +574,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
 
     /// Extracts the week of year (0-53) from all datetime values.
     /// Week 0 contains days before the first Sunday.
-    pub fn week_of_year(&self) -> IntegerArray<i32> {
+    fn week_of_year(&self) -> IntegerArray<i32> {
         let mut result = IntegerArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -601,7 +595,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Returns boolean array indicating whether each datetime's year is a leap year.
-    pub fn is_leap_year(&self) -> BooleanArray<()> {
+    fn is_leap_year(&self) -> BooleanArray<()> {
         let mut result = BooleanArray::with_capacity(self.len(), self.is_nullable());
 
         for i in 0..self.len() {
@@ -625,7 +619,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     ///
     /// # Arguments
     /// * `unit` - The unit to truncate to (Day, Hour, Minute, Second)
-    pub fn truncate(&self, unit: &str) -> Result<Self, MinarrowError> {
+    fn truncate(&self, unit: &str) -> Result<Self, MinarrowError> {
         let mut result = self.clone();
         let len = result.len();
         let time_unit = self.time_unit; // Hoist time_unit outside loop
@@ -693,7 +687,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     /// Truncate to microsecond boundaries.
     ///
     /// Only meaningful for nanosecond precision arrays.
-    pub fn us(&self) -> Self {
+    fn us(&self) -> Self {
         let mut result = self.clone();
 
         // Only meaningful for nanosecond precision
@@ -722,7 +716,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     /// Truncate to millisecond boundaries.
     ///
     /// Meaningful for nanosecond and microsecond precision arrays.
-    pub fn ms(&self) -> Self {
+    fn ms(&self) -> Self {
         let mut result = self.clone();
         let len = result.len();
         let data = &self.data[..];
@@ -765,22 +759,22 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     }
 
     /// Truncate to second boundaries.
-    pub fn sec(&self) -> Self {
+    fn sec(&self) -> Self {
         self.truncate("second").unwrap_or_else(|_| self.clone())
     }
 
     /// Truncate to minute boundaries.
-    pub fn min(&self) -> Self {
+    fn min(&self) -> Self {
         self.truncate("minute").unwrap_or_else(|_| self.clone())
     }
 
     /// Truncate to hour boundaries.
-    pub fn hr(&self) -> Self {
+    fn hr(&self) -> Self {
         self.truncate("hour").unwrap_or_else(|_| self.clone())
     }
 
     /// Truncate to week boundaries (Sunday 00:00:00).
-    pub fn week(&self) -> Self {
+    fn week(&self) -> Self {
         let mut result = self.clone();
         let len = result.len();
         let time_unit = self.time_unit; // Hoist time_unit outside loop
@@ -822,7 +816,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     /// Cast this DatetimeArray to a different TimeUnit.
     ///
     /// This converts the internal representation while preserving the logical datetime values.
-    pub fn cast_time_unit(&self, new_unit: TimeUnit) -> Result<Self, MinarrowError> {
+    fn cast_time_unit(&self, new_unit: TimeUnit) -> Result<Self, MinarrowError> {
         let mut result =
             Self::with_capacity(self.len(), self.is_nullable(), Some(new_unit.clone()));
 
@@ -862,6 +856,7 @@ impl<T: Integer + FromPrimitive> DatetimeArray<T> {
 #[cfg(all(test, feature = "datetime_ops"))]
 mod tests {
     use super::*;
+    use crate::DatetimeOps;
     use time::Duration;
     use vec64::vec64;
 

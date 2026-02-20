@@ -251,6 +251,43 @@ impl Array {
     // Each accessor provides zero-copy for the already native type(s), conversion paths
     // for non-native (e.g., *bool -> integer* ), whilst propagating nulls for rarer nonsensical casts.
 
+    /// Returns a reference to the inner `NumericArray` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn num_ref(&self) -> Option<&NumericArray> {
+        match self {
+            Array::NumericArray(arr) => Some(arr),
+            _ => None,
+        }
+    }
+
+    /// Returns a reference to the inner `TextArray` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn str_ref(&self) -> Option<&TextArray> {
+        match self {
+            Array::TextArray(arr) => Some(arr),
+            _ => None,
+        }
+    }
+
+    /// Returns a reference to the inner `BooleanArray` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn bool_ref(&self) -> Option<&BooleanArray<()>> {
+        match self {
+            Array::BooleanArray(arr) => Some(arr.as_ref()),
+            _ => None,
+        }
+    }
+
+    /// Returns a reference to the inner `TemporalArray` if the variant matches.
+    /// No conversion or cloning is performed.
+    #[cfg(feature = "datetime")]
+    pub fn dt_ref(&self) -> Option<&TemporalArray> {
+        match self {
+            Array::TemporalArray(arr) => Some(arr),
+            _ => None,
+        }
+    }
+
     /// Returns an inner `NumericArray`, consuming self.
     /// - If already a `NumericArray`, consumes and returns the inner value with no clone.
     /// - Other types: casts and copies.
