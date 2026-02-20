@@ -259,6 +259,94 @@ impl TextArray {
         }
     }
 
+    /// Returns a reference to the inner `StringArray<u32>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn str32_ref(&self) -> Result<&StringArray<u32>, MinarrowError> {
+        match self {
+            TextArray::String32(arr) => Ok(arr),
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "TextArray",
+                to: "StringArray<u32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `StringArray<u64>` if the variant matches.
+    /// No conversion or cloning is performed.
+    #[cfg(feature = "large_string")]
+    pub fn str64_ref(&self) -> Result<&StringArray<u64>, MinarrowError> {
+        match self {
+            TextArray::String64(arr) => Ok(arr),
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "TextArray",
+                to: "StringArray<u64>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `CategoricalArray<u32>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn cat32_ref(&self) -> Result<&CategoricalArray<u32>, MinarrowError> {
+        match self {
+            TextArray::Categorical32(arr) => Ok(arr),
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "TextArray",
+                to: "CategoricalArray<u32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `CategoricalArray<u64>` if the variant matches.
+    /// No conversion or cloning is performed.
+    #[cfg(feature = "extended_categorical")]
+    pub fn cat64_ref(&self) -> Result<&CategoricalArray<u64>, MinarrowError> {
+        match self {
+            TextArray::Categorical64(arr) => Ok(arr),
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "TextArray",
+                to: "CategoricalArray<u64>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `CategoricalArray<u8>` if the variant matches.
+    /// No conversion or cloning is performed.
+    #[cfg(feature = "extended_categorical")]
+    pub fn cat8_ref(&self) -> Result<&CategoricalArray<u8>, MinarrowError> {
+        match self {
+            TextArray::Categorical8(arr) => Ok(arr),
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "TextArray",
+                to: "CategoricalArray<u8>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `CategoricalArray<u16>` if the variant matches.
+    /// No conversion or cloning is performed.
+    #[cfg(feature = "extended_categorical")]
+    pub fn cat16_ref(&self) -> Result<&CategoricalArray<u16>, MinarrowError> {
+        match self {
+            TextArray::Categorical16(arr) => Ok(arr),
+            TextArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "TextArray",
+                to: "CategoricalArray<u16>",
+                message: None,
+            }),
+        }
+    }
+
     /// Casts to StringArray<u32>
     ///
     /// - Converts via TryFrom,

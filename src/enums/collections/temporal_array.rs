@@ -180,6 +180,34 @@ impl TemporalArray {
         }
     }
 
+    /// Returns a reference to the inner `DatetimeArray<i32>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn dt32_ref(&self) -> Result<&DatetimeArray<i32>, MinarrowError> {
+        match self {
+            TemporalArray::Datetime32(arr) => Ok(arr),
+            TemporalArray::Datetime64(_) => Err(MinarrowError::TypeError {
+                from: "Datetime64",
+                to: "DatetimeArray<i32>",
+                message: None,
+            }),
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }
+
+    /// Returns a reference to the inner `DatetimeArray<i64>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn dt64_ref(&self) -> Result<&DatetimeArray<i64>, MinarrowError> {
+        match self {
+            TemporalArray::Datetime64(arr) => Ok(arr),
+            TemporalArray::Datetime32(_) => Err(MinarrowError::TypeError {
+                from: "Datetime32",
+                to: "DatetimeArray<i64>",
+                message: None,
+            }),
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }
+
     /// Returns an Arc<DatetimeArray<i32>> (casting if needed).
     pub fn dt32(self) -> Result<DatetimeArray<i32>, MinarrowError> {
         match self {
@@ -234,6 +262,342 @@ impl Concatenate for TemporalArray {
                     temporal_variant_name(&rhs)
                 )),
             }),
+        }
+    }
+}
+
+#[cfg(feature = "datetime_ops")]
+use crate::DatetimeOps;
+
+#[cfg(feature = "datetime_ops")]
+use crate::enums::time_units::TimeUnit;
+
+#[cfg(feature = "datetime_ops")]
+use time::Duration;
+
+#[cfg(feature = "datetime_ops")]
+use crate::structs::variants::{boolean::BooleanArray, integer::IntegerArray};
+
+#[cfg(feature = "datetime_ops")]
+impl DatetimeOps for TemporalArray {
+    // Component Extraction - delegate to inner variant, return directly
+
+    fn year(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.year(),
+            TemporalArray::Datetime64(arr) => arr.year(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn month(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.month(),
+            TemporalArray::Datetime64(arr) => arr.month(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn day(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.day(),
+            TemporalArray::Datetime64(arr) => arr.day(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn hour(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.hour(),
+            TemporalArray::Datetime64(arr) => arr.hour(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn minute(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.minute(),
+            TemporalArray::Datetime64(arr) => arr.minute(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn second(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.second(),
+            TemporalArray::Datetime64(arr) => arr.second(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn weekday(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.weekday(),
+            TemporalArray::Datetime64(arr) => arr.weekday(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn day_of_year(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.day_of_year(),
+            TemporalArray::Datetime64(arr) => arr.day_of_year(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn iso_week(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.iso_week(),
+            TemporalArray::Datetime64(arr) => arr.iso_week(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn quarter(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.quarter(),
+            TemporalArray::Datetime64(arr) => arr.quarter(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn week_of_year(&self) -> IntegerArray<i32> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.week_of_year(),
+            TemporalArray::Datetime64(arr) => arr.week_of_year(),
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }
+
+    fn is_leap_year(&self) -> BooleanArray<()> {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.is_leap_year(),
+            TemporalArray::Datetime64(arr) => arr.is_leap_year(),
+            TemporalArray::Null => BooleanArray::default(),
+        }
+    }
+
+    // Arithmetic - delegate, wrap result back into enum variant
+
+    fn add_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
+        match self {
+            TemporalArray::Datetime32(arr) => {
+                Ok(TemporalArray::Datetime32(Arc::new(arr.add_duration(duration)?)))
+            }
+            TemporalArray::Datetime64(arr) => {
+                Ok(TemporalArray::Datetime64(Arc::new(arr.add_duration(duration)?)))
+            }
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }
+
+    fn sub_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
+        match self {
+            TemporalArray::Datetime32(arr) => {
+                Ok(TemporalArray::Datetime32(Arc::new(arr.sub_duration(duration)?)))
+            }
+            TemporalArray::Datetime64(arr) => {
+                Ok(TemporalArray::Datetime64(Arc::new(arr.sub_duration(duration)?)))
+            }
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }
+
+    fn add_days(&self, days: i64) -> Result<Self, MinarrowError> {
+        match self {
+            TemporalArray::Datetime32(arr) => {
+                Ok(TemporalArray::Datetime32(Arc::new(arr.add_days(days)?)))
+            }
+            TemporalArray::Datetime64(arr) => {
+                Ok(TemporalArray::Datetime64(Arc::new(arr.add_days(days)?)))
+            }
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }
+
+    fn add_months(&self, months: i32) -> Result<Self, MinarrowError> {
+        match self {
+            TemporalArray::Datetime32(arr) => {
+                Ok(TemporalArray::Datetime32(Arc::new(arr.add_months(months)?)))
+            }
+            TemporalArray::Datetime64(arr) => {
+                Ok(TemporalArray::Datetime64(Arc::new(arr.add_months(months)?)))
+            }
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }
+
+    fn add_years(&self, years: i32) -> Result<Self, MinarrowError> {
+        match self {
+            TemporalArray::Datetime32(arr) => {
+                Ok(TemporalArray::Datetime32(Arc::new(arr.add_years(years)?)))
+            }
+            TemporalArray::Datetime64(arr) => {
+                Ok(TemporalArray::Datetime64(Arc::new(arr.add_years(years)?)))
+            }
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }
+
+    // Comparison - match on (self, other) tuple, verify same variant
+
+    fn diff(&self, other: &Self, unit: TimeUnit) -> Result<IntegerArray<i64>, MinarrowError> {
+        match (self, other) {
+            (TemporalArray::Datetime32(a), TemporalArray::Datetime32(b)) => a.diff(b, unit),
+            (TemporalArray::Datetime64(a), TemporalArray::Datetime64(b)) => a.diff(b, unit),
+            (TemporalArray::Null, _) | (_, TemporalArray::Null) => {
+                Err(MinarrowError::NullError { message: None })
+            }
+            _ => Err(MinarrowError::TypeError {
+                from: "TemporalArray",
+                to: "TemporalArray",
+                message: Some("Mismatched temporal variants".to_string()),
+            }),
+        }
+    }
+
+    fn abs_diff(
+        &self,
+        other: &Self,
+        unit: TimeUnit,
+    ) -> Result<IntegerArray<i64>, MinarrowError> {
+        match (self, other) {
+            (TemporalArray::Datetime32(a), TemporalArray::Datetime32(b)) => a.abs_diff(b, unit),
+            (TemporalArray::Datetime64(a), TemporalArray::Datetime64(b)) => a.abs_diff(b, unit),
+            (TemporalArray::Null, _) | (_, TemporalArray::Null) => {
+                Err(MinarrowError::NullError { message: None })
+            }
+            _ => Err(MinarrowError::TypeError {
+                from: "TemporalArray",
+                to: "TemporalArray",
+                message: Some("Mismatched temporal variants".to_string()),
+            }),
+        }
+    }
+
+    fn is_before(&self, other: &Self) -> Result<BooleanArray<()>, MinarrowError> {
+        match (self, other) {
+            (TemporalArray::Datetime32(a), TemporalArray::Datetime32(b)) => a.is_before(b),
+            (TemporalArray::Datetime64(a), TemporalArray::Datetime64(b)) => a.is_before(b),
+            (TemporalArray::Null, _) | (_, TemporalArray::Null) => {
+                Err(MinarrowError::NullError { message: None })
+            }
+            _ => Err(MinarrowError::TypeError {
+                from: "TemporalArray",
+                to: "TemporalArray",
+                message: Some("Mismatched temporal variants".to_string()),
+            }),
+        }
+    }
+
+    fn is_after(&self, other: &Self) -> Result<BooleanArray<()>, MinarrowError> {
+        match (self, other) {
+            (TemporalArray::Datetime32(a), TemporalArray::Datetime32(b)) => a.is_after(b),
+            (TemporalArray::Datetime64(a), TemporalArray::Datetime64(b)) => a.is_after(b),
+            (TemporalArray::Null, _) | (_, TemporalArray::Null) => {
+                Err(MinarrowError::NullError { message: None })
+            }
+            _ => Err(MinarrowError::TypeError {
+                from: "TemporalArray",
+                to: "TemporalArray",
+                message: Some("Mismatched temporal variants".to_string()),
+            }),
+        }
+    }
+
+    fn between(&self, start: &Self, end: &Self) -> Result<BooleanArray<()>, MinarrowError> {
+        match (self, start, end) {
+            (TemporalArray::Datetime32(a), TemporalArray::Datetime32(s), TemporalArray::Datetime32(e)) => {
+                a.between(s, e)
+            }
+            (TemporalArray::Datetime64(a), TemporalArray::Datetime64(s), TemporalArray::Datetime64(e)) => {
+                a.between(s, e)
+            }
+            (TemporalArray::Null, _, _) | (_, TemporalArray::Null, _) | (_, _, TemporalArray::Null) => {
+                Err(MinarrowError::NullError { message: None })
+            }
+            _ => Err(MinarrowError::TypeError {
+                from: "TemporalArray",
+                to: "TemporalArray",
+                message: Some("Mismatched temporal variants".to_string()),
+            }),
+        }
+    }
+
+    // Truncation - delegate, wrap result back into enum variant
+
+    fn truncate(&self, unit: &str) -> Result<Self, MinarrowError> {
+        match self {
+            TemporalArray::Datetime32(arr) => {
+                Ok(TemporalArray::Datetime32(Arc::new(arr.truncate(unit)?)))
+            }
+            TemporalArray::Datetime64(arr) => {
+                Ok(TemporalArray::Datetime64(Arc::new(arr.truncate(unit)?)))
+            }
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }
+
+    fn us(&self) -> Self {
+        match self {
+            TemporalArray::Datetime32(arr) => TemporalArray::Datetime32(Arc::new(arr.us())),
+            TemporalArray::Datetime64(arr) => TemporalArray::Datetime64(Arc::new(arr.us())),
+            TemporalArray::Null => TemporalArray::Null,
+        }
+    }
+
+    fn ms(&self) -> Self {
+        match self {
+            TemporalArray::Datetime32(arr) => TemporalArray::Datetime32(Arc::new(arr.ms())),
+            TemporalArray::Datetime64(arr) => TemporalArray::Datetime64(Arc::new(arr.ms())),
+            TemporalArray::Null => TemporalArray::Null,
+        }
+    }
+
+    fn sec(&self) -> Self {
+        match self {
+            TemporalArray::Datetime32(arr) => TemporalArray::Datetime32(Arc::new(arr.sec())),
+            TemporalArray::Datetime64(arr) => TemporalArray::Datetime64(Arc::new(arr.sec())),
+            TemporalArray::Null => TemporalArray::Null,
+        }
+    }
+
+    fn min(&self) -> Self {
+        match self {
+            TemporalArray::Datetime32(arr) => TemporalArray::Datetime32(Arc::new(arr.min())),
+            TemporalArray::Datetime64(arr) => TemporalArray::Datetime64(Arc::new(arr.min())),
+            TemporalArray::Null => TemporalArray::Null,
+        }
+    }
+
+    fn hr(&self) -> Self {
+        match self {
+            TemporalArray::Datetime32(arr) => TemporalArray::Datetime32(Arc::new(arr.hr())),
+            TemporalArray::Datetime64(arr) => TemporalArray::Datetime64(Arc::new(arr.hr())),
+            TemporalArray::Null => TemporalArray::Null,
+        }
+    }
+
+    fn week(&self) -> Self {
+        match self {
+            TemporalArray::Datetime32(arr) => TemporalArray::Datetime32(Arc::new(arr.week())),
+            TemporalArray::Datetime64(arr) => TemporalArray::Datetime64(Arc::new(arr.week())),
+            TemporalArray::Null => TemporalArray::Null,
+        }
+    }
+
+    // Type Casting
+
+    fn cast_time_unit(&self, new_unit: TimeUnit) -> Result<Self, MinarrowError> {
+        match self {
+            TemporalArray::Datetime32(arr) => {
+                Ok(TemporalArray::Datetime32(Arc::new(arr.cast_time_unit(new_unit)?)))
+            }
+            TemporalArray::Datetime64(arr) => {
+                Ok(TemporalArray::Datetime64(Arc::new(arr.cast_time_unit(new_unit)?)))
+            }
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 }

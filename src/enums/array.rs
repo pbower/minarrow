@@ -251,6 +251,63 @@ impl Array {
     // Each accessor provides zero-copy for the already native type(s), conversion paths
     // for non-native (e.g., *bool -> integer* ), whilst propagating nulls for rarer nonsensical casts.
 
+    /// Returns a reference to the inner `NumericArray` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn num_ref(&self) -> Result<&NumericArray, MinarrowError> {
+        match self {
+            Array::NumericArray(arr) => Ok(arr),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "NumericArray",
+                message: Some("variant is not NumericArray, use num() to convert".to_string()),
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `TextArray` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn str_ref(&self) -> Result<&TextArray, MinarrowError> {
+        match self {
+            Array::TextArray(arr) => Ok(arr),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "TextArray",
+                message: Some("variant is not TextArray, use str() to convert".to_string()),
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `BooleanArray` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn bool_ref(&self) -> Result<&BooleanArray<()>, MinarrowError> {
+        match self {
+            Array::BooleanArray(arr) => Ok(arr.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "BooleanArray",
+                message: Some("variant is not BooleanArray, use bool() to convert".to_string()),
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `TemporalArray` if the variant matches.
+    /// No conversion or cloning is performed.
+    #[cfg(feature = "datetime")]
+    pub fn dt_ref(&self) -> Result<&TemporalArray, MinarrowError> {
+        match self {
+            Array::TemporalArray(arr) => Ok(arr),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "TemporalArray",
+                message: Some("variant is not TemporalArray, use dt() to convert".to_string()),
+            }),
+        }
+    }
+
     /// Returns an inner `NumericArray`, consuming self.
     /// - If already a `NumericArray`, consumes and returns the inner value with no clone.
     /// - Other types: casts and copies.

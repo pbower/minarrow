@@ -192,6 +192,8 @@ pub mod traits {
     pub mod type_unions;
     #[cfg(feature = "views")]
     pub mod view;
+    #[cfg(feature = "datetime_ops")]
+    pub mod datetime_ops;
 }
 
 pub mod aliases;
@@ -268,3 +270,5 @@ pub use traits::print::Print;
 #[cfg(feature = "select")]
 pub use traits::selection::{ColumnSelection, RowSelection, Selection2D};
 pub use traits::type_unions::{Float, Integer, Numeric, Primitive};
+#[cfg(feature = "datetime_ops")]
+pub use traits::datetime_ops::DatetimeOps;
