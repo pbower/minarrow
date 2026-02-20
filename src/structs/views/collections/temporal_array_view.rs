@@ -375,6 +375,305 @@ impl Display for TemporalArrayV {
     }
 }
 
+#[cfg(feature = "datetime_ops")]
+use crate::DatetimeOps;
+
+#[cfg(feature = "datetime_ops")]
+use crate::enums::time_units::TimeUnit;
+
+#[cfg(feature = "datetime_ops")]
+use time::Duration;
+
+#[cfg(feature = "datetime_ops")]
+use crate::structs::variants::{boolean::BooleanArray, integer::IntegerArray};
+
+#[cfg(feature = "datetime_ops")]
+use crate::DatetimeArray;
+
+#[cfg(feature = "datetime_ops")]
+use num_traits::{FromPrimitive, ToPrimitive};
+
+#[cfg(feature = "datetime_ops")]
+use std::sync::Arc;
+
+/// Macro to dispatch a windowed component extraction over both temporal variants.
+///
+/// Iterates `self.offset .. self.offset + self.len` on the inner `DatetimeArray`,
+/// pushing the extracted component into a fresh `IntegerArray<i32>`.
+#[cfg(feature = "datetime_ops")]
+macro_rules! windowed_component {
+    ($self:expr, $extract:expr) => {{
+        let offset = $self.offset;
+        let len = $self.len();
+        match &$self.array {
+            TemporalArray::Datetime32(arr) => {
+                windowed_component_inner!(arr, offset, len, $extract)
+            }
+            TemporalArray::Datetime64(arr) => {
+                windowed_component_inner!(arr, offset, len, $extract)
+            }
+            TemporalArray::Null => IntegerArray::default(),
+        }
+    }};
+}
+
+#[cfg(feature = "datetime_ops")]
+macro_rules! windowed_component_inner {
+    ($arr:expr, $offset:expr, $len:expr, $extract:expr) => {{
+        let mut result = IntegerArray::with_capacity($len, $arr.is_nullable());
+        for i in $offset..$offset + $len {
+            if $arr.is_null(i) {
+                result.push_null();
+            } else if let Some(val_i64) = $arr.data[i].to_i64() {
+                if let Some(dt) = DatetimeArray::<i64>::i64_to_datetime(val_i64, $arr.time_unit) {
+                    #[allow(clippy::redundant_closure_call)]
+                    result.push(($extract)(&dt));
+                } else {
+                    result.push_null();
+                }
+            } else {
+                result.push_null();
+            }
+        }
+        result
+    }};
+}
+
+/// Macro to dispatch a windowed Self-returning operation over both temporal variants.
+#[cfg(feature = "datetime_ops")]
+macro_rules! windowed_self_op {
+    ($self:expr, $method:ident $(, $arg:expr)*) => {{
+        let offset = $self.offset;
+        let len = $self.len();
+        match &$self.array {
+            TemporalArray::Datetime32(arr) => {
+                let sliced = arr.slice_clone(offset, len);
+                let result = sliced.$method($($arg),*)?;
+                Ok(TemporalArrayV::from(TemporalArray::Datetime32(Arc::new(result))))
+            }
+            TemporalArray::Datetime64(arr) => {
+                let sliced = arr.slice_clone(offset, len);
+                let result = sliced.$method($($arg),*)?;
+                Ok(TemporalArrayV::from(TemporalArray::Datetime64(Arc::new(result))))
+            }
+            TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }};
+}
+
+/// Macro for infallible Self-returning operations.
+#[cfg(feature = "datetime_ops")]
+macro_rules! windowed_self_op_infallible {
+    ($self:expr, $method:ident $(, $arg:expr)*) => {{
+        let offset = $self.offset;
+        let len = $self.len();
+        match &$self.array {
+            TemporalArray::Datetime32(arr) => {
+                let sliced = arr.slice_clone(offset, len);
+                let result = sliced.$method($($arg),*);
+                TemporalArrayV::from(TemporalArray::Datetime32(Arc::new(result)))
+            }
+            TemporalArray::Datetime64(arr) => {
+                let sliced = arr.slice_clone(offset, len);
+                let result = sliced.$method($($arg),*);
+                TemporalArrayV::from(TemporalArray::Datetime64(Arc::new(result)))
+            }
+            TemporalArray::Null => TemporalArrayV::from(TemporalArray::Null),
+        }
+    }};
+}
+
+#[cfg(feature = "datetime_ops")]
+impl DatetimeOps for TemporalArrayV {
+    // Component Extraction - iterate only the windowed range
+
+    fn year(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| dt.year())
+    }
+
+    fn month(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| dt.month() as i32)
+    }
+
+    fn day(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| dt.day() as i32)
+    }
+
+    fn hour(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| dt.hour() as i32)
+    }
+
+    fn minute(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| dt.minute() as i32)
+    }
+
+    fn second(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| dt.second() as i32)
+    }
+
+    fn weekday(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| dt
+            .weekday()
+            .number_from_sunday() as i32)
+    }
+
+    fn day_of_year(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| dt.ordinal() as i32)
+    }
+
+    fn iso_week(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| dt.iso_week() as i32)
+    }
+
+    fn quarter(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| {
+            let month = dt.month() as i32;
+            ((month - 1) / 3) + 1
+        })
+    }
+
+    fn week_of_year(&self) -> IntegerArray<i32> {
+        windowed_component!(self, |dt: &time::OffsetDateTime| {
+            let day_of_year = dt.ordinal() as i32;
+            let weekday = dt.weekday().number_from_sunday() as i32;
+            (day_of_year + 7 - weekday) / 7
+        })
+    }
+
+    fn is_leap_year(&self) -> BooleanArray<()> {
+        let offset = self.offset;
+        let len = self.len();
+        match &self.array {
+            TemporalArray::Datetime32(arr) => {
+                is_leap_year_windowed(arr, offset, len)
+            }
+            TemporalArray::Datetime64(arr) => {
+                is_leap_year_windowed(arr, offset, len)
+            }
+            TemporalArray::Null => BooleanArray::default(),
+        }
+    }
+
+    // Arithmetic - slice the windowed range, delegate, wrap result as view
+
+    fn add_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
+        windowed_self_op!(self, add_duration, duration)
+    }
+
+    fn sub_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
+        windowed_self_op!(self, sub_duration, duration)
+    }
+
+    fn add_days(&self, days: i64) -> Result<Self, MinarrowError> {
+        windowed_self_op!(self, add_days, days)
+    }
+
+    fn add_months(&self, months: i32) -> Result<Self, MinarrowError> {
+        windowed_self_op!(self, add_months, months)
+    }
+
+    fn add_years(&self, years: i32) -> Result<Self, MinarrowError> {
+        windowed_self_op!(self, add_years, years)
+    }
+
+    // Comparison - slice both operands, delegate
+
+    fn diff(&self, other: &Self, unit: TimeUnit) -> Result<IntegerArray<i64>, MinarrowError> {
+        let self_arr = self.to_temporal_array();
+        let other_arr = other.to_temporal_array();
+        self_arr.diff(&other_arr, unit)
+    }
+
+    fn abs_diff(
+        &self,
+        other: &Self,
+        unit: TimeUnit,
+    ) -> Result<IntegerArray<i64>, MinarrowError> {
+        let self_arr = self.to_temporal_array();
+        let other_arr = other.to_temporal_array();
+        self_arr.abs_diff(&other_arr, unit)
+    }
+
+    fn is_before(&self, other: &Self) -> Result<BooleanArray<()>, MinarrowError> {
+        let self_arr = self.to_temporal_array();
+        let other_arr = other.to_temporal_array();
+        self_arr.is_before(&other_arr)
+    }
+
+    fn is_after(&self, other: &Self) -> Result<BooleanArray<()>, MinarrowError> {
+        let self_arr = self.to_temporal_array();
+        let other_arr = other.to_temporal_array();
+        self_arr.is_after(&other_arr)
+    }
+
+    fn between(&self, start: &Self, end: &Self) -> Result<BooleanArray<()>, MinarrowError> {
+        let self_arr = self.to_temporal_array();
+        let start_arr = start.to_temporal_array();
+        let end_arr = end.to_temporal_array();
+        self_arr.between(&start_arr, &end_arr)
+    }
+
+    // Truncation - slice the windowed range, delegate
+
+    fn truncate(&self, unit: &str) -> Result<Self, MinarrowError> {
+        windowed_self_op!(self, truncate, unit)
+    }
+
+    fn us(&self) -> Self {
+        windowed_self_op_infallible!(self, us)
+    }
+
+    fn ms(&self) -> Self {
+        windowed_self_op_infallible!(self, ms)
+    }
+
+    fn sec(&self) -> Self {
+        windowed_self_op_infallible!(self, sec)
+    }
+
+    fn min(&self) -> Self {
+        windowed_self_op_infallible!(self, min)
+    }
+
+    fn hr(&self) -> Self {
+        windowed_self_op_infallible!(self, hr)
+    }
+
+    fn week(&self) -> Self {
+        windowed_self_op_infallible!(self, week)
+    }
+
+    // Type Casting
+
+    fn cast_time_unit(&self, new_unit: TimeUnit) -> Result<Self, MinarrowError> {
+        windowed_self_op!(self, cast_time_unit, new_unit)
+    }
+}
+
+/// Helper for windowed `is_leap_year` over a generic `DatetimeArray<T>`.
+#[cfg(feature = "datetime_ops")]
+fn is_leap_year_windowed<T: crate::Integer + FromPrimitive>(
+    arr: &DatetimeArray<T>,
+    offset: usize,
+    len: usize,
+) -> BooleanArray<()> {
+    let mut result = BooleanArray::with_capacity(len, arr.is_nullable());
+    for i in offset..offset + len {
+        if arr.is_null(i) {
+            result.push_null();
+        } else if let Some(val_i64) = arr.data[i].to_i64() {
+            if let Some(dt) = DatetimeArray::<i64>::i64_to_datetime(val_i64, arr.time_unit) {
+                result.push(time::util::is_leap_year(dt.year()));
+            } else {
+                result.push_null();
+            }
+        } else {
+            result.push_null();
+        }
+    }
+    result
+}
+
 impl Shape for TemporalArrayV {
     fn shape(&self) -> ShapeDim {
         ShapeDim::Rank1(self.len())
