@@ -17,7 +17,7 @@
 //!
 //! ## Interop
 //! - Convert back to a full `BooleanArray` via [`to_boolean_array`](BooleanArrayV::to_boolean_array).
-//! - Promote to `Array` via [`as_array`](BooleanArrayV::as_array) for unified API calls.
+//! - Promote to `Array` via [`inner_array`](BooleanArrayV::inner_array) for unified API calls.
 //!
 //! ## Invariants
 //! - `offset + len <= array.len()`
@@ -135,17 +135,17 @@ impl BooleanArrayV {
         self.len
     }
 
-    /// Returns the underlying array as an `Array` enum value.
+    /// Returns the full backing array wrapped as an `Array` enum, ignoring the view's offset and length.
     ///
-    /// Useful to access its inner methods.
+    /// Use this to access inner array methods. The returned array is the unwindowed original.
     #[inline]
-    pub fn as_array(&self) -> Array {
+    pub fn inner_array(&self) -> Array {
         Array::BooleanArray(self.array.clone()) // Arc clone for data buffer
     }
 
     /// Returns an owned `BooleanArray` clone of the window.
     pub fn to_boolean_array(&self) -> Arc<BooleanArray<()>> {
-        self.as_array().slice_clone(self.offset, self.len).bool()
+        self.inner_array().slice_clone(self.offset, self.len).bool()
     }
 
     /// Returns the end index of the view.

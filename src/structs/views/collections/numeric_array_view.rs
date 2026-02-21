@@ -22,7 +22,7 @@
 //! ## Interop
 //! - Convert to an owned `NumericArray` of the window via
 //!   [`to_numeric_array`](NumericArrayV::to_numeric_array).
-//! - Lift to `Array` with [`as_array`](NumericArrayV::as_array) when you need
+//! - Lift to `Array` with [`inner_array`](NumericArrayV::inner_array) when you need
 //!   enum-level APIs.
 //!
 //! ## Invariants
@@ -117,11 +117,11 @@ impl NumericArrayV {
         self.len == 0
     }
 
-    /// Returns the underlying array as an `Array` enum value.
+    /// Returns the full backing array wrapped as an `Array` enum, ignoring the view's offset and length.
     ///
-    /// Useful to access its inner methods
+    /// Use this to access inner array methods. The returned array is the unwindowed original.
     #[inline]
-    pub fn as_array(&self) -> Array {
+    pub fn inner_array(&self) -> Array {
         Array::NumericArray(self.array.clone()) // Arc clone for data buffer
     }
 
@@ -189,7 +189,7 @@ impl NumericArrayV {
 
     /// Materialise a deep copy as an owned NumericArray for the window.
     pub fn to_numeric_array(&self) -> NumericArray {
-        self.as_array().slice_clone(self.offset, self.len).num()
+        self.inner_array().slice_clone(self.offset, self.len).num()
     }
 
     /// Returns the end index of the view.

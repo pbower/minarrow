@@ -19,7 +19,7 @@
 //!
 //! ## Interop
 //! - Convert back to a full `TextArray` via [`to_text_array`](TextArrayV::to_text_array).
-//! - Promote to `Array` via [`as_array`](TextArrayV::as_array) for unified API calls.
+//! - Promote to `Array` via [`inner_array`](TextArrayV::inner_array) for unified API calls.
 //!
 //! ## Invariants
 //! - `offset + len <= array.len()`
@@ -147,17 +147,17 @@ impl TextArrayV {
         self.len
     }
 
-    /// Returns the underlying array as an `Array` enum value.
+    /// Returns the full backing array wrapped as an `Array` enum, ignoring the view's offset and length.
     ///
-    /// Useful to access its inner methods
+    /// Use this to access inner array methods. The returned array is the unwindowed original.
     #[inline]
-    pub fn as_array(&self) -> Array {
+    pub fn inner_array(&self) -> Array {
         Array::TextArray(self.array.clone()) // Arc clone for data buffer
     }
 
     /// Returns an owned `TextArray` clone of the window.
     pub fn to_text_array(&self) -> TextArray {
-        self.as_array().slice_clone(self.offset, self.len).str()
+        self.inner_array().slice_clone(self.offset, self.len).str()
     }
 
     /// Returns the end index of the view.

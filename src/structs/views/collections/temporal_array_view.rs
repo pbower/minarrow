@@ -22,7 +22,7 @@
 //! ## Interop
 //! - Convert to an owned `TemporalArray` of the window with
 //!   [`to_temporal_array`](TemporalArrayV::to_temporal_array).
-//! - Lift to `Array` with [`as_array`](TemporalArrayV::as_array) for enum-level APIs.
+//! - Lift to `Array` with [`inner_array`](TemporalArrayV::inner_array) for enum-level APIs.
 //!
 //! ## Invariants
 //! - `offset + len <= array.len()`
@@ -165,17 +165,17 @@ impl TemporalArrayV {
         self.len
     }
 
-    /// Returns the underlying array as an `Array` enum value.
+    /// Returns the full backing array wrapped as an `Array` enum, ignoring the view's offset and length.
     ///
-    /// Useful to access its inner methods
+    /// Use this to access inner array methods. The returned array is the unwindowed original.
     #[inline]
-    pub fn as_array(&self) -> Array {
+    pub fn inner_array(&self) -> Array {
         Array::TemporalArray(self.array.clone()) // Arc clone for data buffer
     }
 
     /// Converts the view into a sliced `TemporalArray`.
     pub fn to_temporal_array(&self) -> TemporalArray {
-        self.as_array().slice_clone(self.offset, self.len).dt()
+        self.inner_array().slice_clone(self.offset, self.len).dt()
     }
 
     /// Returns the end index of the view.
