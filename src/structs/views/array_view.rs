@@ -728,6 +728,17 @@ impl From<crate::TemporalArrayV> for ArrayV {
     }
 }
 
+/// BooleanArrayView -> ArrayView
+///
+/// Converts by wrapping the inner Arc<BooleanArray> as Array::BooleanArray.
+#[cfg(feature = "views")]
+impl From<crate::BooleanArrayV> for ArrayV {
+    fn from(view: crate::BooleanArrayV) -> Self {
+        let len = view.len();
+        ArrayV::new(Array::BooleanArray(view.array), view.offset, len)
+    }
+}
+
 /// Scalar -> ArrayView
 ///
 /// Converts a Scalar to a length-1 ArrayV, enabling scalar broadcasting

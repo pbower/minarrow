@@ -144,6 +144,7 @@ pub mod structs {
         }
         #[cfg(feature = "views")]
         pub mod collections {
+            pub mod boolean_array_view;
             pub mod numeric_array_view;
             #[cfg(feature = "datetime")]
             pub mod temporal_array_view;
@@ -233,6 +234,8 @@ pub use structs::views::bitmask_view::BitmaskV;
 #[cfg(feature = "views")]
 #[cfg(feature = "chunked")]
 pub use structs::views::chunked::{super_array_view::SuperArrayV, super_table_view::SuperTableV};
+#[cfg(feature = "views")]
+pub use structs::views::collections::boolean_array_view::BooleanArrayV;
 #[cfg(feature = "views")]
 pub use structs::views::collections::numeric_array_view::NumericArrayV;
 #[cfg(feature = "views")]
