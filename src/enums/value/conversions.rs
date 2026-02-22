@@ -794,13 +794,48 @@ impl From<Matrix> for Value {
 impl TryFrom<Value> for Array {
     type Error = MinarrowError;
     fn try_from(v: Value) -> Result<Self, Self::Error> {
+        let err = || MinarrowError::TypeError {
+            from: "Value",
+            to: "Array",
+            message: Some("Value type mismatch".to_owned()),
+        };
         match v {
             Value::Array(inner) => Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone())),
-            _ => Err(MinarrowError::TypeError {
-                from: "Value",
-                to: "Array",
-                message: Some("Value type mismatch".to_owned()),
-            }),
+            #[cfg(feature = "views")]
+            Value::ArrayView(inner) => {
+                let view = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                Ok(view.to_array())
+            }
+            Value::FieldArray(inner) => {
+                let fa = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                Ok(fa.array)
+            }
+            #[cfg(feature = "scalar_type")]
+            Value::Scalar(s) => Ok(Array::from(s)),
+            Value::Table(_) => Err(err()),
+            #[cfg(feature = "views")]
+            Value::TableView(_) => Err(err()),
+            #[cfg(feature = "chunked")]
+            Value::SuperArray(_) => Err(err()),
+            #[cfg(all(feature = "chunked", feature = "views"))]
+            Value::SuperArrayView(_) => Err(err()),
+            #[cfg(feature = "chunked")]
+            Value::SuperTable(_) => Err(err()),
+            #[cfg(all(feature = "chunked", feature = "views"))]
+            Value::SuperTableView(_) => Err(err()),
+            #[cfg(feature = "matrix")]
+            Value::Matrix(_) => Err(err()),
+            #[cfg(feature = "cube")]
+            Value::Cube(_) => Err(err()),
+            Value::VecValue(_) => Err(err()),
+            Value::BoxValue(_) => Err(err()),
+            Value::ArcValue(_) => Err(err()),
+            Value::Tuple2(_) => Err(err()),
+            Value::Tuple3(_) => Err(err()),
+            Value::Tuple4(_) => Err(err()),
+            Value::Tuple5(_) => Err(err()),
+            Value::Tuple6(_) => Err(err()),
+            Value::Custom(_) => Err(err()),
         }
     }
 }
@@ -905,13 +940,66 @@ impl TryFrom<Value> for TemporalArrayV {
 impl TryFrom<Value> for Table {
     type Error = MinarrowError;
     fn try_from(v: Value) -> Result<Self, Self::Error> {
+        let err = || MinarrowError::TypeError {
+            from: "Value",
+            to: "Table",
+            message: Some("Value type mismatch".to_owned()),
+        };
         match v {
             Value::Table(inner) => Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone())),
-            _ => Err(MinarrowError::TypeError {
-                from: "Value",
-                to: "Table",
-                message: Some("Value type mismatch".to_owned()),
-            }),
+            #[cfg(feature = "views")]
+            Value::TableView(inner) => {
+                let view = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                Ok(view.to_table())
+            }
+            Value::Array(inner) => {
+                let array = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                Ok(Table::new(
+                    "array".to_string(),
+                    Some(vec![FieldArray::from_arr("column_0", array)]),
+                ))
+            }
+            #[cfg(feature = "views")]
+            Value::ArrayView(inner) => {
+                let view = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                Ok(Table::new(
+                    "array".to_string(),
+                    Some(vec![FieldArray::from_arr("column_0", view.to_array())]),
+                ))
+            }
+            Value::FieldArray(inner) => {
+                let fa = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                Ok(Table::new("array".to_string(), Some(vec![fa])))
+            }
+            #[cfg(feature = "scalar_type")]
+            Value::Scalar(s) => {
+                let array = Array::from(s);
+                Ok(Table::new(
+                    "scalar".to_string(),
+                    Some(vec![FieldArray::from_arr("column_0", array)]),
+                ))
+            }
+            #[cfg(feature = "chunked")]
+            Value::SuperArray(_) => Err(err()),
+            #[cfg(all(feature = "chunked", feature = "views"))]
+            Value::SuperArrayView(_) => Err(err()),
+            #[cfg(feature = "chunked")]
+            Value::SuperTable(_) => Err(err()),
+            #[cfg(all(feature = "chunked", feature = "views"))]
+            Value::SuperTableView(_) => Err(err()),
+            #[cfg(feature = "matrix")]
+            Value::Matrix(_) => Err(err()),
+            #[cfg(feature = "cube")]
+            Value::Cube(_) => Err(err()),
+            Value::VecValue(_) => Err(err()),
+            Value::BoxValue(_) => Err(err()),
+            Value::ArcValue(_) => Err(err()),
+            Value::Tuple2(_) => Err(err()),
+            Value::Tuple3(_) => Err(err()),
+            Value::Tuple4(_) => Err(err()),
+            Value::Tuple5(_) => Err(err()),
+            Value::Tuple6(_) => Err(err()),
+            Value::Custom(_) => Err(err()),
         }
     }
 }
