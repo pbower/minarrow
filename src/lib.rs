@@ -185,6 +185,8 @@ pub mod traits {
     #[cfg(feature = "chunked")]
     pub mod consolidate;
     pub mod custom_value;
+    #[cfg(feature = "datetime_ops")]
+    pub mod datetime_ops;
     pub mod masked_array;
     pub mod print;
     #[cfg(feature = "select")]
@@ -193,8 +195,6 @@ pub mod traits {
     pub mod type_unions;
     #[cfg(feature = "views")]
     pub mod view;
-    #[cfg(feature = "datetime_ops")]
-    pub mod datetime_ops;
 }
 
 pub mod aliases;
@@ -268,10 +268,10 @@ pub use traits::byte_size::ByteSize;
 pub use traits::concatenate::Concatenate;
 #[cfg(feature = "chunked")]
 pub use traits::consolidate::Consolidate;
+#[cfg(feature = "datetime_ops")]
+pub use traits::datetime_ops::DatetimeOps;
 pub use traits::masked_array::MaskedArray;
 pub use traits::print::Print;
 #[cfg(feature = "select")]
 pub use traits::selection::{ColumnSelection, RowSelection, Selection2D};
 pub use traits::type_unions::{Float, Integer, Numeric, Primitive};
-#[cfg(feature = "datetime_ops")]
-pub use traits::datetime_ops::DatetimeOps;
