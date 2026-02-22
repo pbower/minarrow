@@ -308,6 +308,256 @@ impl Array {
         }
     }
 
+    // ── Typed inner-array accessors ──────────────────────────────────
+    //
+    // Each method collapses the two-level match (outer Array variant +
+    // inner category variant) into a single call returning
+    // Result<&ConcreteType, MinarrowError>.
+
+    /// Returns a reference to the inner `IntegerArray<i32>`.
+    pub fn try_i32_ref(&self) -> Result<&IntegerArray<i32>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::Int32(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "IntegerArray<i32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<i64>`.
+    pub fn try_i64_ref(&self) -> Result<&IntegerArray<i64>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::Int64(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "IntegerArray<i64>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<u32>`.
+    pub fn try_u32_ref(&self) -> Result<&IntegerArray<u32>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::UInt32(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "IntegerArray<u32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<u64>`.
+    pub fn try_u64_ref(&self) -> Result<&IntegerArray<u64>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::UInt64(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "IntegerArray<u64>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `FloatArray<f32>`.
+    pub fn try_f32_ref(&self) -> Result<&FloatArray<f32>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::Float32(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "FloatArray<f32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `FloatArray<f64>`.
+    pub fn try_f64_ref(&self) -> Result<&FloatArray<f64>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::Float64(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "FloatArray<f64>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<i8>`.
+    #[cfg(feature = "extended_numeric_types")]
+    pub fn try_i8_ref(&self) -> Result<&IntegerArray<i8>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::Int8(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "IntegerArray<i8>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<i16>`.
+    #[cfg(feature = "extended_numeric_types")]
+    pub fn try_i16_ref(&self) -> Result<&IntegerArray<i16>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::Int16(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "IntegerArray<i16>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<u8>`.
+    #[cfg(feature = "extended_numeric_types")]
+    pub fn try_u8_ref(&self) -> Result<&IntegerArray<u8>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::UInt8(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "IntegerArray<u8>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<u16>`.
+    #[cfg(feature = "extended_numeric_types")]
+    pub fn try_u16_ref(&self) -> Result<&IntegerArray<u16>, MinarrowError> {
+        match self {
+            Array::NumericArray(NumericArray::UInt16(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "IntegerArray<u16>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `StringArray<u32>`.
+    pub fn try_str32_ref(&self) -> Result<&StringArray<u32>, MinarrowError> {
+        match self {
+            Array::TextArray(TextArray::String32(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "StringArray<u32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `StringArray<u64>`.
+    #[cfg(feature = "large_string")]
+    pub fn try_str64_ref(&self) -> Result<&StringArray<u64>, MinarrowError> {
+        match self {
+            Array::TextArray(TextArray::String64(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "StringArray<u64>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `CategoricalArray<u32>`.
+    pub fn try_cat32_ref(&self) -> Result<&CategoricalArray<u32>, MinarrowError> {
+        match self {
+            Array::TextArray(TextArray::Categorical32(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "CategoricalArray<u32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `CategoricalArray<u8>`.
+    #[cfg(feature = "extended_categorical")]
+    pub fn try_cat8_ref(&self) -> Result<&CategoricalArray<u8>, MinarrowError> {
+        match self {
+            Array::TextArray(TextArray::Categorical8(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "CategoricalArray<u8>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `CategoricalArray<u16>`.
+    #[cfg(feature = "extended_categorical")]
+    pub fn try_cat16_ref(&self) -> Result<&CategoricalArray<u16>, MinarrowError> {
+        match self {
+            Array::TextArray(TextArray::Categorical16(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "CategoricalArray<u16>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `CategoricalArray<u64>`.
+    #[cfg(feature = "extended_categorical")]
+    pub fn try_cat64_ref(&self) -> Result<&CategoricalArray<u64>, MinarrowError> {
+        match self {
+            Array::TextArray(TextArray::Categorical64(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "CategoricalArray<u64>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `DatetimeArray<i32>`.
+    #[cfg(feature = "datetime")]
+    pub fn try_dt32_ref(&self) -> Result<&DatetimeArray<i32>, MinarrowError> {
+        match self {
+            Array::TemporalArray(TemporalArray::Datetime32(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "DatetimeArray<i32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `DatetimeArray<i64>`.
+    #[cfg(feature = "datetime")]
+    pub fn try_dt64_ref(&self) -> Result<&DatetimeArray<i64>, MinarrowError> {
+        match self {
+            Array::TemporalArray(TemporalArray::Datetime64(arc)) => Ok(arc.as_ref()),
+            Array::Null => Err(MinarrowError::NullError { message: None }),
+            other => Err(MinarrowError::TypeError {
+                from: array_category_name(other),
+                to: "DatetimeArray<i64>",
+                message: None,
+            }),
+        }
+    }
+
     /// Returns an inner `NumericArray`, consuming self.
     /// - If already a `NumericArray`, consumes and returns the inner value with no clone.
     /// - Other types: casts and copies.
@@ -1450,6 +1700,136 @@ impl Array {
                 TemporalArray::Null => None,
             },
             Array::Null => None,
+        }
+    }
+
+    // ── Element-level operations ────────────────────────────────────
+
+    /// Format the element at `idx` as a human-readable string.
+    ///
+    /// Returns `"null"` for null elements. Uses the same formatting as
+    /// the array's Display implementation.
+    #[inline]
+    pub fn format_element(&self, idx: usize) -> String {
+        crate::traits::print::value_to_string(self, idx)
+    }
+
+    /// Compare two elements within the same array by index.
+    ///
+    /// Uses total ordering for floats via `total_cmp()`. Nulls sort last:
+    /// null > any value, null == null.
+    pub fn compare_at(&self, i: usize, j: usize) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        // Handle nulls first: null sorts last
+        let null_mask = self.null_mask();
+        let i_null = null_mask.is_some_and(|m| !m.get(i));
+        let j_null = null_mask.is_some_and(|m| !m.get(j));
+        match (i_null, j_null) {
+            (true, true) => return Ordering::Equal,
+            (true, false) => return Ordering::Greater,
+            (false, true) => return Ordering::Less,
+            (false, false) => {}
+        }
+
+        match self {
+            Array::NumericArray(inner) => match inner {
+                NumericArray::Int32(a) => a.data[i].cmp(&a.data[j]),
+                NumericArray::Int64(a) => a.data[i].cmp(&a.data[j]),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => a.data[i].cmp(&a.data[j]),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => a.data[i].cmp(&a.data[j]),
+                NumericArray::UInt32(a) => a.data[i].cmp(&a.data[j]),
+                NumericArray::UInt64(a) => a.data[i].cmp(&a.data[j]),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => a.data[i].cmp(&a.data[j]),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => a.data[i].cmp(&a.data[j]),
+                NumericArray::Float32(a) => a.data[i].total_cmp(&a.data[j]),
+                NumericArray::Float64(a) => a.data[i].total_cmp(&a.data[j]),
+                NumericArray::Null => Ordering::Equal,
+            },
+            Array::BooleanArray(b) => b.data.get(i).cmp(&b.data.get(j)),
+            Array::TextArray(inner) => match inner {
+                TextArray::String32(s) => s.get_str(i).cmp(&s.get_str(j)),
+                #[cfg(feature = "large_string")]
+                TextArray::String64(s) => s.get_str(i).cmp(&s.get_str(j)),
+                TextArray::Categorical32(c) => c.get_str(i).cmp(&c.get_str(j)),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical8(c) => c.get_str(i).cmp(&c.get_str(j)),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical16(c) => c.get_str(i).cmp(&c.get_str(j)),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(c) => c.get_str(i).cmp(&c.get_str(j)),
+                TextArray::Null => Ordering::Equal,
+            },
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(inner) => match inner {
+                TemporalArray::Datetime32(a) => a.data[i].cmp(&a.data[j]),
+                TemporalArray::Datetime64(a) => a.data[i].cmp(&a.data[j]),
+                TemporalArray::Null => Ordering::Equal,
+            },
+            Array::Null => Ordering::Equal,
+        }
+    }
+
+    /// Hash the element at `idx` into the provided hasher.
+    ///
+    /// Null elements hash a fixed sentinel. Floats use `to_bits()` so
+    /// the hash is consistent with the `to_bits()` equality convention.
+    #[cfg(feature = "hash")]
+    pub fn hash_element_at<H: std::hash::Hasher>(&self, idx: usize, state: &mut H) {
+        use std::hash::Hash;
+
+        // Hash null status
+        if let Some(mask) = self.null_mask() {
+            if !mask.get(idx) {
+                // Sentinel for null
+                0xDEAD_BEEF_u64.hash(state);
+                return;
+            }
+        }
+
+        match self {
+            Array::NumericArray(inner) => match inner {
+                NumericArray::Int32(a) => a.data[idx].hash(state),
+                NumericArray::Int64(a) => a.data[idx].hash(state),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => a.data[idx].hash(state),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => a.data[idx].hash(state),
+                NumericArray::UInt32(a) => a.data[idx].hash(state),
+                NumericArray::UInt64(a) => a.data[idx].hash(state),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => a.data[idx].hash(state),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => a.data[idx].hash(state),
+                NumericArray::Float32(a) => a.data[idx].to_bits().hash(state),
+                NumericArray::Float64(a) => a.data[idx].to_bits().hash(state),
+                NumericArray::Null => 0xDEAD_BEEF_u64.hash(state),
+            },
+            Array::BooleanArray(b) => b.data.get(idx).hash(state),
+            Array::TextArray(inner) => match inner {
+                TextArray::String32(s) => s.get_str(idx).hash(state),
+                #[cfg(feature = "large_string")]
+                TextArray::String64(s) => s.get_str(idx).hash(state),
+                TextArray::Categorical32(c) => c.get_str(idx).hash(state),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical8(c) => c.get_str(idx).hash(state),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical16(c) => c.get_str(idx).hash(state),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(c) => c.get_str(idx).hash(state),
+                TextArray::Null => 0xDEAD_BEEF_u64.hash(state),
+            },
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(inner) => match inner {
+                TemporalArray::Datetime32(a) => a.data[idx].hash(state),
+                TemporalArray::Datetime64(a) => a.data[idx].hash(state),
+                TemporalArray::Null => 0xDEAD_BEEF_u64.hash(state),
+            },
+            Array::Null => 0xDEAD_BEEF_u64.hash(state),
         }
     }
 
@@ -3412,6 +3792,266 @@ mod tests {
         assert_eq!(array.clone().bool(), BooleanArray::default().into());
         #[cfg(feature = "datetime")]
         assert_eq!(array.dt(), TemporalArray::Null);
+    }
+
+    // ── try_*_ref tests ──────────────────────────────────────────────
+
+    #[test]
+    fn test_try_i32_ref_success() {
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(10);
+        let array = Array::from_int32(arr);
+        let inner = array.try_i32_ref().unwrap();
+        assert_eq!(inner.data[0], 10);
+    }
+
+    #[test]
+    fn test_try_i32_ref_type_error() {
+        let arr = Array::from_float64(FloatArray::<f64>::default());
+        assert!(arr.try_i32_ref().is_err());
+    }
+
+    #[test]
+    fn test_try_f64_ref_success() {
+        let mut arr = FloatArray::<f64>::default();
+        arr.push(3.14);
+        let array = Array::from_float64(arr);
+        let inner = array.try_f64_ref().unwrap();
+        assert!((inner.data[0] - 3.14).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_try_str32_ref_success() {
+        let arr = StringArray::<u32>::from_slice(&["hello", "world"]);
+        let array = Array::from_string32(arr);
+        let inner = array.try_str32_ref().unwrap();
+        assert_eq!(inner.get_str(0), Some("hello"));
+    }
+
+    #[test]
+    fn test_try_str32_ref_type_error() {
+        let array = Array::from_int32(IntegerArray::<i32>::default());
+        assert!(array.try_str32_ref().is_err());
+    }
+
+    #[test]
+    fn test_try_cat32_ref_success() {
+        let arr = CategoricalArray::<u32>::from_vec(vec!["a", "b", "a"], None);
+        let array = Array::from_categorical32(arr);
+        let inner = array.try_cat32_ref().unwrap();
+        assert_eq!(inner.get_str(0), Some("a"));
+    }
+
+    #[test]
+    fn test_try_ref_null_array() {
+        let array = Array::Null;
+        assert!(array.try_i32_ref().is_err());
+        assert!(array.try_f64_ref().is_err());
+        assert!(array.try_str32_ref().is_err());
+    }
+
+    // ── format_element tests ─────────────────────────────────────────
+
+    #[test]
+    fn test_format_element_integer() {
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(42);
+        arr.push(-7);
+        let array = Array::from_int32(arr);
+        assert_eq!(array.format_element(0), "42");
+        assert_eq!(array.format_element(1), "-7");
+    }
+
+    #[test]
+    fn test_format_element_float() {
+        let mut arr = FloatArray::<f64>::default();
+        arr.push(3.14);
+        let array = Array::from_float64(arr);
+        assert_eq!(array.format_element(0), "3.14");
+    }
+
+    #[test]
+    fn test_format_element_string() {
+        let arr = StringArray::<u32>::from_slice(&["hello"]);
+        let array = Array::from_string32(arr);
+        assert_eq!(array.format_element(0), "hello");
+    }
+
+    #[test]
+    fn test_format_element_bool() {
+        let arr = BooleanArray::from_slice(&[true, false]);
+        let array = Array::from_bool(arr);
+        assert_eq!(array.format_element(0), "true");
+        assert_eq!(array.format_element(1), "false");
+    }
+
+    #[test]
+    fn test_format_element_null_variant() {
+        let array = Array::Null;
+        assert_eq!(array.format_element(0), "null");
+    }
+
+    #[test]
+    fn test_format_element_null_value() {
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(10);
+        arr.push(20);
+        arr.set_null_mask(Some(Bitmask::from_bools(&[true, false])));
+        let array = Array::from_int32(arr);
+        assert_eq!(array.format_element(0), "10");
+        assert_eq!(array.format_element(1), "null");
+    }
+
+    // ── compare_at tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_compare_at_ascending() {
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(1);
+        arr.push(2);
+        arr.push(3);
+        let array = Array::from_int32(arr);
+        assert_eq!(array.compare_at(0, 1), std::cmp::Ordering::Less);
+        assert_eq!(array.compare_at(2, 1), std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn test_compare_at_equal() {
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(5);
+        arr.push(5);
+        let array = Array::from_int32(arr);
+        assert_eq!(array.compare_at(0, 1), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn test_compare_at_null_handling() {
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(1);
+        arr.push(2);
+        arr.push(3);
+        arr.set_null_mask(Some(Bitmask::from_bools(&[true, false, true])));
+        let array = Array::from_int32(arr);
+        // null > non-null
+        assert_eq!(array.compare_at(1, 0), std::cmp::Ordering::Greater);
+        // non-null < null
+        assert_eq!(array.compare_at(0, 1), std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_at_both_null() {
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(1);
+        arr.push(2);
+        arr.set_null_mask(Some(Bitmask::from_bools(&[false, false])));
+        let array = Array::from_int32(arr);
+        assert_eq!(array.compare_at(0, 1), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn test_compare_at_float_nan() {
+        let mut arr = FloatArray::<f64>::default();
+        arr.push(1.0);
+        arr.push(f64::NAN);
+        let array = Array::from_float64(arr);
+        // NaN sorts after all values with total_cmp
+        assert_eq!(array.compare_at(0, 1), std::cmp::Ordering::Less);
+        // NaN == NaN with total_cmp
+        let mut arr2 = FloatArray::<f64>::default();
+        arr2.push(f64::NAN);
+        arr2.push(f64::NAN);
+        let array2 = Array::from_float64(arr2);
+        assert_eq!(array2.compare_at(0, 1), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn test_compare_at_string() {
+        let arr = StringArray::<u32>::from_slice(&["apple", "banana", "apple"]);
+        let array = Array::from_string32(arr);
+        assert_eq!(array.compare_at(0, 1), std::cmp::Ordering::Less);
+        assert_eq!(array.compare_at(0, 2), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn test_compare_at_bool() {
+        let arr = BooleanArray::from_slice(&[false, true]);
+        let array = Array::from_bool(arr);
+        assert_eq!(array.compare_at(0, 1), std::cmp::Ordering::Less);
+    }
+
+    // ── hash_element_at tests ────────────────────────────────────────
+
+    #[cfg(feature = "hash")]
+    #[test]
+    fn test_hash_element_at_same_value() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
+
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(42);
+        arr.push(42);
+        let array = Array::from_int32(arr);
+
+        let mut h1 = DefaultHasher::new();
+        array.hash_element_at(0, &mut h1);
+        let mut h2 = DefaultHasher::new();
+        array.hash_element_at(1, &mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    #[cfg(feature = "hash")]
+    #[test]
+    fn test_hash_element_at_different_value() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
+
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(1);
+        arr.push(2);
+        let array = Array::from_int32(arr);
+
+        let mut h1 = DefaultHasher::new();
+        array.hash_element_at(0, &mut h1);
+        let mut h2 = DefaultHasher::new();
+        array.hash_element_at(1, &mut h2);
+        assert_ne!(h1.finish(), h2.finish());
+    }
+
+    #[cfg(feature = "hash")]
+    #[test]
+    fn test_hash_element_at_null_consistent() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
+
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(10);
+        arr.push(20);
+        arr.set_null_mask(Some(Bitmask::from_bools(&[false, false])));
+        let array = Array::from_int32(arr);
+
+        let mut h1 = DefaultHasher::new();
+        array.hash_element_at(0, &mut h1);
+        let mut h2 = DefaultHasher::new();
+        array.hash_element_at(1, &mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    #[cfg(feature = "hash")]
+    #[test]
+    fn test_hash_element_at_float_to_bits() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
+
+        let mut arr = FloatArray::<f64>::default();
+        arr.push(3.14);
+        arr.push(3.14);
+        let array = Array::from_float64(arr);
+
+        let mut h1 = DefaultHasher::new();
+        array.hash_element_at(0, &mut h1);
+        let mut h2 = DefaultHasher::new();
+        array.hash_element_at(1, &mut h2);
+        assert_eq!(h1.finish(), h2.finish());
     }
 }
 

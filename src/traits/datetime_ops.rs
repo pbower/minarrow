@@ -82,8 +82,7 @@ pub trait DatetimeOps: Sized {
     fn diff(&self, other: &Self, unit: TimeUnit) -> Result<IntegerArray<i64>, MinarrowError>;
 
     /// Calculate the absolute duration between elements (always positive).
-    fn abs_diff(&self, other: &Self, unit: TimeUnit)
-        -> Result<IntegerArray<i64>, MinarrowError>;
+    fn abs_diff(&self, other: &Self, unit: TimeUnit) -> Result<IntegerArray<i64>, MinarrowError>;
 
     /// Compares this array with another, returning a boolean array indicating
     /// where values in `self` are before values in `other`.
