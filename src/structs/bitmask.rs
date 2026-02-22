@@ -601,6 +601,18 @@ impl Bitmask {
         BitmaskV::new(self.clone(), offset, len)
     }
 
+    /// Combine two optional null masks. None means "no nulls".
+    ///
+    /// Returns None when both inputs are None, otherwise merges them
+    /// using bitwise OR via `union()`.
+    pub fn union_opt(a: Option<&Bitmask>, b: Option<&Bitmask>) -> Option<Bitmask> {
+        match (a, b) {
+            (None, None) => None,
+            (Some(m), None) | (None, Some(m)) => Some(m.clone()),
+            (Some(a), Some(b)) => Some(a.union(b)),
+        }
+    }
+
     /// Logical 'or' (elementwise) with another mask.
     #[inline]
     pub fn union(&self, other: &Self) -> Self {
@@ -992,6 +1004,36 @@ mod tests {
         let empty_bytes = [0u8];
         m3.extend_from_slice(&empty_bytes, 0);
         assert_eq!(m3.len(), 3);
+    }
+
+    #[test]
+    fn test_union_opt_none_none() {
+        assert!(Bitmask::union_opt(None, None).is_none());
+    }
+
+    #[test]
+    fn test_union_opt_some_none() {
+        let m = Bitmask::from_bools(&[true, false, true]);
+        let result = Bitmask::union_opt(Some(&m), None).unwrap();
+        assert_eq!(result, m);
+    }
+
+    #[test]
+    fn test_union_opt_none_some() {
+        let m = Bitmask::from_bools(&[false, true, false]);
+        let result = Bitmask::union_opt(None, Some(&m)).unwrap();
+        assert_eq!(result, m);
+    }
+
+    #[test]
+    fn test_union_opt_some_some() {
+        let a = Bitmask::from_bools(&[true, false, false, true]);
+        let b = Bitmask::from_bools(&[false, true, false, true]);
+        let result = Bitmask::union_opt(Some(&a), Some(&b)).unwrap();
+        assert!(result.get(0)); // true | false
+        assert!(result.get(1)); // false | true
+        assert!(!result.get(2)); // false | false
+        assert!(result.get(3)); // true | true
     }
 
     #[test]

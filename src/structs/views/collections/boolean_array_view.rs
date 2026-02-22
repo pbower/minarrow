@@ -287,8 +287,10 @@ impl Concatenate for BooleanArrayV {
     /// - The resulting view has offset=0 and length equal to the combined length.
     fn concat(self, other: Self) -> Result<Self, MinarrowError> {
         // Materialise both views to owned boolean arrays
-        let self_array = Arc::try_unwrap(self.to_boolean_array()).unwrap_or_else(|arc| (*arc).clone());
-        let other_array = Arc::try_unwrap(other.to_boolean_array()).unwrap_or_else(|arc| (*arc).clone());
+        let self_array =
+            Arc::try_unwrap(self.to_boolean_array()).unwrap_or_else(|arc| (*arc).clone());
+        let other_array =
+            Arc::try_unwrap(other.to_boolean_array()).unwrap_or_else(|arc| (*arc).clone());
 
         // Concatenate the owned boolean arrays
         let concatenated = self_array.concat(other_array)?;
@@ -369,7 +371,9 @@ mod tests {
     #[test]
     fn test_boolean_array_view_to_boolean_array_and_as_tuple() {
         let mut arr = BooleanArray::<()>::default();
-        for v in [true, false, true, false, true, true, false, true, false, true] {
+        for v in [
+            true, false, true, false, true, true, false, true, false, true,
+        ] {
             arr.push(v);
         }
         let arc = Arc::new(arr);

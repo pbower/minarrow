@@ -512,9 +512,10 @@ impl DatetimeOps for TemporalArrayV {
     }
 
     fn weekday(&self) -> IntegerArray<i32> {
-        windowed_component!(self, |dt: &time::OffsetDateTime| dt
-            .weekday()
-            .number_from_sunday() as i32)
+        windowed_component!(
+            self,
+            |dt: &time::OffsetDateTime| dt.weekday().number_from_sunday() as i32
+        )
     }
 
     fn day_of_year(&self) -> IntegerArray<i32> {
@@ -544,12 +545,8 @@ impl DatetimeOps for TemporalArrayV {
         let offset = self.offset;
         let len = self.len();
         match &self.array {
-            TemporalArray::Datetime32(arr) => {
-                is_leap_year_windowed(arr, offset, len)
-            }
-            TemporalArray::Datetime64(arr) => {
-                is_leap_year_windowed(arr, offset, len)
-            }
+            TemporalArray::Datetime32(arr) => is_leap_year_windowed(arr, offset, len),
+            TemporalArray::Datetime64(arr) => is_leap_year_windowed(arr, offset, len),
             TemporalArray::Null => BooleanArray::default(),
         }
     }
@@ -584,11 +581,7 @@ impl DatetimeOps for TemporalArrayV {
         self_arr.diff(&other_arr, unit)
     }
 
-    fn abs_diff(
-        &self,
-        other: &Self,
-        unit: TimeUnit,
-    ) -> Result<IntegerArray<i64>, MinarrowError> {
+    fn abs_diff(&self, other: &Self, unit: TimeUnit) -> Result<IntegerArray<i64>, MinarrowError> {
         let self_arr = self.to_temporal_array();
         let other_arr = other.to_temporal_array();
         self_arr.abs_diff(&other_arr, unit)

@@ -1535,6 +1535,43 @@ impl Scalar {
     }
 }
 
+#[cfg(feature = "hash")]
+impl Eq for Scalar {}
+
+#[cfg(feature = "hash")]
+impl std::hash::Hash for Scalar {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Scalar::Null => {}
+            Scalar::Boolean(v) => v.hash(state),
+            #[cfg(feature = "extended_numeric_types")]
+            Scalar::Int8(v) => v.hash(state),
+            #[cfg(feature = "extended_numeric_types")]
+            Scalar::Int16(v) => v.hash(state),
+            Scalar::Int32(v) => v.hash(state),
+            Scalar::Int64(v) => v.hash(state),
+            #[cfg(feature = "extended_numeric_types")]
+            Scalar::UInt8(v) => v.hash(state),
+            #[cfg(feature = "extended_numeric_types")]
+            Scalar::UInt16(v) => v.hash(state),
+            Scalar::UInt32(v) => v.hash(state),
+            Scalar::UInt64(v) => v.hash(state),
+            Scalar::Float32(v) => v.to_bits().hash(state),
+            Scalar::Float64(v) => v.to_bits().hash(state),
+            Scalar::String32(v) => v.hash(state),
+            #[cfg(feature = "large_string")]
+            Scalar::String64(v) => v.hash(state),
+            #[cfg(feature = "datetime")]
+            Scalar::Datetime32(v) => v.hash(state),
+            #[cfg(feature = "datetime")]
+            Scalar::Datetime64(v) => v.hash(state),
+            #[cfg(feature = "datetime")]
+            Scalar::Interval => {}
+        }
+    }
+}
+
 #[cfg(feature = "scalar_type")]
 macro_rules! impl_scalar_from {
     ($variant:ident: $($t:ty),+ $(,)?) => {
@@ -2289,6 +2326,68 @@ mod tests {
     #[should_panic]
     fn test_any_null_panics() {
         Scalar::Null.u64();
+    }
+
+    #[cfg(feature = "hash")]
+    #[test]
+    fn test_scalar_hash_same_value_same_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        fn hash_one(s: &Scalar) -> u64 {
+            let mut h = DefaultHasher::new();
+            s.hash(&mut h);
+            h.finish()
+        }
+
+        assert_eq!(hash_one(&Int32(42)), hash_one(&Int32(42)));
+        assert_eq!(hash_one(&Float64(3.14)), hash_one(&Float64(3.14)));
+        assert_eq!(
+            hash_one(&String32("hello".into())),
+            hash_one(&String32("hello".into()))
+        );
+        assert_eq!(hash_one(&Scalar::Null), hash_one(&Scalar::Null));
+    }
+
+    #[cfg(feature = "hash")]
+    #[test]
+    fn test_scalar_hash_different_value_different_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        fn hash_one(s: &Scalar) -> u64 {
+            let mut h = DefaultHasher::new();
+            s.hash(&mut h);
+            h.finish()
+        }
+
+        assert_ne!(hash_one(&Int32(1)), hash_one(&Int32(2)));
+        assert_ne!(hash_one(&Float64(1.0)), hash_one(&Float64(2.0)));
+    }
+
+    #[cfg(feature = "hash")]
+    #[test]
+    fn test_scalar_hash_float_to_bits_consistency() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        fn hash_one(s: &Scalar) -> u64 {
+            let mut h = DefaultHasher::new();
+            s.hash(&mut h);
+            h.finish()
+        }
+
+        // NaN == NaN under to_bits() convention
+        assert_eq!(hash_one(&Float64(f64::NAN)), hash_one(&Float64(f64::NAN)));
+        assert_eq!(hash_one(&Float32(f32::NAN)), hash_one(&Float32(f32::NAN)));
+    }
+
+    #[cfg(feature = "hash")]
+    #[test]
+    fn test_scalar_eq() {
+        assert_eq!(Int32(5), Int32(5));
+        assert_ne!(Int32(5), Int32(6));
+        assert_eq!(Scalar::Null, Scalar::Null);
     }
 
     #[cfg(test)]

@@ -382,24 +382,24 @@ impl DatetimeOps for TemporalArray {
 
     fn add_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
         match self {
-            TemporalArray::Datetime32(arr) => {
-                Ok(TemporalArray::Datetime32(Arc::new(arr.add_duration(duration)?)))
-            }
-            TemporalArray::Datetime64(arr) => {
-                Ok(TemporalArray::Datetime64(Arc::new(arr.add_duration(duration)?)))
-            }
+            TemporalArray::Datetime32(arr) => Ok(TemporalArray::Datetime32(Arc::new(
+                arr.add_duration(duration)?,
+            ))),
+            TemporalArray::Datetime64(arr) => Ok(TemporalArray::Datetime64(Arc::new(
+                arr.add_duration(duration)?,
+            ))),
             TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
 
     fn sub_duration(&self, duration: Duration) -> Result<Self, MinarrowError> {
         match self {
-            TemporalArray::Datetime32(arr) => {
-                Ok(TemporalArray::Datetime32(Arc::new(arr.sub_duration(duration)?)))
-            }
-            TemporalArray::Datetime64(arr) => {
-                Ok(TemporalArray::Datetime64(Arc::new(arr.sub_duration(duration)?)))
-            }
+            TemporalArray::Datetime32(arr) => Ok(TemporalArray::Datetime32(Arc::new(
+                arr.sub_duration(duration)?,
+            ))),
+            TemporalArray::Datetime64(arr) => Ok(TemporalArray::Datetime64(Arc::new(
+                arr.sub_duration(duration)?,
+            ))),
             TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }
@@ -457,11 +457,7 @@ impl DatetimeOps for TemporalArray {
         }
     }
 
-    fn abs_diff(
-        &self,
-        other: &Self,
-        unit: TimeUnit,
-    ) -> Result<IntegerArray<i64>, MinarrowError> {
+    fn abs_diff(&self, other: &Self, unit: TimeUnit) -> Result<IntegerArray<i64>, MinarrowError> {
         match (self, other) {
             (TemporalArray::Datetime32(a), TemporalArray::Datetime32(b)) => a.abs_diff(b, unit),
             (TemporalArray::Datetime64(a), TemporalArray::Datetime64(b)) => a.abs_diff(b, unit),
@@ -508,15 +504,19 @@ impl DatetimeOps for TemporalArray {
 
     fn between(&self, start: &Self, end: &Self) -> Result<BooleanArray<()>, MinarrowError> {
         match (self, start, end) {
-            (TemporalArray::Datetime32(a), TemporalArray::Datetime32(s), TemporalArray::Datetime32(e)) => {
-                a.between(s, e)
-            }
-            (TemporalArray::Datetime64(a), TemporalArray::Datetime64(s), TemporalArray::Datetime64(e)) => {
-                a.between(s, e)
-            }
-            (TemporalArray::Null, _, _) | (_, TemporalArray::Null, _) | (_, _, TemporalArray::Null) => {
-                Err(MinarrowError::NullError { message: None })
-            }
+            (
+                TemporalArray::Datetime32(a),
+                TemporalArray::Datetime32(s),
+                TemporalArray::Datetime32(e),
+            ) => a.between(s, e),
+            (
+                TemporalArray::Datetime64(a),
+                TemporalArray::Datetime64(s),
+                TemporalArray::Datetime64(e),
+            ) => a.between(s, e),
+            (TemporalArray::Null, _, _)
+            | (_, TemporalArray::Null, _)
+            | (_, _, TemporalArray::Null) => Err(MinarrowError::NullError { message: None }),
             _ => Err(MinarrowError::TypeError {
                 from: "TemporalArray",
                 to: "TemporalArray",
@@ -591,12 +591,12 @@ impl DatetimeOps for TemporalArray {
 
     fn cast_time_unit(&self, new_unit: TimeUnit) -> Result<Self, MinarrowError> {
         match self {
-            TemporalArray::Datetime32(arr) => {
-                Ok(TemporalArray::Datetime32(Arc::new(arr.cast_time_unit(new_unit)?)))
-            }
-            TemporalArray::Datetime64(arr) => {
-                Ok(TemporalArray::Datetime64(Arc::new(arr.cast_time_unit(new_unit)?)))
-            }
+            TemporalArray::Datetime32(arr) => Ok(TemporalArray::Datetime32(Arc::new(
+                arr.cast_time_unit(new_unit)?,
+            ))),
+            TemporalArray::Datetime64(arr) => Ok(TemporalArray::Datetime64(Arc::new(
+                arr.cast_time_unit(new_unit)?,
+            ))),
             TemporalArray::Null => Err(MinarrowError::NullError { message: None }),
         }
     }

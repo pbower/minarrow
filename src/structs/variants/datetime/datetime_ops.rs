@@ -36,7 +36,10 @@ use num_traits::FromPrimitive;
 impl<T: Integer + FromPrimitive> DatetimeArray<T> {
     /// Convert i64 value to OffsetDateTime based on time unit.
     #[inline(always)]
-    pub(crate) fn i64_to_datetime(val_i64: i64, time_unit: TimeUnit) -> Option<time::OffsetDateTime> {
+    pub(crate) fn i64_to_datetime(
+        val_i64: i64,
+        time_unit: TimeUnit,
+    ) -> Option<time::OffsetDateTime> {
         use time::OffsetDateTime;
         match time_unit {
             TimeUnit::Seconds => OffsetDateTime::from_unix_timestamp(val_i64).ok(),
@@ -277,11 +280,7 @@ impl<T: Integer + FromPrimitive> DatetimeOps for DatetimeArray<T> {
     }
 
     /// Calculate the absolute duration between elements (always positive).
-    fn abs_diff(
-        &self,
-        other: &Self,
-        unit: TimeUnit,
-    ) -> Result<IntegerArray<i64>, MinarrowError> {
+    fn abs_diff(&self, other: &Self, unit: TimeUnit) -> Result<IntegerArray<i64>, MinarrowError> {
         let diff = self.diff(other, unit)?;
         let mut result = IntegerArray::with_capacity(diff.len(), diff.is_nullable());
 
