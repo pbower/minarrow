@@ -700,31 +700,34 @@ impl From<&FieldArray> for ArrayV {
 
 /// NumericArrayView -> ArrayView
 ///
-/// Converts via NumericArrayV.into() -> Array -> ArrayV
+/// Converts by wrapping the inner NumericArray as Array::NumericArray.
 #[cfg(feature = "views")]
 impl From<crate::NumericArrayV> for ArrayV {
-    fn from(numeric_view: crate::NumericArrayV) -> Self {
-        numeric_view.into()
+    fn from(view: crate::NumericArrayV) -> Self {
+        let len = view.len();
+        ArrayV::new(Array::NumericArray(view.array), view.offset, len)
     }
 }
 
 /// TextArrayView -> ArrayView
 ///
-/// Converts via TextArrayV.into() -> Array -> ArrayV
+/// Converts by wrapping the inner TextArray as Array::TextArray.
 #[cfg(feature = "views")]
 impl From<crate::TextArrayV> for ArrayV {
-    fn from(text_view: crate::TextArrayV) -> Self {
-        text_view.into()
+    fn from(view: crate::TextArrayV) -> Self {
+        let len = view.len();
+        ArrayV::new(Array::TextArray(view.array), view.offset, len)
     }
 }
 
 /// TemporalArrayView -> ArrayView
 ///
-/// Converts via TemporalArrayV.into() -> Array -> ArrayV
+/// Converts by wrapping the inner TemporalArray as Array::TemporalArray.
 #[cfg(all(feature = "views", feature = "datetime"))]
 impl From<crate::TemporalArrayV> for ArrayV {
-    fn from(temporal_view: crate::TemporalArrayV) -> Self {
-        temporal_view.into()
+    fn from(view: crate::TemporalArrayV) -> Self {
+        let len = view.len();
+        ArrayV::new(Array::TemporalArray(view.array), view.offset, len)
     }
 }
 
