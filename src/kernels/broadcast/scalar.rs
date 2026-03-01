@@ -818,7 +818,9 @@ pub fn broadcast_scalar_to_temporal_arrayview(
         Scalar::Int16(val) => Array::from_int16(IntegerArray::from_slice(&[*val])),
         Scalar::Int32(val) => Array::from_int32(IntegerArray::from_slice(&[*val])),
         Scalar::Int64(val) => Array::from_int64(IntegerArray::from_slice(&[*val])),
+        #[cfg(feature = "extended_numeric_types")]
         Scalar::UInt8(val) => Array::from_uint8(IntegerArray::from_slice(&[*val])),
+        #[cfg(feature = "extended_numeric_types")]
         Scalar::UInt16(val) => Array::from_uint16(IntegerArray::from_slice(&[*val])),
         Scalar::UInt32(val) => Array::from_uint32(IntegerArray::from_slice(&[*val])),
         Scalar::UInt64(val) => Array::from_uint64(IntegerArray::from_slice(&[*val])),
@@ -868,7 +870,9 @@ pub fn broadcast_temporal_arrayview_to_scalar(
         Scalar::Int16(val) => Array::from_int16(IntegerArray::from_slice(&[*val])),
         Scalar::Int32(val) => Array::from_int32(IntegerArray::from_slice(&[*val])),
         Scalar::Int64(val) => Array::from_int64(IntegerArray::from_slice(&[*val])),
+        #[cfg(feature = "extended_numeric_types")]
         Scalar::UInt8(val) => Array::from_uint8(IntegerArray::from_slice(&[*val])),
+        #[cfg(feature = "extended_numeric_types")]
         Scalar::UInt16(val) => Array::from_uint16(IntegerArray::from_slice(&[*val])),
         Scalar::UInt32(val) => Array::from_uint32(IntegerArray::from_slice(&[*val])),
         Scalar::UInt64(val) => Array::from_uint64(IntegerArray::from_slice(&[*val])),

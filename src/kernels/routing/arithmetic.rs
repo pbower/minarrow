@@ -120,6 +120,7 @@ pub fn scalar_arithmetic(
         (Scalar::UInt64(l), Scalar::UInt64(r), Divide) => Scalar::UInt64(l / r),
         // String concatenation
         (Scalar::String32(l), Scalar::String32(r), Add) => Scalar::String32(format!("{}{}", l, r)),
+        #[cfg(feature = "large_string")]
         (Scalar::String64(l), Scalar::String64(r), Add) => Scalar::String64(format!("{}{}", l, r)),
 
         // DateTime types
@@ -373,6 +374,7 @@ fn arithmetic_dispatch(
                 )))
             }
         }
+        #[cfg(feature = "large_string")]
         (Array::TextArray(TextArray::String64(l)), Array::TextArray(TextArray::String64(r))) => {
             if matches!(op, ArithmeticOperator::Add) {
                 Ok(Array::TextArray(TextArray::String64(

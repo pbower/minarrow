@@ -1984,6 +1984,7 @@ impl Pow<Scalar> for Scalar {
                 );
                 base.pow(b)
             }
+            #[cfg(feature = "large_string")]
             (String64(a), b) => {
                 let base = Scalar::Float64(
                     a.parse::<f64>()
@@ -1998,6 +1999,7 @@ impl Pow<Scalar> for Scalar {
                 );
                 a.pow(exp)
             }
+            #[cfg(feature = "large_string")]
             (a, String64(b)) => {
                 let exp = Scalar::Float64(
                     b.parse::<f64>()
