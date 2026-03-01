@@ -796,10 +796,14 @@ impl TryFrom<Value> for Array {
     fn try_from(v: Value) -> Result<Self, Self::Error> {
         match v {
             Value::Array(inner) => Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone())),
+            #[cfg(feature = "views")]
+            Value::ArrayView(av) => {
+                Ok(Arc::try_unwrap(av).unwrap_or_else(|arc| (*arc).clone()).to_array())
+            }
             _ => Err(MinarrowError::TypeError {
-                from: "Value",
+                from: value_variant_name(&v),
                 to: "Array",
-                message: Some("Value type mismatch".to_owned()),
+                message: None,
             }),
         }
     }
