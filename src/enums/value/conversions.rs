@@ -797,9 +797,9 @@ impl TryFrom<Value> for Array {
         match v {
             Value::Array(inner) => Ok(Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone())),
             #[cfg(feature = "views")]
-            Value::ArrayView(av) => {
-                Ok(Arc::try_unwrap(av).unwrap_or_else(|arc| (*arc).clone()).to_array())
-            }
+            Value::ArrayView(av) => Ok(Arc::try_unwrap(av)
+                .unwrap_or_else(|arc| (*arc).clone())
+                .to_array()),
             _ => Err(MinarrowError::TypeError {
                 from: value_variant_name(&v),
                 to: "Array",
