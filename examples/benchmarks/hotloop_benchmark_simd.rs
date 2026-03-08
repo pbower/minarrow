@@ -26,7 +26,7 @@ pub(crate) const SIMD_LANES: usize = 4;
 mod benchmarks_simd {
 
     use std::hint::black_box;
-    use std::simd::{LaneCount, Simd, SupportedLaneCount};
+    use std::simd::Simd;
     use std::sync::Arc;
     use std::time::Instant;
 
@@ -40,8 +40,6 @@ mod benchmarks_simd {
 
     #[inline(always)]
     fn simd_sum_i64<const LANES: usize>(data: &[i64]) -> i64
-    where
-        LaneCount<LANES>: SupportedLaneCount,
     {
         let n = data.len();
         let simd_width = LANES;
@@ -104,8 +102,6 @@ mod benchmarks_simd {
 
     #[inline(always)]
     fn simd_sum_f64<const LANES: usize>(data: &[f64]) -> f64
-    where
-        LaneCount<LANES>: SupportedLaneCount,
     {
         let n = data.len();
         let simd_width = LANES;

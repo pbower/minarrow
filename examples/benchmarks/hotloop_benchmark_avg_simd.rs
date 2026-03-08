@@ -22,7 +22,7 @@ pub(crate) const ITERATIONS: usize = 1000;
 #[cfg(feature = "cast_arrow")]
 mod avg_simd {
     use std::hint::black_box;
-    use std::simd::{LaneCount, Simd, SupportedLaneCount};
+    use std::simd::Simd;
     use std::sync::Arc;
     use std::time::Instant;
 
@@ -37,8 +37,6 @@ mod avg_simd {
 
     #[inline(always)]
     fn simd_sum_i64<const LANES: usize>(data: &[i64]) -> i64
-    where
-        LaneCount<LANES>: SupportedLaneCount,
     {
         let n = data.len();
         let simd_width = LANES;
@@ -99,8 +97,6 @@ mod avg_simd {
 
     #[inline(always)]
     fn simd_sum_f64<const LANES: usize>(data: &[f64]) -> f64
-    where
-        LaneCount<LANES>: SupportedLaneCount,
     {
         let n = data.len();
         let simd_width = LANES;

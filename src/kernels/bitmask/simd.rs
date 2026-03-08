@@ -45,7 +45,7 @@
 //! if !eq_mask.all() { return false; }
 //! ```
 
-use core::simd::{LaneCount, Simd, SupportedLaneCount};
+use core::simd::Simd;
 
 use crate::{Bitmask, BitmaskVT};
 
@@ -86,7 +86,7 @@ pub fn bitmask_binop_simd<const LANES: usize>(
     op: LogicalOperator,
 ) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     let (lhs_mask, lhs_off, len) = lhs;
     let (rhs_mask, rhs_off, _) = rhs;
@@ -154,7 +154,7 @@ where
 #[inline(always)]
 pub fn bitmask_unop_simd<const LANES: usize>(src: BitmaskVT<'_>, op: UnaryOperator) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     let (mask, offset, len) = src;
     let mut out = Bitmask::new_set_all(len, false);
@@ -213,7 +213,7 @@ where
 #[inline(always)]
 pub fn and_masks_simd<const LANES: usize>(lhs: BitmaskVT<'_>, rhs: BitmaskVT<'_>) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     bitmask_binop_simd::<LANES>(lhs, rhs, LogicalOperator::And)
 }
@@ -244,7 +244,7 @@ where
 #[inline(always)]
 pub fn or_masks_simd<const LANES: usize>(lhs: BitmaskVT<'_>, rhs: BitmaskVT<'_>) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     bitmask_binop_simd::<LANES>(lhs, rhs, LogicalOperator::Or)
 }
@@ -275,7 +275,7 @@ where
 #[inline(always)]
 pub fn xor_masks_simd<const LANES: usize>(lhs: BitmaskVT<'_>, rhs: BitmaskVT<'_>) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     bitmask_binop_simd::<LANES>(lhs, rhs, LogicalOperator::Xor)
 }
@@ -305,7 +305,7 @@ where
 #[inline(always)]
 pub fn not_mask_simd<const LANES: usize>(src: BitmaskVT<'_>) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     bitmask_unop_simd::<LANES>(src, UnaryOperator::Not)
 }
@@ -314,7 +314,7 @@ where
 #[inline]
 pub fn in_mask_simd<const LANES: usize>(lhs: BitmaskVT<'_>, rhs: BitmaskVT<'_>) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     let (lhs_mask, lhs_off, len) = lhs;
     let (rhs_mask, rhs_off, rlen) = rhs;
@@ -373,7 +373,7 @@ where
 #[inline]
 pub fn not_in_mask_simd<const LANES: usize>(lhs: BitmaskVT<'_>, rhs: BitmaskVT<'_>) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     let mask = in_mask_simd::<LANES>(lhs, rhs);
     not_mask_simd::<LANES>((&mask, 0, mask.len))
@@ -383,7 +383,7 @@ where
 #[inline]
 pub fn eq_mask_simd<const LANES: usize>(a: BitmaskVT<'_>, b: BitmaskVT<'_>) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     let (am, ao, len) = a;
     let (bm, bo, blen) = b;
@@ -462,7 +462,7 @@ where
 #[inline]
 pub fn ne_mask_simd<const LANES: usize>(a: BitmaskVT<'_>, b: BitmaskVT<'_>) -> Bitmask
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     !eq_mask_simd::<LANES>(a, b)
 }
@@ -485,7 +485,7 @@ where
 #[inline]
 pub fn all_ne_mask_simd<const LANES: usize>(a: BitmaskVT<'_>, b: BitmaskVT<'_>) -> bool
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     !all_eq_mask_simd::<LANES>(a, b)
 }
@@ -508,7 +508,7 @@ where
 #[inline]
 pub fn all_eq_mask_simd<const LANES: usize>(a: BitmaskVT<'_>, b: BitmaskVT<'_>) -> bool
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     let (am, ao, len) = a;
 
@@ -591,7 +591,7 @@ where
 #[inline]
 pub fn popcount_mask_simd<const LANES: usize>(m: BitmaskVT<'_>) -> usize
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     let (mask, offset, len) = m;
     let n_words = (len + 63) / 64;
@@ -636,7 +636,7 @@ where
 #[inline]
 pub fn all_true_mask_simd<const LANES: usize>(mask: &Bitmask) -> bool
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     if mask.len < 64 {
         for i in 0..mask.len {
@@ -683,7 +683,7 @@ where
 /// Returns true if all bits in the mask are set to (0).
 pub fn all_false_mask_simd<const LANES: usize>(mask: &Bitmask) -> bool
 where
-    LaneCount<LANES>: SupportedLaneCount,
+
 {
     if mask.len < 64 {
         for i in 0..mask.len {

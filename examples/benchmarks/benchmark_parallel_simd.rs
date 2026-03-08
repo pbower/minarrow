@@ -15,7 +15,7 @@
 mod parallel_simd {
     use std::hint::black_box;
     use std::simd::num::{SimdFloat, SimdInt};
-    use std::simd::{LaneCount, Simd, SupportedLaneCount};
+    use std::simd::Simd;
     use std::time::Instant;
 
     use minarrow::{Buffer, Vec64};
@@ -28,8 +28,6 @@ mod parallel_simd {
     // SIMD chunk sum for i64
     #[inline(always)]
     fn simd_sum_i64<const LANES: usize>(data: &[i64]) -> i64
-    where
-        LaneCount<LANES>: SupportedLaneCount,
     {
         let n = data.len();
         let simd_width = LANES;
@@ -50,8 +48,6 @@ mod parallel_simd {
     // SIMD chunk sum for f64
     #[inline(always)]
     fn simd_sum_f64<const LANES: usize>(data: &[f64]) -> f64
-    where
-        LaneCount<LANES>: SupportedLaneCount,
     {
         let n = data.len();
         let simd_width = LANES;
