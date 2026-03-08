@@ -201,7 +201,6 @@ pub fn simd_mask<T: MaskElement, const N: usize>(
     len: usize,
 ) -> Mask<T, N>
 where
-
 {
     let mut bits = [false; N];
     for l in 0..N {

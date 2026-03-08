@@ -45,7 +45,6 @@ pub fn int_dense_body_simd<T, const LANES: usize>(
     out: &mut [T],
 ) where
     T: Copy + One + PrimInt + ToPrimitive + Zero + SimdElement + WrappingMul,
-
     Simd<T, LANES>: Add<Output = Simd<T, LANES>>
         + Sub<Output = Simd<T, LANES>>
         + Mul<Output = Simd<T, LANES>>
@@ -114,7 +113,6 @@ pub fn int_masked_body_simd<T, const LANES: usize>(
         + WrappingAdd
         + WrappingMul
         + WrappingSub,
-
     Simd<T, LANES>: Add<Output = Simd<T, LANES>>
         + SimdPartialEq<Mask = Mask<<T as SimdElement>::Mask, LANES>>
         + Sub<Output = Simd<T, LANES>>
@@ -324,9 +322,7 @@ pub fn float_masked_body_f32_simd<const LANES: usize>(
     mask: &Bitmask,
     out: &mut [f32],
     out_mask: &mut Bitmask,
-) where
-
-{
+) {
     type M = <f32 as SimdElement>::Mask;
 
     let n = lhs.len();
@@ -395,9 +391,7 @@ pub fn float_masked_body_f64_simd<const LANES: usize>(
     mask: &Bitmask,
     out: &mut [f64],
     out_mask: &mut Bitmask,
-) where
-
-{
+) {
     type M = <f64 as SimdElement>::Mask;
 
     let n = lhs.len();
@@ -467,9 +461,7 @@ pub fn float_dense_body_f32_simd<const LANES: usize>(
     lhs: &[f32],
     rhs: &[f32],
     out: &mut [f32],
-) where
-
-{
+) {
     let n = lhs.len();
     let mut i = 0;
     while i + LANES <= n {
@@ -509,9 +501,7 @@ pub fn float_dense_body_f64_simd<const LANES: usize>(
     lhs: &[f64],
     rhs: &[f64],
     out: &mut [f64],
-) where
-
-{
+) {
     let n = lhs.len();
     let mut i = 0;
     while i + LANES <= n {
@@ -552,9 +542,7 @@ pub fn fma_masked_body_f32_simd<const LANES: usize>(
     mask: &Bitmask,
     out: &mut [f32],
     out_mask: &mut Bitmask,
-) where
-
-{
+) {
     use core::simd::{Mask, Simd};
 
     let n = lhs.len();
@@ -612,9 +600,7 @@ pub fn fma_masked_body_f64_simd<const LANES: usize>(
     mask: &Bitmask,
     out: &mut [f64],
     out_mask: &mut Bitmask,
-) where
-
-{
+) {
     use core::simd::{Mask, Simd};
 
     let n = lhs.len();
@@ -671,9 +657,7 @@ pub fn fma_dense_body_f32_simd<const LANES: usize>(
     rhs: &[f32],
     acc: &[f32],
     out: &mut [f32],
-) where
-
-{
+) {
     use core::simd::Simd;
 
     let n = lhs.len();
@@ -701,9 +685,7 @@ pub fn fma_dense_body_f64_simd<const LANES: usize>(
     rhs: &[f64],
     acc: &[f64],
     out: &mut [f64],
-) where
-
-{
+) {
     use core::simd::Simd;
 
     let n = lhs.len();
