@@ -7,7 +7,7 @@
 use ahash::AHashSet as HashSet;
 #[cfg(not(feature = "fast_hash"))]
 use std::collections::HashSet;
-use std::simd::{LaneCount, Mask, MaskElement, SupportedLaneCount};
+use std::simd::{Mask, MaskElement};
 use std::{fmt::Display, sync::Arc};
 
 use crate::enums::error::KernelError;
@@ -201,7 +201,6 @@ pub fn simd_mask<T: MaskElement, const N: usize>(
     len: usize,
 ) -> Mask<T, N>
 where
-    LaneCount<N>: SupportedLaneCount,
 {
     let mut bits = [false; N];
     for l in 0..N {
