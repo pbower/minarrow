@@ -224,10 +224,12 @@ fn capsule_to_ptr(capsule: &Bound<PyAny>, name: &std::ffi::CStr) -> PyMinarrowRe
 
 // Public import functions
 
-/// Converts a PyArrow Array (or any Arrow-compatible Python object) to a
-/// MinArrow FieldArray.
+/// Converts a PyArrow Array, pd.Series, pl.Series, or any Arrow-compatible
+/// Python object to a MinArrow FieldArray.
 ///
-/// Tries `__arrow_c_array__` first, then falls back to `_export_to_c`.
+/// Tries `__arrow_c_array__` first, then `__arrow_c_stream__` for objects
+/// that only expose a stream interface e.g. pandas and Polars Series, then
+/// falls back to the legacy `_export_to_c` approach.
 ///
 /// # Arguments
 /// * `obj` - A Python object implementing the Arrow array interface
@@ -235,9 +237,33 @@ fn capsule_to_ptr(capsule: &Bound<PyAny>, name: &std::ffi::CStr) -> PyMinarrowRe
 /// # Returns
 /// * `PyMinarrowResult<FieldArray>` - The converted MinArrow FieldArray
 pub fn array_to_rust(obj: &Bound<PyAny>) -> PyMinarrowResult<FieldArray> {
-    // Try PyCapsule protocol first
+    // Try PyCapsule array protocol first
     if let Some(result) = try_capsule_array(obj) {
         return result;
+    }
+
+    // Try PyCapsule stream protocol for objects like pd.Series / pl.Series
+    // that expose __arrow_c_stream__ but not __arrow_c_array__
+    if let Some(result) = try_capsule_array_stream(obj) {
+        let (arrays, field) = result?;
+        if arrays.is_empty() {
+            return Ok(FieldArray::new(field, minarrow::Array::Null));
+        }
+        if arrays.len() == 1 {
+            let array = Arc::try_unwrap(arrays.into_iter().next().unwrap())
+                .unwrap_or_else(|arc| (*arc).clone());
+            return Ok(FieldArray::new(field, array));
+        }
+        // Concatenate multiple chunks into a single array
+        use minarrow::Concatenate;
+        let mut iter = arrays.into_iter();
+        let first = Arc::try_unwrap(iter.next().unwrap())
+            .unwrap_or_else(|arc| (*arc).clone());
+        let combined = iter.fold(first, |acc, chunk| {
+            let arr = Arc::try_unwrap(chunk).unwrap_or_else(|arc| (*arc).clone());
+            acc.concat(arr).expect("Failed to concatenate array chunks")
+        });
+        return Ok(FieldArray::new(field, combined));
     }
 
     // Fall back to _export_to_c approach

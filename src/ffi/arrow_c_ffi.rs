@@ -2387,7 +2387,9 @@ pub unsafe fn import_record_batch_stream_with_metadata(
 /// imported arrays along with the field metadata.
 ///
 /// Uses the zero-copy import path since each yielded array is independently
-/// owned.
+/// owned. The stream schema is kept alive for the duration of the import so
+/// that dictionary-encoded arrays can reference it directly, avoiding the need
+/// to reconstruct synthetic schemas per chunk.
 ///
 /// # Safety
 /// `stream` must be a valid, non-null pointer to an initialised ArrowArrayStream.
@@ -2405,15 +2407,12 @@ pub unsafe fn import_array_stream(
             rc
         );
 
-        // Extract complete field including metadata before releasing the schema
-        let field = field_from_c_schema(&schema_c);
+        // Extract complete field including metadata
+        let mut field = field_from_c_schema(&schema_c);
 
-        // Release the schema as we have extracted what we need
-        if let Some(release) = schema_c.release {
-            release(&mut schema_c as *mut ArrowSchema);
-        }
-
-        // 2. Consume arrays
+        // 2. Consume arrays using the original stream schema directly.
+        // This is essential for dictionary-encoded arrays where import_categorical
+        // needs schema_c.dictionary to describe the dictionary value type.
         let mut arrays = Vec::new();
         let get_next = ((*stream).get_next).expect("stream has no get_next callback");
 
@@ -2430,30 +2429,27 @@ pub unsafe fn import_array_stream(
                 break;
             }
 
-            // Create schema for this array to import with ownership
-            let schema_box = {
-                let fmt_cstr = fmt_c(field.dtype.clone());
-                let name_cstr = CString::new(field.name.clone()).unwrap_or_default();
-                let flags = if field.nullable { 2 } else { 0 };
-                Box::new(ArrowSchema {
-                    format: fmt_cstr.into_raw(),
-                    name: name_cstr.into_raw(),
-                    metadata: ptr::null(),
-                    flags,
-                    n_children: 0,
-                    children: ptr::null_mut(),
-                    dictionary: ptr::null_mut(),
-                    release: Some(release_arrow_schema),
-                    private_data: ptr::null_mut(),
-                })
-            };
-
             let arr_box = Box::new(arr);
-            let (imported, _) = import_from_c_owned(arr_box, schema_box);
+            let imported = import_array_zero_copy(
+                arr_box,
+                field.dtype.clone(),
+                &schema_c as *const ArrowSchema,
+            );
             arrays.push(imported);
         }
 
-        // 3. Release the stream
+        // Utf8View is stored internally as String since the data is
+        // restructured during import from views to offsets+data.
+        if field.dtype == ArrowType::Utf8View {
+            field.dtype = ArrowType::String;
+        }
+
+        // 3. Release the schema now that all chunks have been imported
+        if let Some(release) = schema_c.release {
+            release(&mut schema_c as *mut ArrowSchema);
+        }
+
+        // 4. Release the stream
         if let Some(release) = (*stream).release {
             release(stream);
         }
@@ -2463,6 +2459,10 @@ pub unsafe fn import_array_stream(
 }
 
 /// Extracts a complete Field from an ArrowSchema, including metadata.
+///
+/// When the schema has a non-null `dictionary` pointer, the field is recognised
+/// as dictionary-encoded and the returned ArrowType is `Dictionary(...)` rather
+/// than the raw index type.
 ///
 /// # Safety
 /// `schema` must point to a valid ArrowSchema with valid name and format pointers.
@@ -2476,7 +2476,29 @@ unsafe fn field_from_c_schema(schema: &ArrowSchema) -> crate::Field {
     };
     let nullable = (schema.flags & 2) != 0;
     let fmt = unsafe { std::ffi::CStr::from_ptr(schema.format).to_bytes() };
-    let dtype = parse_arrow_format(fmt);
+
+    let dtype = if !schema.dictionary.is_null() {
+        // Dictionary-encoded: format string describes the index type, the
+        // dictionary field describes the value type.
+        use crate::ffi::arrow_dtype::CategoricalIndexType;
+        let index_type = match fmt {
+            #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+            b"c" | b"C" => CategoricalIndexType::UInt8,
+            #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+            b"s" | b"S" => CategoricalIndexType::UInt16,
+            b"i" | b"I" => CategoricalIndexType::UInt32,
+            #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
+            b"l" | b"L" => CategoricalIndexType::UInt64,
+            _ => panic!(
+                "Unsupported dictionary index format: {:?}",
+                std::str::from_utf8(fmt).unwrap_or("??")
+            ),
+        };
+        ArrowType::Dictionary(index_type)
+    } else {
+        parse_arrow_format(fmt)
+    };
+
     let metadata = unsafe { decode_arrow_metadata(schema.metadata) };
     crate::Field::new(name, dtype, nullable, metadata)
 }
