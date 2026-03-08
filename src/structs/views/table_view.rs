@@ -269,6 +269,25 @@ impl TableV {
         }
     }
 
+    /// Apply a transformation to each column view, producing a new table.
+    ///
+    /// The closure receives the field and column view directly without
+    /// materialisation. To pass a column through unchanged, materialise
+    /// with `view.to_array()`. To transform, operate on the view and
+    /// return the result as a FieldArray.
+    pub fn apply_cols<E>(
+        &self,
+        mut f: impl FnMut(&Arc<Field>, &ArrayV) -> Result<FieldArray, E>,
+    ) -> Result<Table, E> {
+        let cols = self
+            .fields
+            .iter()
+            .zip(self.cols.iter())
+            .map(|(field, col_view)| f(field, col_view))
+            .collect::<Result<Vec<_>, E>>()?;
+        Ok(Table::new(self.name.clone(), Some(cols)))
+    }
+
     /// Gather specific rows from an ArrayV window
     #[cfg(feature = "select")]
     fn gather_rows_from_window(&self, window: &ArrayV, row_indices: &[usize]) -> Option<Array> {
