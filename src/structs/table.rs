@@ -580,7 +580,7 @@ impl Table {
             .iter()
             .map(|fa| Column::new(fa.field.name.clone().into(), fa.to_polars()))
             .collect::<Vec<_>>();
-        DataFrame::new(cols).expect("DataFrame build failed")
+        DataFrame::new(self.n_rows, cols).expect("DataFrame build failed")
     }
 }
 

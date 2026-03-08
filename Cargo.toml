@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
@@ -23,12 +23,12 @@ description = "Apache Arrow-compatible, Rust-first columnar data library for hig
 
 # Arrow and Polars are for optional to/from_apache_arrow() and to/from_polars() via the optional
 # `cast_arrow` and `cast_polars` features.
-arrow = { version = "55.2.0", default-features = false, features = [
+arrow = { version = "58.0.0", default-features = false, features = [
     "ffi",
     "prettyprint",
 ], optional = true }
-arrow-schema = { version = "55.2.0", features = ["ffi"], optional = true }
-polars = { version = "0.50.0", features = [
+arrow-schema = { version = "58.0.0", features = ["ffi"], optional = true }
+polars = { version = "0.53.0", features = [
     # Core needed for Series/DataFrame
     "lazy",
     "dtype-categorical",
@@ -40,21 +40,21 @@ polars = { version = "0.50.0", features = [
     "performant",
     "fmt",
 ], optional = true }
-polars-arrow = { version = "0.50.0", optional = true }
+polars-arrow = { version = "0.53.0", optional = true }
 time = { version = "0.3", optional = true, features = ["parsing", "formatting", "macros", "local-offset"] }
-phf = { version = "0.11", features = ["macros"], optional = true }
+phf = { version = "0.13.1", features = ["macros"], optional = true }
 num-traits = "0.2.19"
-rayon = { version = "1.10.0", optional = true }
+rayon = { version = "1.11.0", optional = true }
 snappy = { version = "0.4.0", optional = true }
 zstd = { version = "0.13.3", optional = true }
-ryu = { version = "1.0.20", optional = true }
-memchr = { version = "2.7.5", optional = true }
+ryu = { version = "1.0.23", optional = true }
+memchr = { version = "2.8.0", optional = true }
 ahash = { version = "0.8.12", optional = true }
-regex = { version = "1.11.1", optional = true }
-vec64 = { version = "0.4.1" }
+regex = { version = "1.12.3", optional = true }
+vec64 = { version = "0.4.2" }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8.2", features = ["html_reports"] }
 
 [build-dependencies]
 cc = { version = "1", optional = true }

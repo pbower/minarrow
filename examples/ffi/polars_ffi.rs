@@ -277,7 +277,7 @@ mod polars_roundtrip {
             let s = series_from_arrow(field_name, arrow2_array);
 
             let c = Column::new("TestCol".into(), s.clone());
-            let df = DataFrame::new(vec![c]).expect("build DataFrame");
+            let df = DataFrame::new(s.len(), vec![c]).expect("build DataFrame");
             println!("{df}");
 
             let (out_arr, out_sch) = export_series_to_c(field_name, &s);
