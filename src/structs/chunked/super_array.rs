@@ -959,21 +959,58 @@ impl Consolidate for SuperArray {
     /// Use this when you need contiguous memory for operations or
     /// APIs that require single buffers.
     ///
-    /// Pays a memory re-allocation cost.
+    /// When the `arena` feature is enabled, all buffers are written
+    /// into a single allocation then sliced into typed views. The
+    /// resulting buffers are SharedBuffer-backed; mutations trigger
+    /// copy-on-write.
+    ///
+    /// Without the `arena` feature, falls back to concat fold.
     ///
     /// # Panics
     /// Panics if the SuperArray is empty.
     fn consolidate(self) -> Array {
+        #[cfg(feature = "arena")]
+        {
+            self.consolidate_arena()
+        }
+        #[cfg(not(feature = "arena"))]
+        {
+            self.consolidate_concat()
+        }
+    }
+}
+
+impl SuperArray {
+    /// Concat-based consolidation: folds chunks via `Array::concat`.
+    #[cfg_attr(feature = "arena", allow(dead_code))]
+    fn consolidate_concat(self) -> Array {
         assert!(
             !self.chunks.is_empty(),
             "consolidate() called on empty SuperArray"
         );
 
-        // Use the Concatenate trait to combine all Arrays
         self.chunks
             .into_iter()
             .reduce(|acc, arr| acc.concat(arr).expect("Failed to concatenate arrays"))
             .expect("Expected at least one array")
+    }
+
+    /// Arena-based consolidation: writes all buffers into a single
+    /// allocation, then slices typed views from the frozen SharedBuffer.
+    #[cfg(feature = "arena")]
+    fn consolidate_arena(self) -> Array {
+        assert!(
+            !self.chunks.is_empty(),
+            "consolidate() called on empty SuperArray"
+        );
+
+        if self.chunks.len() == 1 {
+            return self.chunks.into_iter().next().unwrap();
+        }
+
+        let dtype = self.chunks[0].arrow_type();
+        let refs: Vec<&Array> = self.chunks.iter().collect();
+        crate::structs::arena::consolidate_array_arena(&refs, &dtype)
     }
 }
 

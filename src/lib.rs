@@ -118,6 +118,8 @@ pub mod kernels {
 
 /// **Table**, **IntegerArray**, **FloatArray**, **Vec64** - *All the **Low-Level Control**, **Tables** and **Views***.
 pub mod structs {
+    #[cfg(feature = "arena")]
+    pub mod arena;
 
     #[cfg(feature = "chunked")]
     pub mod chunked {
@@ -220,6 +222,8 @@ pub use enums::time_units::{IntervalUnit, TimeUnit};
 #[cfg(feature = "value_type")]
 pub use enums::value::Value;
 
+#[cfg(feature = "arena")]
+pub use structs::arena::{AAMaker, Arena, ArenaRegion};
 pub use structs::bitmask::Bitmask;
 pub use structs::buffer::Buffer;
 #[cfg(feature = "chunked")]

@@ -123,6 +123,41 @@ impl Table {
         }
     }
 
+    /// Build a Table from an Arena and its collected array regions.
+    ///
+    /// Freezes the arena into a SharedBuffer, then reconstructs each
+    /// column as a zero-copy view into the shared allocation. This is
+    /// the read-side complement to `Arena::write_slices` and friends.
+    ///
+    /// Typical use: IPC or streaming ingestion where batch sizes are
+    /// known from message headers, allowing a single arena allocation
+    /// per batch.
+    #[cfg(feature = "arena")]
+    pub fn from_arena(
+        name: String,
+        schema: &[Arc<Field>],
+        arena: crate::structs::arena::Arena,
+        regions: Vec<crate::structs::arena::AAMaker>,
+        n_rows: usize,
+    ) -> Self {
+        let shared = arena.freeze();
+        let cols: Vec<FieldArray> = schema
+            .iter()
+            .zip(regions)
+            .map(|(field, region)| {
+                let array = region.to_array(&field.dtype, &shared, n_rows);
+                let null_count = array.null_count();
+                FieldArray {
+                    field: field.clone(),
+                    array,
+                    null_count,
+                }
+            })
+            .collect();
+
+        Self { cols, n_rows, name }
+    }
+
     /// Adds a column with a name.
     pub fn add_col(&mut self, field_array: FieldArray) {
         let array_len = field_array.len();
@@ -691,6 +726,13 @@ impl Consolidate for Vec<Table> {
     ///
     /// Returns an empty table if the input is empty. For a single table,
     /// returns it directly without copying.
+    ///
+    /// When the `arena` feature is enabled, all column buffers are written
+    /// into a single allocation then sliced into typed views, reducing
+    /// allocation count from O(columns) to O(1). The resulting buffers
+    /// are SharedBuffer-backed; mutations trigger copy-on-write.
+    ///
+    /// Without the `arena` feature, falls back to per-column concat.
     fn consolidate(self) -> Table {
         if self.is_empty() {
             return Table::new_empty();
@@ -699,30 +741,45 @@ impl Consolidate for Vec<Table> {
             return self.into_iter().next().unwrap();
         }
 
-        let n_cols = self[0].cols.len();
-        let mut unified_cols = Vec::with_capacity(n_cols);
-
-        for col_idx in 0..n_cols {
-            let field = self[0].cols[col_idx].field.clone();
-            let mut arr = self[0].cols[col_idx].array.clone();
-            for table in self.iter().skip(1) {
-                arr.concat_array(&table.cols[col_idx].array);
-            }
-            let null_count = arr.null_count();
-            unified_cols.push(FieldArray {
-                field,
-                array: arr,
-                null_count,
-            });
+        #[cfg(feature = "arena")]
+        {
+            let name = self[0].name.clone();
+            let refs: Vec<&Table> = self.iter().collect();
+            crate::structs::arena::consolidate_tables_arena(&refs, name)
         }
-
-        let n_rows = unified_cols.first().map(|c| c.len()).unwrap_or(0);
-        let name = self[0].name.clone();
-        Table {
-            cols: unified_cols,
-            n_rows,
-            name,
+        #[cfg(not(feature = "arena"))]
+        {
+            consolidate_vec_concat(self)
         }
+    }
+}
+
+#[cfg(feature = "chunked")]
+#[cfg(not(feature = "arena"))]
+fn consolidate_vec_concat(tables: Vec<Table>) -> Table {
+    let n_cols = tables[0].cols.len();
+    let mut unified_cols = Vec::with_capacity(n_cols);
+
+    for col_idx in 0..n_cols {
+        let field = tables[0].cols[col_idx].field.clone();
+        let mut arr = tables[0].cols[col_idx].array.clone();
+        for table in tables.iter().skip(1) {
+            arr.concat_array(&table.cols[col_idx].array);
+        }
+        let null_count = arr.null_count();
+        unified_cols.push(FieldArray {
+            field,
+            array: arr,
+            null_count,
+        });
+    }
+
+    let n_rows = unified_cols.first().map(|c| c.len()).unwrap_or(0);
+    let name = tables[0].name.clone();
+    Table {
+        cols: unified_cols,
+        n_rows,
+        name,
     }
 }
 
@@ -1374,6 +1431,244 @@ mod tests {
         assert_eq!(result.n_rows(), 0);
         for col in &result.cols {
             assert_eq!(col.array.len(), 0);
+        }
+    }
+
+    // --- Table::from_arena tests ---
+
+    #[cfg(feature = "arena")]
+    mod arena_tests {
+        use crate::Bitmask;
+        use crate::ffi::arrow_dtype::ArrowType;
+        use crate::structs::arena::{AAMaker, Arena};
+        use crate::structs::field::Field;
+        use crate::structs::table::Table;
+        use crate::traits::masked_array::MaskedArray;
+        use std::sync::Arc;
+
+        #[test]
+        fn test_from_arena_integer_and_float() {
+            let ids: Vec<i32> = vec![10, 20, 30];
+            let prices: Vec<f64> = vec![1.5, 2.5, 3.5];
+
+            let mut arena = Arena::with_capacity(4096);
+            let r_ids = arena.push_slice(&ids);
+            let r_prices = arena.push_slice(&prices);
+
+            let schema = vec![
+                Arc::new(Field::new("id", ArrowType::Int32, false, None)),
+                Arc::new(Field::new("price", ArrowType::Float64, false, None)),
+            ];
+            let regions = vec![
+                AAMaker::Primitive {
+                    data: r_ids,
+                    mask: None,
+                },
+                AAMaker::Primitive {
+                    data: r_prices,
+                    mask: None,
+                },
+            ];
+
+            let table = Table::from_arena("test".into(), &schema, arena, regions, 3);
+            assert_eq!(table.n_rows(), 3);
+            assert_eq!(table.n_cols(), 2);
+            assert_eq!(table.cols[0].field.name, "id");
+            assert_eq!(table.cols[1].field.name, "price");
+
+            // Verify values
+            if let crate::Array::NumericArray(crate::NumericArray::Int32(a)) = &table.cols[0].array
+            {
+                assert_eq!(a.get(0), Some(10));
+                assert_eq!(a.get(2), Some(30));
+            } else {
+                panic!("Expected Int32 array");
+            }
+
+            if let crate::Array::NumericArray(crate::NumericArray::Float64(a)) =
+                &table.cols[1].array
+            {
+                assert_eq!(a.get(0), Some(1.5));
+                assert_eq!(a.get(2), Some(3.5));
+            } else {
+                panic!("Expected Float64 array");
+            }
+        }
+
+        #[test]
+        fn test_from_arena_string_columns() {
+            let strings = ["hello", "world", "foo"];
+            let mut offsets: Vec<u32> = Vec::with_capacity(4);
+            let mut data: Vec<u8> = Vec::new();
+            offsets.push(0);
+            for s in &strings {
+                data.extend_from_slice(s.as_bytes());
+                offsets.push(data.len() as u32);
+            }
+
+            let mut arena = Arena::with_capacity(4096);
+            let r_offsets = arena.push_slice(&offsets);
+            let r_data = arena.push_slice(&data);
+
+            let schema = vec![Arc::new(Field::new("text", ArrowType::String, true, None))];
+            let regions = vec![AAMaker::String {
+                offsets: r_offsets,
+                data: r_data,
+                mask: None,
+            }];
+
+            let table = Table::from_arena("str_test".into(), &schema, arena, regions, 3);
+            assert_eq!(table.n_rows(), 3);
+
+            if let crate::Array::TextArray(
+                crate::enums::collections::text_array::TextArray::String32(a),
+            ) = &table.cols[0].array
+            {
+                assert_eq!(a.get_str(0), Some("hello"));
+                assert_eq!(a.get_str(1), Some("world"));
+                assert_eq!(a.get_str(2), Some("foo"));
+            } else {
+                panic!("Expected String32 array");
+            }
+        }
+
+        #[test]
+        fn test_from_arena_nullable_columns() {
+            let values: Vec<i64> = vec![100, 200, 300, 400];
+            let mut mask = Bitmask::new_set_all(4, true);
+            mask.set(1, false); // second value is null
+            mask.set(3, false); // fourth value is null
+
+            let mut arena = Arena::with_capacity(4096);
+            let r_data = arena.push_slice(&values);
+            let r_mask = arena.push_bitmask(&mask);
+
+            let schema = vec![Arc::new(Field::new("vals", ArrowType::Int64, true, None))];
+            let regions = vec![AAMaker::Primitive {
+                data: r_data,
+                mask: Some(r_mask),
+            }];
+
+            let table = Table::from_arena("nullable".into(), &schema, arena, regions, 4);
+            assert_eq!(table.n_rows(), 4);
+            assert_eq!(table.cols[0].null_count, 2);
+
+            if let crate::Array::NumericArray(crate::NumericArray::Int64(a)) = &table.cols[0].array
+            {
+                assert_eq!(a.get(0), Some(100));
+                assert_eq!(a.get(1), None);
+                assert_eq!(a.get(2), Some(300));
+                assert_eq!(a.get(3), None);
+            } else {
+                panic!("Expected Int64 array");
+            }
+        }
+
+        #[test]
+        fn test_from_arena_boolean_and_categorical() {
+            use crate::ffi::arrow_dtype::CategoricalIndexType;
+            use vec64::Vec64;
+
+            // Boolean column: true, false, true
+            let mut bool_data = Bitmask::new_set_all(3, true);
+            bool_data.set(1, false);
+
+            let mut arena = Arena::with_capacity(4096);
+            let r_bool = arena.push_bitmask(&bool_data);
+
+            // Categorical column
+            let indices: Vec<u32> = vec![0, 1, 0];
+            let r_cat_idx = arena.push_slice(&indices);
+
+            let mut unique = Vec64::new();
+            unique.push("cat_a".to_string());
+            unique.push("cat_b".to_string());
+
+            let schema = vec![
+                Arc::new(Field::new("flag", ArrowType::Boolean, false, None)),
+                Arc::new(Field::new(
+                    "category",
+                    ArrowType::Dictionary(CategoricalIndexType::UInt32),
+                    false,
+                    None,
+                )),
+            ];
+            let regions = vec![
+                AAMaker::Boolean {
+                    data: r_bool,
+                    mask: None,
+                },
+                AAMaker::Categorical {
+                    indices: r_cat_idx,
+                    mask: None,
+                    unique_values: unique,
+                },
+            ];
+
+            let table = Table::from_arena("mixed".into(), &schema, arena, regions, 3);
+            assert_eq!(table.n_rows(), 3);
+            assert_eq!(table.n_cols(), 2);
+
+            if let crate::Array::BooleanArray(a) = &table.cols[0].array {
+                assert_eq!(a.get(0), Some(true));
+                assert_eq!(a.get(1), Some(false));
+                assert_eq!(a.get(2), Some(true));
+            } else {
+                panic!("Expected BooleanArray");
+            }
+
+            if let crate::Array::TextArray(
+                crate::enums::collections::text_array::TextArray::Categorical32(a),
+            ) = &table.cols[1].array
+            {
+                assert_eq!(a.get_str(0), Some("cat_a"));
+                assert_eq!(a.get_str(1), Some("cat_b"));
+                assert_eq!(a.get_str(2), Some("cat_a"));
+            } else {
+                panic!("Expected Categorical32 array");
+            }
+        }
+
+        #[test]
+        fn test_from_arena_shared_buffer_backed() {
+            let col1: Vec<i32> = vec![1, 2, 3];
+            let col2: Vec<f64> = vec![4.0, 5.0, 6.0];
+
+            let mut arena = Arena::with_capacity(4096);
+            let r1 = arena.push_slice(&col1);
+            let r2 = arena.push_slice(&col2);
+
+            let schema = vec![
+                Arc::new(Field::new("a", ArrowType::Int32, false, None)),
+                Arc::new(Field::new("b", ArrowType::Float64, false, None)),
+            ];
+            let regions = vec![
+                AAMaker::Primitive {
+                    data: r1,
+                    mask: None,
+                },
+                AAMaker::Primitive {
+                    data: r2,
+                    mask: None,
+                },
+            ];
+
+            let table = Table::from_arena("shared".into(), &schema, arena, regions, 3);
+
+            // Verify all buffers are SharedBuffer-backed
+            if let crate::Array::NumericArray(crate::NumericArray::Int32(a)) = &table.cols[0].array
+            {
+                assert!(a.data.is_shared());
+            } else {
+                panic!("Expected Int32");
+            }
+            if let crate::Array::NumericArray(crate::NumericArray::Float64(a)) =
+                &table.cols[1].array
+            {
+                assert!(a.data.is_shared());
+            } else {
+                panic!("Expected Float64");
+            }
         }
     }
 }

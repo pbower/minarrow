@@ -156,6 +156,15 @@ pub fn confirm_equal_len(label: &str, a: usize, b: usize) -> Result<(), KernelEr
     Ok(())
 }
 
+/// Round `byte_count` up to the next 64-byte boundary.
+///
+/// Useful for pre-calculating buffer sizes that must honour SIMD or
+/// Arena alignment requirements.
+#[inline(always)]
+pub fn align64(byte_count: usize) -> usize {
+    (byte_count + 63) & !63
+}
+
 /// SIMD Alignment check. Returns true if the slice is properly
 /// 64-byte aligned for SIMD operations, false otherwise.
 #[inline(always)]

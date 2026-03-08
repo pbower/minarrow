@@ -642,11 +642,31 @@ impl Consolidate for SuperTable {
     ///
     /// Uses `self.name` for the resulting table. Rename afterwards if needed.
     ///
-    /// Pays a re-allocation cost per Array.
+    /// When the `arena` feature is enabled, all column buffers are written
+    /// into a single allocation then sliced into typed views, reducing
+    /// allocation count from O(columns) to O(1). The resulting buffers
+    /// are SharedBuffer-backed; mutations trigger copy-on-write.
+    ///
+    /// Without the `arena` feature, falls back to per-column concat.
     ///
     /// # Panics
     /// Panics if the SuperTable is empty.
     fn consolidate(self) -> Table {
+        #[cfg(feature = "arena")]
+        {
+            self.consolidate_arena()
+        }
+        #[cfg(not(feature = "arena"))]
+        {
+            self.consolidate_concat()
+        }
+    }
+}
+
+impl SuperTable {
+    /// Concat-based consolidation: appends batches per column via `concat_array`.
+    #[cfg_attr(feature = "arena", allow(dead_code))]
+    fn consolidate_concat(self) -> Table {
         assert!(
             !self.batches.is_empty(),
             "consolidate() called on empty SuperTable"
@@ -656,7 +676,6 @@ impl Consolidate for SuperTable {
 
         for col_idx in 0..n_cols {
             let field = self.schema[col_idx].clone();
-            // Use first array as base
             let mut arr = self.batches[0].cols[col_idx].array.clone();
             for batch in self.batches.iter().skip(1) {
                 arr.concat_array(&batch.cols[col_idx].array);
@@ -674,6 +693,28 @@ impl Consolidate for SuperTable {
             n_rows: self.n_rows,
             name: self.name,
         }
+    }
+
+    /// Arena-based consolidation: writes all column buffers into a single
+    /// allocation, then slices typed views from the frozen SharedBuffer.
+    /// Reduces allocation count from O(columns) to O(1).
+    #[cfg(feature = "arena")]
+    fn consolidate_arena(self) -> Table {
+        assert!(
+            !self.batches.is_empty(),
+            "consolidate() called on empty SuperTable"
+        );
+
+        // Fast path: single batch, no copying needed
+        if self.batches.len() == 1 {
+            let batch = self.batches.into_iter().next().unwrap();
+            let mut table = Arc::try_unwrap(batch).unwrap_or_else(|arc| (*arc).clone());
+            table.name = self.name;
+            return table;
+        }
+
+        let refs: Vec<&Table> = self.batches.iter().map(|b| b.as_ref()).collect();
+        crate::structs::arena::consolidate_tables_arena(&refs, self.name)
     }
 }
 
@@ -820,7 +861,7 @@ impl From<SuperTableV> for SuperTable {
 mod tests {
     use super::*;
     use crate::ffi::arrow_dtype::ArrowType;
-    use crate::{Array, Field, FieldArray, NumericArray, Table};
+    use crate::{Array, Field, FieldArray, MaskedArray, NumericArray, Table};
 
     fn fa(name: &str, vals: &[i32]) -> FieldArray {
         let arr = Array::from_int32(crate::IntegerArray::<i32>::from_slice(vals));
@@ -1238,6 +1279,515 @@ mod tests {
                 assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
             }
             _ => panic!("Expected Int32 array"),
+        }
+    }
+
+    // --- consolidate_arena tests ---
+
+    #[test]
+    fn test_consolidate_arena_integer_and_float() {
+        use crate::{FloatArray, IntegerArray};
+
+        let fa_i32 = |name: &str, vals: &[i32]| -> FieldArray {
+            let arr = Array::from_int32(IntegerArray::<i32>::from_slice(vals));
+            FieldArray::new(
+                Field::new(name.to_string(), ArrowType::Int32, false, None),
+                arr,
+            )
+        };
+        let fa_f64 = |name: &str, vals: &[f64]| -> FieldArray {
+            let arr = Array::from_float64(FloatArray::<f64>::from_slice(vals));
+            FieldArray::new(
+                Field::new(name.to_string(), ArrowType::Float64, false, None),
+                arr,
+            )
+        };
+
+        let b1 = Arc::new(table(vec![
+            fa_i32("id", &[1, 2, 3]),
+            fa_f64("val", &[1.5, 2.5, 3.5]),
+        ]));
+        let b2 = Arc::new(table(vec![
+            fa_i32("id", &[4, 5]),
+            fa_f64("val", &[4.5, 5.5]),
+        ]));
+        let st = SuperTable::from_batches(vec![b1, b2], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 5);
+        match &result.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4, 5]);
+            }
+            _ => panic!("Expected Int32"),
+        }
+        match &result.cols[1].array {
+            Array::NumericArray(NumericArray::Float64(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1.5, 2.5, 3.5, 4.5, 5.5]);
+            }
+            _ => panic!("Expected Float64"),
+        }
+    }
+
+    #[test]
+    fn test_consolidate_arena_string_columns() {
+        use crate::StringArray;
+
+        let fa_str = |name: &str, vals: &[&str]| -> FieldArray {
+            let arr = Array::from_string32(StringArray::<u32>::from_vec(vals.to_vec(), None));
+            FieldArray::new(
+                Field::new(name.to_string(), ArrowType::String, false, None),
+                arr,
+            )
+        };
+
+        let b1 = Arc::new(table(vec![fa_str("name", &["hello", "world"])]));
+        let b2 = Arc::new(table(vec![fa_str("name", &["foo", "bar", "baz"])]));
+        let st = SuperTable::from_batches(vec![b1, b2], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 5);
+        match &result.cols[0].array {
+            Array::TextArray(crate::TextArray::String32(arr)) => {
+                assert_eq!(
+                    arr.offsets.len(),
+                    6,
+                    "offsets should have n_rows+1 elements"
+                );
+                assert_eq!(arr.len(), 5);
+                assert_eq!(arr.get_str(0), Some("hello"));
+                assert_eq!(arr.get_str(1), Some("world"));
+                assert_eq!(arr.get_str(2), Some("foo"));
+                assert_eq!(arr.get_str(3), Some("bar"));
+                assert_eq!(arr.get_str(4), Some("baz"));
+            }
+            _ => panic!("Expected String32"),
+        }
+    }
+
+    #[test]
+    fn test_consolidate_arena_nullable_columns() {
+        use crate::{Bitmask, Buffer, IntegerArray};
+
+        let fa_nullable = |name: &str, vals: &[i32], nulls: &[bool]| -> FieldArray {
+            let mask = Bitmask::from_bools(nulls);
+            let arr = Array::from_int32(IntegerArray::<i32>::new(
+                Buffer::from_slice(vals),
+                Some(mask),
+            ));
+            FieldArray::new(
+                Field::new(name.to_string(), ArrowType::Int32, true, None),
+                arr,
+            )
+        };
+
+        // batch 1: index 1 is null
+        let b1 = Arc::new(table(vec![fa_nullable(
+            "x",
+            &[10, 0, 30],
+            &[true, false, true],
+        )]));
+        // batch 2: index 0 is null
+        let b2 = Arc::new(table(vec![fa_nullable("x", &[0, 50], &[false, true])]));
+        let st = SuperTable::from_batches(vec![b1, b2], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 5);
+        match &result.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.get(0), Some(10));
+                assert_eq!(arr.get(1), None); // null
+                assert_eq!(arr.get(2), Some(30));
+                assert_eq!(arr.get(3), None); // null
+                assert_eq!(arr.get(4), Some(50));
+            }
+            _ => panic!("Expected Int32"),
+        }
+    }
+
+    #[test]
+    fn test_consolidate_arena_boolean_columns() {
+        use crate::BooleanArray;
+
+        let fa_bool = |name: &str, vals: &[bool]| -> FieldArray {
+            let arr = Array::from_bool(BooleanArray::from_slice(vals));
+            FieldArray::new(
+                Field::new(name.to_string(), ArrowType::Boolean, false, None),
+                arr,
+            )
+        };
+
+        let b1 = Arc::new(table(vec![fa_bool("flag", &[true, false, true])]));
+        let b2 = Arc::new(table(vec![fa_bool("flag", &[false, true])]));
+        let st = SuperTable::from_batches(vec![b1, b2], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 5);
+        match &result.cols[0].array {
+            Array::BooleanArray(arr) => {
+                assert_eq!(arr.data.get(0), true);
+                assert_eq!(arr.data.get(1), false);
+                assert_eq!(arr.data.get(2), true);
+                assert_eq!(arr.data.get(3), false);
+                assert_eq!(arr.data.get(4), true);
+            }
+            _ => panic!("Expected BooleanArray"),
+        }
+    }
+
+    #[test]
+    fn test_consolidate_arena_mixed_types() {
+        use crate::{BooleanArray, FloatArray, IntegerArray, StringArray};
+
+        let b1 = Arc::new(Table {
+            cols: vec![
+                FieldArray::new(
+                    Field::new("id", ArrowType::Int64, false, None),
+                    Array::from_int64(IntegerArray::<i64>::from_slice(&[1, 2])),
+                ),
+                FieldArray::new(
+                    Field::new("score", ArrowType::Float64, false, None),
+                    Array::from_float64(FloatArray::<f64>::from_slice(&[9.5, 8.0])),
+                ),
+                FieldArray::new(
+                    Field::new("name", ArrowType::String, false, None),
+                    Array::from_string32(StringArray::<u32>::from_vec(vec!["alice", "bob"], None)),
+                ),
+                FieldArray::new(
+                    Field::new("active", ArrowType::Boolean, false, None),
+                    Array::from_bool(BooleanArray::from_slice(&[true, false])),
+                ),
+            ],
+            n_rows: 2,
+            name: "batch".into(),
+        });
+        let b2 = Arc::new(Table {
+            cols: vec![
+                FieldArray::new(
+                    Field::new("id", ArrowType::Int64, false, None),
+                    Array::from_int64(IntegerArray::<i64>::from_slice(&[3])),
+                ),
+                FieldArray::new(
+                    Field::new("score", ArrowType::Float64, false, None),
+                    Array::from_float64(FloatArray::<f64>::from_slice(&[7.0])),
+                ),
+                FieldArray::new(
+                    Field::new("name", ArrowType::String, false, None),
+                    Array::from_string32(StringArray::<u32>::from_vec(vec!["charlie"], None)),
+                ),
+                FieldArray::new(
+                    Field::new("active", ArrowType::Boolean, false, None),
+                    Array::from_bool(BooleanArray::from_slice(&[true])),
+                ),
+            ],
+            n_rows: 1,
+            name: "batch".into(),
+        });
+        let st = SuperTable::from_batches(vec![b1, b2], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 3);
+        assert_eq!(result.cols.len(), 4);
+
+        // Verify int64 column
+        match &result.cols[0].array {
+            Array::NumericArray(NumericArray::Int64(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1i64, 2, 3]);
+            }
+            _ => panic!("Expected Int64"),
+        }
+        // Verify float64 column
+        match &result.cols[1].array {
+            Array::NumericArray(NumericArray::Float64(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[9.5, 8.0, 7.0]);
+            }
+            _ => panic!("Expected Float64"),
+        }
+        // Verify string column
+        match &result.cols[2].array {
+            Array::TextArray(crate::TextArray::String32(arr)) => {
+                assert_eq!(arr.get_str(0), Some("alice"));
+                assert_eq!(arr.get_str(1), Some("bob"));
+                assert_eq!(arr.get_str(2), Some("charlie"));
+            }
+            _ => panic!("Expected String32"),
+        }
+        // Verify boolean column
+        match &result.cols[3].array {
+            Array::BooleanArray(arr) => {
+                assert_eq!(arr.data.get(0), true);
+                assert_eq!(arr.data.get(1), false);
+                assert_eq!(arr.data.get(2), true);
+            }
+            _ => panic!("Expected BooleanArray"),
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "arena")]
+    fn test_consolidate_arena_shared_buffers() {
+        let b1 = Arc::new(table(vec![fa("x", &[1, 2, 3])]));
+        let b2 = Arc::new(table(vec![fa("x", &[4, 5])]));
+        let st = SuperTable::from_batches(vec![b1, b2], None);
+        let result = st.consolidate();
+
+        // All output buffers should be SharedBuffer-backed
+        match &result.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert!(arr.data.is_shared(), "Data buffer should be shared");
+            }
+            _ => panic!("Expected Int32"),
+        }
+    }
+
+    #[test]
+    fn test_consolidate_arena_single_batch() {
+        let batch = Arc::new(table(vec![fa("x", &[10, 20, 30])]));
+        let st = SuperTable::from_batches(vec![batch], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 3);
+        match &result.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[10, 20, 30]);
+            }
+            _ => panic!("Expected Int32"),
+        }
+    }
+
+    #[test]
+    /// Verifies that arena-based and concat-based consolidation produce
+    /// identical results for integer, float, and string columns.
+    #[cfg(feature = "arena")]
+    fn test_consolidate_arena_equivalence_with_consolidate() {
+        use crate::{FloatArray, IntegerArray, StringArray};
+
+        // Build identical SuperTables for both paths
+        let make_st = || {
+            let fa_i32 = |name: &str, vals: &[i32]| -> FieldArray {
+                let arr = Array::from_int32(IntegerArray::<i32>::from_slice(vals));
+                FieldArray::new(
+                    Field::new(name.to_string(), ArrowType::Int32, false, None),
+                    arr,
+                )
+            };
+            let fa_f64 = |name: &str, vals: &[f64]| -> FieldArray {
+                let arr = Array::from_float64(FloatArray::<f64>::from_slice(vals));
+                FieldArray::new(
+                    Field::new(name.to_string(), ArrowType::Float64, false, None),
+                    arr,
+                )
+            };
+            let fa_str = |name: &str, vals: &[&str]| -> FieldArray {
+                let arr = Array::from_string32(StringArray::<u32>::from_vec(vals.to_vec(), None));
+                FieldArray::new(
+                    Field::new(name.to_string(), ArrowType::String, false, None),
+                    arr,
+                )
+            };
+
+            let b1 = Arc::new(Table {
+                cols: vec![
+                    fa_i32("id", &[1, 2, 3]),
+                    fa_f64("val", &[1.5, 2.5, 3.5]),
+                    fa_str("label", &["a", "bb", "ccc"]),
+                ],
+                n_rows: 3,
+                name: "batch".into(),
+            });
+            let b2 = Arc::new(Table {
+                cols: vec![
+                    fa_i32("id", &[4, 5]),
+                    fa_f64("val", &[4.5, 5.5]),
+                    fa_str("label", &["dddd", "e"]),
+                ],
+                n_rows: 2,
+                name: "batch".into(),
+            });
+            SuperTable::from_batches(vec![b1, b2], None)
+        };
+
+        let result_concat = make_st().consolidate_concat();
+        let result_arena = make_st().consolidate_arena();
+
+        assert_eq!(result_concat.n_rows, result_arena.n_rows);
+        assert_eq!(result_concat.cols.len(), result_arena.cols.len());
+
+        // Compare integer column
+        match (&result_concat.cols[0].array, &result_arena.cols[0].array) {
+            (
+                Array::NumericArray(NumericArray::Int32(a)),
+                Array::NumericArray(NumericArray::Int32(b)),
+            ) => {
+                assert_eq!(a.data.as_slice(), b.data.as_slice());
+            }
+            _ => panic!("Mismatched types for column 0"),
+        }
+        // Compare float column
+        match (&result_concat.cols[1].array, &result_arena.cols[1].array) {
+            (
+                Array::NumericArray(NumericArray::Float64(a)),
+                Array::NumericArray(NumericArray::Float64(b)),
+            ) => {
+                assert_eq!(a.data.as_slice(), b.data.as_slice());
+            }
+            _ => panic!("Mismatched types for column 1"),
+        }
+        // Compare string column
+        match (&result_concat.cols[2].array, &result_arena.cols[2].array) {
+            (
+                Array::TextArray(crate::TextArray::String32(a)),
+                Array::TextArray(crate::TextArray::String32(b)),
+            ) => {
+                for i in 0..5 {
+                    assert_eq!(a.get_str(i), b.get_str(i), "String mismatch at index {i}");
+                }
+            }
+            _ => panic!("Mismatched types for column 2"),
+        }
+    }
+
+    #[test]
+    fn test_consolidate_arena_categorical() {
+        use crate::CategoricalArray;
+
+        let fa_cat = |name: &str, vals: &[&str]| -> FieldArray {
+            let arr =
+                Array::from_categorical32(CategoricalArray::<u32>::from_vec(vals.to_vec(), None));
+            FieldArray::new(
+                Field::new(
+                    name.to_string(),
+                    ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt32),
+                    false,
+                    None,
+                ),
+                arr,
+            )
+        };
+
+        let b1 = Arc::new(table(vec![fa_cat("cat", &["a", "b", "a"])]));
+        let b2 = Arc::new(table(vec![fa_cat("cat", &["a", "b"])]));
+        let st = SuperTable::from_batches(vec![b1, b2], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 5);
+        match &result.cols[0].array {
+            Array::TextArray(crate::TextArray::Categorical32(arr)) => {
+                assert_eq!(arr.get_str(0), Some("a"));
+                assert_eq!(arr.get_str(1), Some("b"));
+                assert_eq!(arr.get_str(2), Some("a"));
+                assert_eq!(arr.get_str(3), Some("a"));
+                assert_eq!(arr.get_str(4), Some("b"));
+            }
+            _ => panic!("Expected Categorical32"),
+        }
+    }
+
+    #[test]
+    fn test_consolidate_arena_nullable_strings() {
+        use crate::{Bitmask, StringArray};
+
+        let fa_nullable_str = |name: &str, vals: &[&str], nulls: &[bool]| -> FieldArray {
+            let mask = Bitmask::from_bools(nulls);
+            let arr = Array::from_string32(StringArray::<u32>::from_vec(vals.to_vec(), Some(mask)));
+            FieldArray::new(
+                Field::new(name.to_string(), ArrowType::String, true, None),
+                arr,
+            )
+        };
+
+        let b1 = Arc::new(table(vec![fa_nullable_str(
+            "s",
+            &["hello", "", "world"],
+            &[true, false, true],
+        )]));
+        let b2 = Arc::new(table(vec![fa_nullable_str(
+            "s",
+            &["", "bar"],
+            &[false, true],
+        )]));
+        let st = SuperTable::from_batches(vec![b1, b2], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 5);
+        match &result.cols[0].array {
+            Array::TextArray(crate::TextArray::String32(arr)) => {
+                assert!(!arr.is_null(0));
+                assert!(arr.is_null(1));
+                assert!(!arr.is_null(2));
+                assert!(arr.is_null(3));
+                assert!(!arr.is_null(4));
+                assert_eq!(arr.get_str(0), Some("hello"));
+                assert_eq!(arr.get_str(2), Some("world"));
+                assert_eq!(arr.get_str(4), Some("bar"));
+            }
+            _ => panic!("Expected String32"),
+        }
+    }
+
+    #[test]
+    fn test_consolidate_arena_three_batches() {
+        let b1 = Arc::new(table(vec![fa("x", &[1, 2])]));
+        let b2 = Arc::new(table(vec![fa("x", &[3])]));
+        let b3 = Arc::new(table(vec![fa("x", &[4, 5, 6])]));
+        let st = SuperTable::from_batches(vec![b1, b2, b3], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 6);
+        match &result.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1, 2, 3, 4, 5, 6]);
+            }
+            _ => panic!("Expected Int32"),
+        }
+    }
+
+    #[test]
+    fn test_consolidate_arena_preserves_name() {
+        let b1 = Arc::new(table(vec![fa("x", &[1, 2])]));
+        let b2 = Arc::new(table(vec![fa("x", &[3])]));
+        let mut st = SuperTable::from_batches(vec![b1, b2], None);
+        st.name = "my_table".to_string();
+        let result = st.consolidate();
+        assert_eq!(result.name, "my_table");
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_consolidate_arena_datetime() {
+        use crate::enums::collections::temporal_array::TemporalArray;
+        use crate::{DatetimeArray, TimeUnit};
+
+        let fa_dt = |name: &str, vals: &[i64]| -> FieldArray {
+            let arr =
+                Array::TemporalArray(TemporalArray::Datetime64(Arc::new(DatetimeArray::new(
+                    crate::Buffer::from_vec64(vals.into()),
+                    None,
+                    Some(TimeUnit::Milliseconds),
+                ))));
+            FieldArray::new(
+                Field::new(
+                    name.to_string(),
+                    ArrowType::Timestamp(TimeUnit::Milliseconds, None),
+                    false,
+                    None,
+                ),
+                arr,
+            )
+        };
+
+        let b1 = Arc::new(table(vec![fa_dt("ts", &[1000, 2000, 3000])]));
+        let b2 = Arc::new(table(vec![fa_dt("ts", &[4000, 5000])]));
+        let st = SuperTable::from_batches(vec![b1, b2], None);
+        let result = st.consolidate();
+
+        assert_eq!(result.n_rows, 5);
+        match &result.cols[0].array {
+            Array::TemporalArray(TemporalArray::Datetime64(arr)) => {
+                assert_eq!(arr.data.as_slice(), &[1000i64, 2000, 3000, 4000, 5000]);
+                assert_eq!(arr.time_unit, TimeUnit::Milliseconds);
+            }
+            _ => panic!("Expected Datetime64"),
         }
     }
 }

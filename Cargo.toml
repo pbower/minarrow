@@ -1,6 +1,6 @@
 [package]
 name = "minarrow"
-version = "0.8.3"
+version = "0.8.4"
 edition = "2024"
 authors = ['Peter G. Bower']
 build = "build.rs"
@@ -185,6 +185,12 @@ hash = ["scalar_type"]
 
 # Adds byte size trait for best-effort size calculation
 size = []
+
+# Arena bump allocator for bulk array and Table construction.
+# Reduces per-batch allocation count from O(columns) to O(1) by writing
+# all column buffers into a single 64-byte aligned allocation.
+# Adds Arena, Table::from_arena, and an optimised consolidate path.
+arena = []
 
 # Adds pandas-style selection for Table and TableV with .c() and .r() methods
 select = []
