@@ -82,7 +82,7 @@
 #![feature(allocator_api)]
 #![feature(portable_simd)]
 
-pub use vec64::{Vec64, vec64};
+pub use ::vec64::{Vec64, Vec64Alloc, vec64};
 
 /// **Array**, **TextArray**, **NumericArray**...- *All the *High-Level Array containers* are here.*
 pub mod enums {

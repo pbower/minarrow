@@ -2,7 +2,7 @@
 //! Runs sum benchmark on Minarrow with Rayon (Multi-core processing) and SIMD
 //!
 //! Run with:
-//!     RUSTFLAGS="-C target-cpu=native" cargo run --release --example parallel_simd --features parallel_proc
+//!     RUSTFLAGS="-C target-cpu=native" cargo bench --bench benchmark_parallel_simd --features parallel_proc
 //!
 //! The *RUSTFLAGS* argument ensures it compiles to your host instruction-set.
 //!

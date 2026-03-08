@@ -38,8 +38,7 @@ use crate::{
     Bitmask, Buffer, Length, MaskedArray, Offset, StringArray, impl_arc_masked_array,
     impl_array_ref_deref,
 };
-use vec64::Vec64;
-use vec64::alloc64::Alloc64;
+use ::vec64::{Vec64, Vec64Alloc};
 
 /// # CategoricalArray
 ///
@@ -200,8 +199,8 @@ impl<T: Integer> CategoricalArray<T> {
             "All indices must be valid for unique_values"
         );
         Self {
-            data: Vec64(indices.to_vec_in(Alloc64)).into(),
-            unique_values: Vec64(unique_values.to_vec_in(Alloc64)).into(),
+            data: Vec64(indices.to_vec_in(Vec64Alloc::default())).into(),
+            unique_values: Vec64(unique_values.to_vec_in(Vec64Alloc::default())).into(),
             null_mask: None,
         }
     }
@@ -725,7 +724,7 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
             "slice window out of bounds"
         );
 
-        let data = self.data[offset..offset + len].to_vec_in(Alloc64);
+        let data = self.data[offset..offset + len].to_vec_in(Vec64Alloc::default());
         let null_mask = self
             .null_mask
             .as_ref()
