@@ -331,6 +331,90 @@ impl NumericArray {
         }
     }
 
+    /// Returns a reference to the inner `IntegerArray<i32>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn i32_ref(&self) -> Result<&IntegerArray<i32>, MinarrowError> {
+        match self {
+            NumericArray::Int32(a) => Ok(a),
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "NumericArray",
+                to: "IntegerArray<i32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<i64>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn i64_ref(&self) -> Result<&IntegerArray<i64>, MinarrowError> {
+        match self {
+            NumericArray::Int64(a) => Ok(a),
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "NumericArray",
+                to: "IntegerArray<i64>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<u32>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn u32_ref(&self) -> Result<&IntegerArray<u32>, MinarrowError> {
+        match self {
+            NumericArray::UInt32(a) => Ok(a),
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "NumericArray",
+                to: "IntegerArray<u32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `IntegerArray<u64>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn u64_ref(&self) -> Result<&IntegerArray<u64>, MinarrowError> {
+        match self {
+            NumericArray::UInt64(a) => Ok(a),
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "NumericArray",
+                to: "IntegerArray<u64>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `FloatArray<f32>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn f32_ref(&self) -> Result<&FloatArray<f32>, MinarrowError> {
+        match self {
+            NumericArray::Float32(a) => Ok(a),
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "NumericArray",
+                to: "FloatArray<f32>",
+                message: None,
+            }),
+        }
+    }
+
+    /// Returns a reference to the inner `FloatArray<f64>` if the variant matches.
+    /// No conversion or cloning is performed.
+    pub fn f64_ref(&self) -> Result<&FloatArray<f64>, MinarrowError> {
+        match self {
+            NumericArray::Float64(a) => Ok(a),
+            NumericArray::Null => Err(MinarrowError::NullError { message: None }),
+            _ => Err(MinarrowError::TypeError {
+                from: "NumericArray",
+                to: "FloatArray<f64>",
+                message: None,
+            }),
+        }
+    }
+
     /// Convert to IntegerArray<i32> using From/TryFrom as appropriate per conversion.
     pub fn i32(self) -> Result<IntegerArray<i32>, MinarrowError> {
         match self {

@@ -56,6 +56,7 @@ pub fn broadcast_length_1_array(av: ArrayV, len: usize) -> Result<Array, KernelE
             let strs: Vec64<&str> = std::iter::repeat(s).take(len).collect();
             Ok(Array::from_string32(StringArray::from_vec64(strs, None)))
         }
+        #[cfg(feature = "large_string")]
         Array::TextArray(TextArray::String64(a)) => {
             // Get the first string from the array, which should have exactly 1 string
             let s = a.get_str(av.offset).unwrap_or("");

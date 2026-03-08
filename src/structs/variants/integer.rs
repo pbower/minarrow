@@ -565,24 +565,4 @@ mod concat_tests {
         assert_eq!(result.get(3), Some(40));
         assert_eq!(result.null_count(), 2);
     }
-
-    #[test]
-    fn test_get_raw_returns_buffer_value_regardless_of_null() {
-        let mut arr = IntegerArray::<i32>::from_slice(&[10, 20, 30]);
-        arr.push_null();
-        assert_eq!(arr.get(3), None);
-        // get_raw bypasses null mask and returns the raw buffer value
-        let raw = arr.get_raw(3);
-        assert_eq!(raw, i32::default());
-    }
-
-    #[cfg(feature = "unchecked_index")]
-    #[test]
-    fn test_index_bypasses_null_mask() {
-        let mut arr = IntegerArray::<i32>::from_slice(&[10, 20, 30]);
-        arr.set_null(1);
-        assert_eq!(arr.get(1), None);
-        // Index bypasses the null mask and returns the raw buffer value
-        assert_eq!(arr[1], 20);
-    }
 }

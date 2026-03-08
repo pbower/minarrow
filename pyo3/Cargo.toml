@@ -1,6 +1,6 @@
 [package]
 name = "minarrow-pyo3"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ['Peter G. Bower']
 license = "MIT"
@@ -22,7 +22,7 @@ name = "minarrow_pyo3"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-minarrow = { path = "..", features = ["large_string"] }
+minarrow = { version = "0.8.1", features = ["large_string"] }
 pyo3 = { version = "0.23" }
 thiserror = "2"
 
@@ -47,4 +47,3 @@ path = "tests/python_roundtrip.rs"
 [[example]]
 name = "pycapsule_exchange"
 path = "examples/pycapsule_exchange.rs"
-

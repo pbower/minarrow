@@ -34,6 +34,7 @@ use crate::SuperTable;
 #[cfg(feature = "views")]
 use crate::TableV;
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
+#[cfg(feature = "chunked")]
 use crate::traits::consolidate::Consolidate;
 #[cfg(all(feature = "views", feature = "select"))]
 use crate::traits::selection::{ColumnSelection, DataSelector, FieldSelector, RowSelection};
@@ -682,6 +683,7 @@ impl Concatenate for Table {
     }
 }
 
+#[cfg(feature = "chunked")]
 impl Consolidate for Vec<Table> {
     type Output = Table;
 
@@ -852,32 +854,19 @@ impl RowSelection for Table {
     type View = TableV;
 
     fn r<S: DataSelector>(&self, selection: S) -> TableV {
-        let table_v = TableV::from(self.clone());
-
         if selection.is_contiguous() {
-            // Contiguous selection (ranges): adjust offset and len
+            // Contiguous selection (ranges): create a properly windowed view
             let indices = selection.resolve_indices(self.n_rows);
             if indices.is_empty() {
-                return TableV {
-                    name: self.name.clone(),
-                    fields: table_v.fields,
-                    cols: table_v.cols,
-                    offset: 0,
-                    len: 0,
-                };
+                return TableV::from_table(self.clone(), 0, 0);
             }
             let new_offset = indices[0];
             let new_len = indices.len();
-            TableV {
-                name: self.name.clone(),
-                fields: table_v.fields,
-                cols: table_v.cols,
-                offset: new_offset,
-                len: new_len,
-            }
+            TableV::from_table(self.clone(), new_offset, new_len)
         } else {
             // Non-contiguous selection (index arrays): materialise
             let indices = selection.resolve_indices(self.n_rows);
+            let table_v = TableV::from(self.clone());
             let materialised_table = table_v.gather_rows(&indices);
             TableV::from(materialised_table)
         }
@@ -1325,6 +1314,67 @@ mod tests {
         let mut t3 = Table::new_empty();
         t3.add_col(field_array("a", Array::from_int32(col1)));
         assert!(t3.split(10).is_err());
+    }
+
+    #[cfg(all(feature = "views", feature = "select"))]
+    #[test]
+    fn test_row_selection_to_table_column_lengths() {
+        use crate::traits::selection::RowSelection;
+
+        let mut ids = IntegerArray::<i32>::default();
+        let mut flags = BooleanArray::default();
+        for i in 0..10 {
+            ids.push(i + 1);
+            flags.push(i % 2 == 0);
+        }
+
+        let mut t = Table::new_empty();
+        t.add_col(field_array("ids", Array::from_int32(ids)));
+        t.add_col(field_array("flags", Array::from_bool(flags)));
+        assert_eq!(t.n_rows(), 10);
+
+        // Contiguous range selection via r()
+        let result = t.r(0..5).to_table();
+        assert_eq!(result.n_rows(), 5);
+        for col in &result.cols {
+            assert_eq!(
+                col.array.len(),
+                5,
+                "Column '{}' has {} elements after r(0..5), expected 5",
+                col.field.name,
+                col.array.len()
+            );
+        }
+
+        // Offset range
+        let result = t.r(3..7).to_table();
+        assert_eq!(result.n_rows(), 4);
+        for col in &result.cols {
+            assert_eq!(col.array.len(), 4);
+        }
+        // Verify values: ids should be [4, 5, 6, 7]
+        match &result.cols[0].array {
+            Array::NumericArray(NumericArray::Int32(a)) => {
+                let vals: Vec<i32> = (0..a.len()).map(|i| a.get(i).unwrap()).collect();
+                assert_eq!(vals, vec![4, 5, 6, 7]);
+            }
+            _ => panic!("unexpected type"),
+        }
+
+        // Equivalence with slice
+        let via_r = t.r(2..8).to_table();
+        let via_slice = t.slice(2, 6).to_table();
+        assert_eq!(via_r.n_rows(), via_slice.n_rows());
+        for (r_col, s_col) in via_r.cols.iter().zip(via_slice.cols.iter()) {
+            assert_eq!(r_col.array.len(), s_col.array.len());
+        }
+
+        // Empty selection
+        let result = t.r(0..0).to_table();
+        assert_eq!(result.n_rows(), 0);
+        for col in &result.cols {
+            assert_eq!(col.array.len(), 0);
+        }
     }
 }
 
