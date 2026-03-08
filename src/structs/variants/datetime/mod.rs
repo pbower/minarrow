@@ -57,8 +57,7 @@ use crate::utils::validate_null_mask_len;
 use crate::{
     Bitmask, Length, Offset, impl_arc_masked_array, impl_array_ref_deref, impl_masked_array,
 };
-use vec64::Vec64;
-use vec64::alloc64::Alloc64;
+use ::vec64::{Vec64, Vec64Alloc};
 
 pub mod datetime_ops;
 pub mod tz;
@@ -178,7 +177,7 @@ impl<T: Integer> DatetimeArray<T> {
     #[inline]
     pub fn from_slice(slice: &[T], time_unit: Option<TimeUnit>) -> Self {
         Self {
-            data: Vec64(slice.to_vec_in(Alloc64)).into(),
+            data: Vec64(slice.to_vec_in(Vec64Alloc::default())).into(),
             null_mask: None,
             time_unit: time_unit.unwrap_or_default(),
         }

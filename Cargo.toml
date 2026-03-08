@@ -51,7 +51,7 @@ ryu = { version = "1.0.20", optional = true }
 memchr = { version = "2.7.5", optional = true }
 ahash = { version = "0.8.12", optional = true }
 regex = { version = "1.11.1", optional = true }
-vec64 = { version = "0.2.1"}
+vec64 = { version = "0.4.1" }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -203,6 +203,9 @@ select = []
 # Children call `MemfdBuffer::reopen()` to access the same physical memory.
 memfd = []
 
+# Consider enabling this for improved Vec64 performance on Linux.
+vmap64 = ["vec64/mmap"]
+
 default = [
     "views",
     "chunked",
@@ -255,26 +258,30 @@ name = "test_value_macros"
 path = "examples/broadcasting/test_value_macros.rs"
 required-features = ["broadcast"]
 
-# Benchmark examples
-[[example]]
+[[bench]]
 name = "hotloop_benchmark_simd"
-path = "examples/benchmarks/hotloop_benchmark_simd.rs"
+harness = false
+required-features = ["cast_arrow"]
 
-[[example]]
+[[bench]]
 name = "hotloop_benchmark_std"
-path = "examples/benchmarks/hotloop_benchmark_std.rs"
+harness = false
+required-features = ["cast_arrow"]
 
-[[example]]
+[[bench]]
 name = "hotloop_benchmark_avg_simd"
-path = "examples/benchmarks/hotloop_benchmark_avg_simd.rs"
+harness = false
+required-features = ["cast_arrow"]
 
-[[example]]
+[[bench]]
 name = "hotloop_benchmark_avg_std"
-path = "examples/benchmarks/hotloop_benchmark_avg_std.rs"
+harness = false
+required-features = ["cast_arrow"]
 
-[[example]]
+[[bench]]
 name = "benchmark_parallel_simd"
-path = "examples/benchmarks/benchmark_parallel_simd.rs"
+harness = false
+required-features = ["parallel_proc"]
 
 # FFI examples
 [[example]]

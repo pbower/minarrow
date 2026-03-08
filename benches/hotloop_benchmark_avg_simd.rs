@@ -7,7 +7,7 @@
 //!     3. Top-level unified `Array` type
 //!
 //! Run with:
-//!     RUSTFLAGS="-C target-cpu=native" cargo run --release --example hotloop_benchmark_avg_simd
+//!     RUSTFLAGS="-C target-cpu=native" cargo bench --bench hotloop_benchmark_avg_simd --features cast_arrow
 //! ---------------------------------------------------------
 
 #![feature(portable_simd)]

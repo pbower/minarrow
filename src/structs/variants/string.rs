@@ -524,7 +524,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     ///
     /// ## ⚠️ Incorrect Usage (do **not** do this):
     ///
-    /// ```
+    /// ```no_run
     /// use minarrow::{MaskedArray, StringArray};
     /// let s: &str;
     /// {
@@ -590,7 +590,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     ///
     /// ## ⚠️ Incorrect Usage (do **not** do this):
     ///
-    /// ```
+    /// ```no_run
     /// use minarrow::{MaskedArray, StringArray};
     /// let s: &str;
     /// {
@@ -658,7 +658,7 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     /// context when you don't have a choice (i.e., when building off the trait contract).
     ///
     /// ## ⚠️ Incorrect Usage (do **not** do this):
-    /// ```
+    /// ```no_run
     /// use minarrow::{MaskedArray, StringArray};
     /// let data: &str;
     /// {

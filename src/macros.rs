@@ -73,7 +73,7 @@ macro_rules! impl_numeric_array_constructors {
             #[inline]
             pub fn from_slice(slice: &[T]) -> Self {
                 Self {
-                    data: Vec64(slice.to_vec_in(vec64::Alloc64)).into(),
+                    data: Vec64(slice.to_vec_in(::vec64::Vec64Alloc::default())).into(),
                     null_mask: None,
                 }
             }

@@ -7,7 +7,7 @@
 //!     3. Top-level unified `Array` type
 //!
 //! Run with:
-//!     cargo run --example hotloop_benchmark_std --release
+//!     cargo bench --bench hotloop_benchmark_std --features cast_arrow
 //!
 //! Use ./benchmark_avg.sh for a realistic sample, that
 //! avoids compiler optimisations that otherwise distort
