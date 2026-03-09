@@ -32,7 +32,7 @@ use crate::Field;
 #[cfg(feature = "chunked")]
 use crate::SuperTable;
 #[cfg(feature = "views")]
-use crate::TableV;
+use crate::{BitmaskV, NumericArrayV, TableV, TextArrayV};
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
 #[cfg(feature = "chunked")]
 use crate::traits::consolidate::Consolidate;
@@ -204,6 +204,33 @@ impl Table {
         self.cols.iter().position(|fa| fa.field.name == name)
     }
 
+    /// Resolve a named column to a `NumericArrayV`.
+    #[cfg(feature = "views")]
+    pub fn col_numeric(&self, name: &str) -> Result<NumericArrayV, MinarrowError> {
+        let idx = self.col_name_index(name)
+            .ok_or_else(|| MinarrowError::IndexError(format!("column '{}' not found", name)))?;
+        let num = self.cols[idx].array.num_ref()?;
+        Ok(NumericArrayV::from(num.clone()))
+    }
+
+    /// Resolve a named column to a `TextArrayV`.
+    #[cfg(feature = "views")]
+    pub fn col_text(&self, name: &str) -> Result<TextArrayV, MinarrowError> {
+        let idx = self.col_name_index(name)
+            .ok_or_else(|| MinarrowError::IndexError(format!("column '{}' not found", name)))?;
+        let ta = self.cols[idx].array.str_ref()?;
+        Ok(TextArrayV::from(ta.clone()))
+    }
+
+    /// Resolve a named column to a `BitmaskV`.
+    #[cfg(feature = "views")]
+    pub fn col_bitmask(&self, name: &str) -> Result<BitmaskV, MinarrowError> {
+        let idx = self.col_name_index(name)
+            .ok_or_else(|| MinarrowError::IndexError(format!("column '{}' not found", name)))?;
+        let ba = self.cols[idx].array.bool_ref()?;
+        Ok(BitmaskV::new(ba.data.clone(), 0, ba.len))
+    }
+
     /// Removes a column by name.
     pub fn remove_col(&mut self, name: &str) -> bool {
         if let Some(idx) = self.col_name_index(name) {
@@ -365,6 +392,24 @@ impl Table {
         F: FnMut(&FieldArray) -> T,
     {
         self.cols.iter().map(func).collect()
+    }
+
+    /// Apply a transformation to each column, producing a new table.
+    ///
+    /// The closure receives each FieldArray and returns a transformed FieldArray.
+    /// To pass a column through unchanged, clone it. The closure can dispatch
+    /// on `Array` variant to handle numeric, text, temporal, and boolean columns
+    /// differently.
+    pub fn apply_cols<E>(
+        &self,
+        mut f: impl FnMut(&FieldArray) -> Result<FieldArray, E>,
+    ) -> Result<Table, E> {
+        let cols = self
+            .cols
+            .iter()
+            .map(|fa| f(fa))
+            .collect::<Result<Vec<_>, E>>()?;
+        Ok(Table::new(self.name.clone(), Some(cols)))
     }
 
     /// Inserts rows from another table at the specified index.
