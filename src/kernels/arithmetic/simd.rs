@@ -63,7 +63,7 @@ pub fn int_dense_body_simd<T, const LANES: usize>(
             ArithmeticOperator::Multiply => a * b,
             ArithmeticOperator::Divide => a / b, // Panics if divisor is zero
             ArithmeticOperator::Remainder => a % b, // Panics if divisor is zero
-            ArithmeticOperator::Power => {
+            ArithmeticOperator::Power | ArithmeticOperator::FloorDiv => {
                 vectorisable = 0;
                 break;
             }
@@ -87,6 +87,15 @@ pub fn int_dense_body_simd<T, const LANES: usize>(
                     acc = acc.wrapping_mul(&lhs[idx]);
                 }
                 acc
+            }
+            ArithmeticOperator::FloorDiv => {
+                if rhs[idx] == T::zero() {
+                    panic!("Floor division by zero")
+                } else {
+                    let d = lhs[idx] / rhs[idx];
+                    let r = lhs[idx] % rhs[idx];
+                    if r != T::zero() && (lhs[idx] ^ rhs[idx]) < T::zero() { d - T::one() } else { d }
+                }
             }
         };
     }
@@ -159,6 +168,22 @@ pub fn int_masked_body_simd<T, const LANES: usize>(
                     let r = div_zero.select(Simd::splat(T::zero()), r);
                     (r, valid)
                 }
+                ArithmeticOperator::FloorDiv => {
+                    let div_zero = b.simd_eq(Simd::splat(T::zero()));
+                    let valid = !div_zero;
+                    // Per-lane floor division with sign correction
+                    let mut tmp = [T::zero(); LANES];
+                    for l in 0..LANES {
+                        if b[l] == T::zero() {
+                            tmp[l] = T::zero();
+                        } else {
+                            let d = a[l] / b[l];
+                            let r = a[l] % b[l];
+                            tmp[l] = if r != T::zero() && (a[l] ^ b[l]) < T::zero() { d - T::one() } else { d };
+                        }
+                    }
+                    (Simd::<T, LANES>::from_array(tmp), valid)
+                }
             };
             r.copy_to_slice(&mut out[i..i + LANES]);
             // Write the out_mask based on the op
@@ -217,6 +242,21 @@ pub fn int_masked_body_simd<T, const LANES: usize>(
                         }
                     }
                 }
+                ArithmeticOperator::FloorDiv => {
+                    if rhs[idx] == T::zero() {
+                        out[idx] = T::zero();
+                        unsafe {
+                            out_mask.set_unchecked(idx, false);
+                        }
+                    } else {
+                        let d = lhs[idx] / rhs[idx];
+                        let r = lhs[idx] % rhs[idx];
+                        out[idx] = if r != T::zero() && (lhs[idx] ^ rhs[idx]) < T::zero() { d - T::one() } else { d };
+                        unsafe {
+                            out_mask.set_unchecked(idx, true);
+                        }
+                    }
+                }
             }
         }
         return;
@@ -254,6 +294,18 @@ pub fn int_masked_body_simd<T, const LANES: usize>(
                 }
                 Simd::<T, LANES>::from_array(tmp)
             }
+            ArithmeticOperator::FloorDiv => {
+                // Per-lane floor division with sign correction
+                let mut tmp = [T::zero(); LANES];
+                for l in 0..LANES {
+                    if b[l] != T::zero() {
+                        let d = a[l] / b[l];
+                        let r = a[l] % b[l];
+                        tmp[l] = if r != T::zero() && (a[l] ^ b[l]) < T::zero() { d - T::one() } else { d };
+                    }
+                }
+                Simd::<T, LANES>::from_array(tmp)
+            }
         };
 
         // apply source validity mask, write results
@@ -262,8 +314,8 @@ pub fn int_masked_body_simd<T, const LANES: usize>(
 
         // write out-mask bits: combine source mask with div-by-zero validity
         let final_mask = match op {
-            ArithmeticOperator::Divide | ArithmeticOperator::Remainder => {
-                // For div/rem: valid iff source is valid AND not dividing by zero
+            ArithmeticOperator::Divide | ArithmeticOperator::Remainder | ArithmeticOperator::FloorDiv => {
+                // Valid iff source is valid and not dividing by zero
                 m_src & !div_zero
             }
             _ => m_src,
@@ -301,6 +353,15 @@ pub fn int_masked_body_simd<T, const LANES: usize>(
                     }
                 }
                 ArithmeticOperator::Power => (lhs[j].pow(rhs[j].to_u32().unwrap_or(0)), true),
+                ArithmeticOperator::FloorDiv => {
+                    if rhs[j] == T::zero() {
+                        (T::zero(), false)
+                    } else {
+                        let d = lhs[j] / rhs[j];
+                        let r = lhs[j] % rhs[j];
+                        if r != T::zero() && (lhs[j] ^ rhs[j]) < T::zero() { (d - T::one(), true) } else { (d, true) }
+                    }
+                }
             };
             out[j] = result;
             unsafe { out_mask.set_unchecked(j, final_valid) };
@@ -345,6 +406,7 @@ pub fn float_masked_body_f32_simd<const LANES: usize>(
             ArithmeticOperator::Divide => a / b,
             ArithmeticOperator::Remainder => a % b,
             ArithmeticOperator::Power => (b * a.ln()).exp(),
+            ArithmeticOperator::FloorDiv => (a / b).floor(),
         };
 
         let selected = m.select(res, Simd::<f32, LANES>::splat(0.0));
@@ -371,6 +433,7 @@ pub fn float_masked_body_f32_simd<const LANES: usize>(
                 ArithmeticOperator::Divide => lhs[j] / rhs[j],
                 ArithmeticOperator::Remainder => lhs[j] % rhs[j],
                 ArithmeticOperator::Power => (rhs[j] * lhs[j].ln()).exp(),
+                ArithmeticOperator::FloorDiv => (lhs[j] / rhs[j]).floor(),
             };
             unsafe { out_mask.set_unchecked(j, true) };
         } else {
@@ -417,6 +480,7 @@ pub fn float_masked_body_f64_simd<const LANES: usize>(
             ArithmeticOperator::Divide => a / b,
             ArithmeticOperator::Remainder => a % b,
             ArithmeticOperator::Power => (b * a.ln()).exp(),
+            ArithmeticOperator::FloorDiv => (a / b).floor(),
         };
 
         let selected = m.select(res, Simd::<f64, LANES>::splat(0.0));
@@ -443,6 +507,7 @@ pub fn float_masked_body_f64_simd<const LANES: usize>(
                 ArithmeticOperator::Divide => lhs[j] / rhs[j],
                 ArithmeticOperator::Remainder => lhs[j] % rhs[j],
                 ArithmeticOperator::Power => (rhs[j] * lhs[j].ln()).exp(),
+                ArithmeticOperator::FloorDiv => (lhs[j] / rhs[j]).floor(),
             };
             unsafe { out_mask.set_unchecked(j, true) };
         } else {
@@ -474,6 +539,7 @@ pub fn float_dense_body_f32_simd<const LANES: usize>(
             ArithmeticOperator::Divide => a / b,
             ArithmeticOperator::Remainder => a % b,
             ArithmeticOperator::Power => (b * a.ln()).exp(),
+            ArithmeticOperator::FloorDiv => (a / b).floor(),
         };
         res.copy_to_slice(&mut out[i..i + LANES]);
         i += LANES;
@@ -488,6 +554,7 @@ pub fn float_dense_body_f32_simd<const LANES: usize>(
             ArithmeticOperator::Divide => lhs[j] / rhs[j],
             ArithmeticOperator::Remainder => lhs[j] % rhs[j],
             ArithmeticOperator::Power => (rhs[j] * lhs[j].ln()).exp(),
+            ArithmeticOperator::FloorDiv => (lhs[j] / rhs[j]).floor(),
         };
     }
 }
@@ -514,6 +581,7 @@ pub fn float_dense_body_f64_simd<const LANES: usize>(
             ArithmeticOperator::Divide => a / b,
             ArithmeticOperator::Remainder => a % b,
             ArithmeticOperator::Power => (b * a.ln()).exp(),
+            ArithmeticOperator::FloorDiv => (a / b).floor(),
         };
         res.copy_to_slice(&mut out[i..i + LANES]);
         i += LANES;
@@ -528,6 +596,7 @@ pub fn float_dense_body_f64_simd<const LANES: usize>(
             ArithmeticOperator::Divide => lhs[j] / rhs[j],
             ArithmeticOperator::Remainder => lhs[j] % rhs[j],
             ArithmeticOperator::Power => (rhs[j] * lhs[j].ln()).exp(),
+            ArithmeticOperator::FloorDiv => (lhs[j] / rhs[j]).floor(),
         };
     }
 }

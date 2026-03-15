@@ -27,6 +27,13 @@ pub enum ArithmeticOperator {
     /// For integers, uses repeated multiplication. For floating-point, uses `pow()` function.
     /// Negative exponents on integers may yield zero due to truncation.
     Power,
+    /// Floor division (`lhs // rhs`)
+    ///
+    /// Rounds the quotient towards negative infinity. For unsigned integers this is
+    /// identical to truncation division. For signed integers, when the remainder is
+    /// non-zero and the operands have different signs, the result is one less than
+    /// truncation division. For floating-point, equivalent to `(lhs / rhs).floor()`.
+    FloorDiv,
 }
 
 /// Comparison operators for binary predicates.
