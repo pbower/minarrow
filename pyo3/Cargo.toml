@@ -22,7 +22,7 @@ name = "minarrow_pyo3"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-minarrow = { version = "0.9.1", features = ["large_string"] }
+minarrow = { version = "0.9.2", path = "..", features = ["large_string"] }
 pyo3 = { version = "0.23" }
 thiserror = "2"
 
