@@ -842,8 +842,8 @@ pub unsafe fn import_from_c_owned(
     let is_dict = !arr.dictionary.is_null() || !sch.dictionary.is_null();
 
     // For categorical (dictionary-encoded) types, the codes buffer is zero-copy
-    // via ForeignBuffer. Dictionary strings are copied due to structural mismatch
-    // between Arrow's contiguous offsets+data and MinArrow's Vec64<String>.
+    // via ForeignBuffer. Dictionary strings are currently copied into Vec64<String>,
+    // however this will be addressed in a future enhancement.
     if is_dict {
         drop(sch_box);
         let result = unsafe {
@@ -1441,9 +1441,31 @@ unsafe fn import_categorical(
     let null_ptr = buffers[0];
     let codes_ptr = buffers[1];
 
-    // Import dictionary strings (always copied — structural mismatch between
-    // Arrow's contiguous offsets+data and MinArrow's Vec64<String>).
-    let dict = unsafe { import_from_c(arr.dictionary as *const _, sch.dictionary as *const _) };
+    // Import dictionary strings into Vec64<String>.
+    //
+    // When the schema carries a dictionary pointer we use it directly.
+    // Some producers (e.g. pandas Series via __arrow_c_stream__) leave
+    // sch.dictionary null while still populating arr.dictionary. In that
+    // case we construct a synthetic UTF-8 schema so import_from_c can
+    // interpret the dictionary values array.
+    let synthetic_schema;
+    let dict_sch_ptr: *const ArrowSchema = if !sch.dictionary.is_null() {
+        sch.dictionary as *const _
+    } else {
+        synthetic_schema = ArrowSchema {
+            format: b"u\0".as_ptr() as *const i8,
+            name: b"\0".as_ptr() as *const i8,
+            metadata: ptr::null(),
+            flags: 0,
+            n_children: 0,
+            children: ptr::null_mut(),
+            dictionary: ptr::null_mut(),
+            release: None,
+            private_data: ptr::null_mut(),
+        };
+        &synthetic_schema as *const _
+    };
+    let dict = unsafe { import_from_c(arr.dictionary as *const _, dict_sch_ptr) };
     let dict_strings = match dict.as_ref() {
         Array::TextArray(TextArray::String32(s)) => (0..s.len())
             .map(|i| s.get(i).unwrap_or_default().to_string())
