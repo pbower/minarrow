@@ -1740,24 +1740,9 @@ struct ArrayStreamHolder {
 /// The resulting `ArrowArray` has format `"+s"` with one child per column.
 /// Callers must eventually call the release callback on the returned pointers.
 ///
-/// When the `table_metadata` feature is enabled, an optional `metadata` parameter
-/// is accepted and encoded into the top-level struct ArrowSchema.
-#[cfg(not(feature = "table_metadata"))]
-pub fn export_struct_to_c(
-    columns: Vec<(Arc<Array>, Schema)>,
-) -> (*mut ArrowArray, *mut ArrowSchema) {
-    export_struct_to_c_inner(columns, None)
-}
-
-/// Exports a single record batch (a set of column arrays with a shared schema)
-/// as an Arrow struct array + struct schema pair.
-///
-/// The resulting `ArrowArray` has format `"+s"` with one child per column.
-/// Callers must eventually call the release callback on the returned pointers.
-///
 /// When `metadata` is provided, it is encoded and attached to the top-level
-/// struct ArrowSchema.
-#[cfg(feature = "table_metadata")]
+/// struct ArrowSchema. The `table_metadata` feature controls whether metadata
+/// is preserved on the minarrow rust side during import.
 pub fn export_struct_to_c(
     columns: Vec<(Arc<Array>, Schema)>,
     metadata: Option<std::collections::BTreeMap<String, String>>,

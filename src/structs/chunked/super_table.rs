@@ -1605,6 +1605,8 @@ mod tests {
                 ],
                 n_rows: 3,
                 name: "batch".into(),
+                #[cfg(feature = "table_metadata")]
+                metadata: std::collections::BTreeMap::new(),
             });
             let b2 = Arc::new(Table {
                 cols: vec![
@@ -1614,6 +1616,8 @@ mod tests {
                 ],
                 n_rows: 2,
                 name: "batch".into(),
+                #[cfg(feature = "table_metadata")]
+                metadata: std::collections::BTreeMap::new(),
             });
             SuperTable::from_batches(vec![b1, b2], None)
         };

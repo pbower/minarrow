@@ -52,7 +52,15 @@ pub fn broadcast_arrayview_to_table(
         })
         .collect();
 
-    Ok(Table::new(table.name.clone(), Some(field_arrays)))
+    let table_out = Table::new(table.name.clone(), Some(field_arrays));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = table.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Helper function for arrayview-tableview broadcasting - work with views

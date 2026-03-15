@@ -190,7 +190,7 @@ impl Table {
             })
             .collect();
 
-        Self { cols, n_rows, name }
+        Self::build(cols, n_rows, name)
     }
 
     /// Adds a column with a name.

@@ -57,7 +57,15 @@ pub fn broadcast_scalar_to_table(
         })
         .collect();
 
-    Ok(Table::new(table.name.clone(), Some(new_cols?)))
+    let table_out = Table::new(table.name.clone(), Some(new_cols?));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = table.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Helper function for scalar-tableview broadcasting - work directly with views

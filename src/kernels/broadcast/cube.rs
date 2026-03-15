@@ -727,7 +727,15 @@ fn merge_supertable_batches(super_table: &crate::SuperTable) -> Result<Table, Mi
         }
     }
 
-    Ok(Table::new(super_table.name.clone(), Some(merged_cols)))
+    let table_out = Table::new(super_table.name.clone(), Some(merged_cols));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = super_table.metadata().clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Broadcast SuperArray to Cube - apply super array against each table in the cube (left operand)

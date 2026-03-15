@@ -51,7 +51,15 @@ pub fn broadcast_table_with_operator(
         result_field_arrays.push(result_field_array);
     }
 
-    Ok(Table::new(table_l.name.clone(), Some(result_field_arrays)))
+    let table = Table::new(table_l.name.clone(), Some(result_field_arrays));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table;
+        t.metadata = table_l.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table)
 }
 
 /// Broadcasts addition over table columns element-wise
@@ -206,7 +214,15 @@ pub fn broadcast_table_to_array(
         })
         .collect();
 
-    Ok(Table::new(table.name.clone(), Some(new_cols?)))
+    let table_out = Table::new(table.name.clone(), Some(new_cols?));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = table.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Helper function for table-scalar broadcasting - apply table columns to scalar
@@ -249,7 +265,15 @@ pub fn broadcast_table_to_scalar(
         })
         .collect();
 
-    Ok(Table::new(table.name.clone(), Some(new_cols?)))
+    let table_out = Table::new(table.name.clone(), Some(new_cols?));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = table.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Helper function for table-arrayview broadcasting - work directly with view without conversion
@@ -294,7 +318,15 @@ pub fn broadcast_table_to_arrayview(
         })
         .collect();
 
-    Ok(Table::new(table.name.clone(), Some(new_cols?)))
+    let table_out = Table::new(table.name.clone(), Some(new_cols?));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = table.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Helper function for Table-SuperArrayView broadcasting - promote Table to aligned SuperTableView
