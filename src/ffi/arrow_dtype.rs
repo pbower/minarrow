@@ -117,8 +117,7 @@ pub enum ArrowType {
 /// - Smaller widths reduce memory footprint for low-cardinality data.
 /// - Larger widths enable more distinct categories without overflow.
 /// - Variant availability depends on feature flags:
-///   - `UInt8` and `UInt16` require both `extended_categorical` and `extended_numeric_types`.
-///   - `UInt64` requires `extended_categorical`.
+///   - `UInt8`, `UInt16`, and `UInt64` require `extended_categorical`.
 ///   - `UInt32` is always available.
 ///
 /// ## Interoperability
@@ -127,12 +126,12 @@ pub enum ArrowType {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum CategoricalIndexType {
-    #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+    #[cfg(feature = "extended_categorical")]
     UInt8,
-    #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+    #[cfg(feature = "extended_categorical")]
     UInt16,
     UInt32,
-    #[cfg(all(feature = "extended_categorical"))]
+    #[cfg(feature = "extended_categorical")]
     UInt64,
 }
 

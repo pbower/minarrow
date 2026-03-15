@@ -76,7 +76,7 @@ c_ffi_tests = ['cc']
 # Highly recommend keeping these off unless required
 # E.g., constrained or embedded environments, as they add combinatorial
 # weight to the binary and enum match arms
-extended_categorical = ["extended_numeric_types"]
+extended_categorical = []
 
 # Adds UInt8, UInt16, Int8, Int16 types.
 #
