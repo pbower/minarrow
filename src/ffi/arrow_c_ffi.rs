@@ -553,9 +553,9 @@ fn export_categorical_array_to_c(
 
     let mut field = schema.fields[0].clone();
     field.dtype = match index_bits {
-        #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+        #[cfg(feature = "extended_categorical")]
         8 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt8),
-        #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+        #[cfg(feature = "extended_categorical")]
         16 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt16),
         32 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt32),
         #[cfg(feature = "extended_categorical")]
@@ -1483,14 +1483,12 @@ unsafe fn import_categorical(
 
     // Build codes & wrap
     match index_type {
-        #[cfg(feature = "extended_numeric_types")]
         #[cfg(feature = "extended_categorical")]
         CategoricalIndexType::UInt8 => {
             let codes_buf = unsafe { build_codes::<u8>(codes_ptr, len, ownership) };
             let arr = CategoricalArray::<u8>::new(codes_buf, dict_strings, null_mask);
             Arc::new(Array::TextArray(TextArray::Categorical8(Arc::new(arr))))
         }
-        #[cfg(feature = "extended_numeric_types")]
         #[cfg(feature = "extended_categorical")]
         CategoricalIndexType::UInt16 => {
             let codes_buf = unsafe { build_codes::<u16>(codes_ptr, len, ownership) };
@@ -1502,7 +1500,6 @@ unsafe fn import_categorical(
             let arr = CategoricalArray::<u32>::new(codes_buf, dict_strings, null_mask);
             Arc::new(Array::TextArray(TextArray::Categorical32(Arc::new(arr))))
         }
-        #[cfg(feature = "extended_numeric_types")]
         #[cfg(feature = "extended_categorical")]
         CategoricalIndexType::UInt64 => {
             let codes_buf = unsafe { build_codes::<u64>(codes_ptr, len, ownership) };

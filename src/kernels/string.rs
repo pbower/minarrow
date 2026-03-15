@@ -32,16 +32,14 @@ use crate::enums::error::KernelError;
 use crate::utils::confirm_mask_capacity;
 use std::marker::PhantomData;
 
-/// Helper for predicate kernels: produce optional input masks and a fresh output mask
-#[inline(always)]
-pub fn string_predicate_masks<'a>(
-    lhs_mask: Option<&'a Bitmask>,
-    rhs_mask: Option<&'a Bitmask>,
-    len: usize,
-) -> (Option<&'a Bitmask>, Option<&'a Bitmask>, Bitmask) {
-    let out = Bitmask::new_set_all(len, false);
-    (lhs_mask, rhs_mask, out)
+/// Side for string padding operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PadSide {
+    Left,
+    Right,
+    Both,
 }
+
 
 // Concatenation
 
@@ -71,8 +69,9 @@ pub fn concat_str_str<T: Integer>(lhs: StringAVT<T>, rhs: StringAVT<T>) -> Strin
     let (rarr, roff, rlen) = rhs;
     let len = llen.min(rlen);
 
-    let (lmask, rmask, mut out_mask) =
-        string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+    let lmask = larr.null_mask.as_ref();
+    let rmask = rarr.null_mask.as_ref();
+    let mut out_mask = Bitmask::new_set_all(len, false);
     let _ = confirm_mask_capacity(larr.len(), lmask);
     let _ = confirm_mask_capacity(rarr.len(), rmask);
 
@@ -158,8 +157,9 @@ pub fn concat_dict_dict<T: Integer>(
     let (rarr, roff, rlen) = rhs;
     let len = llen.min(rlen);
 
-    let (lmask, rmask, mut out_mask) =
-        string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+    let lmask = larr.null_mask.as_ref();
+    let rmask = rarr.null_mask.as_ref();
+    let mut out_mask = Bitmask::new_set_all(len, false);
     let _ = confirm_mask_capacity(larr.data.len(), lmask)?;
     let _ = confirm_mask_capacity(rarr.data.len(), rmask)?;
 
@@ -245,8 +245,9 @@ pub fn concat_str_dict<T: Integer, U: Integer>(
     let (rarr, roff, rlen) = rhs;
     let len = llen.min(rlen);
 
-    let (lmask, rmask, mut out_mask) =
-        string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+    let lmask = larr.null_mask.as_ref();
+    let rmask = rarr.null_mask.as_ref();
+    let mut out_mask = Bitmask::new_set_all(len, false);
     let _ = confirm_mask_capacity(larr.len(), lmask)?;
     let _ = confirm_mask_capacity(rarr.data.len(), rmask)?;
 
@@ -453,8 +454,9 @@ macro_rules! str_cat_predicate {
             let (rarr, roff, rlen) = rhs;
             let len = llen.min(rlen);
 
-            let (lmask, rmask, mut out_mask) =
-                string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+            let lmask = larr.null_mask.as_ref();
+            let rmask = rarr.null_mask.as_ref();
+            let mut out_mask = Bitmask::new_set_all(len, false);
 
             let data = binary_str_pred_loop!(
                 len,
@@ -504,8 +506,9 @@ macro_rules! cat_cat_predicate {
             let (rarr, roff, rlen) = rhs;
             let len = llen.min(rlen);
 
-            let (lmask, rmask, mut out_mask) =
-                string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+            let lmask = larr.null_mask.as_ref();
+            let rmask = rarr.null_mask.as_ref();
+            let mut out_mask = Bitmask::new_set_all(len, false);
 
             let data = binary_str_pred_loop!(
                 len,
@@ -556,8 +559,9 @@ macro_rules! dict_str_predicate {
             let (rarr, roff, rlen) = rhs;
             let len = llen.min(rlen);
 
-            let (lmask, rmask, mut out_mask) =
-                string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+            let lmask = larr.null_mask.as_ref();
+            let rmask = rarr.null_mask.as_ref();
+            let mut out_mask = Bitmask::new_set_all(len, false);
             let _ = confirm_mask_capacity(larr.data.len(), lmask)?;
             let _ = confirm_mask_capacity(rarr.len(), rmask)?;
 
@@ -666,8 +670,9 @@ pub fn regex_str_str<'a, T: Integer, U: Integer>(
     let (larr, loff, llen) = lhs;
     let (rarr, roff, rlen) = rhs;
     let len = llen.min(rlen);
-    let (lmask, rmask, mut out_mask) =
-        string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+    let lmask = larr.null_mask.as_ref();
+    let rmask = rarr.null_mask.as_ref();
+    let mut out_mask = Bitmask::new_set_all(len, false);
 
     let data = regex_match_loop!(len, lmask, rmask, out_mask, larr, loff, rarr, roff);
     Ok(BooleanArray {
@@ -707,8 +712,9 @@ pub fn regex_dict_str<'a, U: Integer, T: Integer>(
     let (larr, loff, llen) = lhs;
     let (rarr, roff, rlen) = rhs;
     let len = llen.min(rlen);
-    let (lmask, rmask, mut out_mask) =
-        string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+    let lmask = larr.null_mask.as_ref();
+    let rmask = rarr.null_mask.as_ref();
+    let mut out_mask = Bitmask::new_set_all(len, false);
 
     let data = regex_match_loop!(len, lmask, rmask, out_mask, larr, loff, rarr, roff);
     Ok(BooleanArray {
@@ -748,8 +754,9 @@ pub fn regex_str_dict<'a, T: Integer, U: Integer>(
     let (larr, loff, llen) = lhs;
     let (rarr, roff, rlen) = rhs;
     let len = llen.min(rlen);
-    let (lmask, rmask, mut out_mask) =
-        string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+    let lmask = larr.null_mask.as_ref();
+    let rmask = rarr.null_mask.as_ref();
+    let mut out_mask = Bitmask::new_set_all(len, false);
 
     let data = regex_match_loop!(len, lmask, rmask, out_mask, larr, loff, rarr, roff);
     Ok(BooleanArray {
@@ -792,8 +799,9 @@ pub fn regex_dict_dict<'a, T: Integer>(
     let (larr, loff, llen) = lhs;
     let (rarr, roff, rlen) = rhs;
     let len = llen.min(rlen);
-    let (lmask, rmask, mut out_mask) =
-        string_predicate_masks(larr.null_mask.as_ref(), rarr.null_mask.as_ref(), len);
+    let lmask = larr.null_mask.as_ref();
+    let rmask = rarr.null_mask.as_ref();
+    let mut out_mask = Bitmask::new_set_all(len, false);
 
     let data = regex_match_loop!(len, lmask, rmask, out_mask, larr, loff, rarr, roff);
     Ok(BooleanArray {
@@ -1063,6 +1071,940 @@ pub fn count_distinct_string<T: Integer>(window: StringAVT<T>) -> usize {
         }
     }
     set.len()
+}
+
+// Unary string transformations
+
+/// Generates a unary string transform kernel for StringArray.
+/// The transform closure receives `&str` and returns `String`.
+macro_rules! unary_str_transform {
+    ($fn_name:ident, $doc:expr, $transform:expr) => {
+        #[doc = $doc]
+        pub fn $fn_name<T: Integer>(input: StringAVT<T>) -> Result<StringArray<T>, KernelError> {
+            let (arr, offset, len) = input;
+
+            let mask_opt = arr.null_mask.as_ref().map(|orig| {
+                let mut m = Bitmask::new_set_all(len, true);
+                for i in 0..len {
+                    unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+                }
+                m
+            });
+
+            let input_bytes = arr.offsets[offset + len].to_usize()
+                - arr.offsets[offset].to_usize();
+            let mut offsets = Vec64::<T>::with_capacity(len + 1);
+            unsafe { offsets.set_len(len + 1); }
+            let mut data = Vec64::<u8>::with_capacity(input_bytes);
+
+            offsets[0] = T::zero();
+            let mut cur = 0usize;
+
+            for i in 0..len {
+                let valid = mask_opt.as_ref()
+                    .map_or(true, |m| unsafe { m.get_unchecked(i) });
+
+                if valid {
+                    let s = unsafe { arr.get_str_unchecked(offset + i) };
+                    let t: String = ($transform)(s);
+                    data.extend_from_slice(t.as_bytes());
+                    cur += t.len();
+                }
+                offsets[i + 1] = T::from_usize(cur);
+            }
+
+            Ok(StringArray {
+                offsets: offsets.into(),
+                data: data.into(),
+                null_mask: mask_opt,
+            })
+        }
+    };
+}
+
+/// Generates a unary string transform kernel for CategoricalArray.
+/// Transforms dictionary values once and remaps indices.
+macro_rules! unary_dict_transform {
+    ($fn_name:ident, $doc:expr, $transform:expr) => {
+        #[doc = $doc]
+        pub fn $fn_name<T: Integer>(input: CategoricalAVT<T>) -> Result<CategoricalArray<T>, KernelError> {
+            let (arr, offset, len) = input;
+
+            let mask_opt = arr.null_mask.as_ref().map(|orig| {
+                let mut m = Bitmask::new_set_all(len, true);
+                for i in 0..len {
+                    unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+                }
+                m
+            });
+
+            // Transform each dictionary value once, build old->new index mapping
+            #[cfg(feature = "fast_hash")]
+            let mut seen: AHashMap<String, T> = AHashMap::with_capacity(arr.unique_values.len());
+            #[cfg(not(feature = "fast_hash"))]
+            let mut seen: std::collections::HashMap<String, T> =
+                std::collections::HashMap::with_capacity(arr.unique_values.len());
+
+            let mut new_unique = Vec64::<String>::new();
+            let mut idx_map = Vec64::<T>::with_capacity(arr.unique_values.len());
+
+            for old_val in arr.unique_values.iter() {
+                let t: String = ($transform)(old_val.as_str());
+                let new_idx = match seen.get(&t) {
+                    Some(&ix) => ix,
+                    None => {
+                        let ix = T::from_usize(new_unique.len());
+                        new_unique.push(t.clone());
+                        seen.insert(t, ix);
+                        ix
+                    }
+                };
+                idx_map.push(new_idx);
+            }
+
+            // Remap indices for the window
+            let mut data = Vec64::<T>::with_capacity(len);
+            unsafe { data.set_len(len); }
+            for i in 0..len {
+                let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+                data[i] = if valid {
+                    idx_map[arr.data[offset + i].to_usize()]
+                } else {
+                    T::zero()
+                };
+            }
+
+            Ok(CategoricalArray {
+                data: data.into(),
+                unique_values: new_unique,
+                null_mask: mask_opt,
+            })
+        }
+    };
+}
+
+unary_str_transform!(to_uppercase_str,
+    "Converts each string element to uppercase.",
+    |s: &str| s.to_uppercase()
+);
+unary_dict_transform!(to_uppercase_dict,
+    "Converts each categorical string element to uppercase.",
+    |s: &str| s.to_uppercase()
+);
+
+unary_str_transform!(to_lowercase_str,
+    "Converts each string element to lowercase.",
+    |s: &str| s.to_lowercase()
+);
+unary_dict_transform!(to_lowercase_dict,
+    "Converts each categorical string element to lowercase.",
+    |s: &str| s.to_lowercase()
+);
+
+unary_str_transform!(trim_str,
+    "Trims leading and trailing whitespace from each string element.",
+    |s: &str| s.trim().to_owned()
+);
+unary_dict_transform!(trim_dict,
+    "Trims leading and trailing whitespace from each categorical string element.",
+    |s: &str| s.trim().to_owned()
+);
+
+unary_str_transform!(ltrim_str,
+    "Trims leading whitespace from each string element.",
+    |s: &str| s.trim_start().to_owned()
+);
+unary_dict_transform!(ltrim_dict,
+    "Trims leading whitespace from each categorical string element.",
+    |s: &str| s.trim_start().to_owned()
+);
+
+unary_str_transform!(rtrim_str,
+    "Trims trailing whitespace from each string element.",
+    |s: &str| s.trim_end().to_owned()
+);
+unary_dict_transform!(rtrim_dict,
+    "Trims trailing whitespace from each categorical string element.",
+    |s: &str| s.trim_end().to_owned()
+);
+
+unary_str_transform!(reverse_str,
+    "Reverses each string element by Unicode characters.",
+    |s: &str| s.chars().rev().collect::<String>()
+);
+unary_dict_transform!(reverse_dict,
+    "Reverses each categorical string element by Unicode characters.",
+    |s: &str| s.chars().rev().collect::<String>()
+);
+
+// Byte length
+
+/// Computes the byte length of each string in a StringArray slice.
+pub fn byte_length_str<T: Integer + Copy>(
+    input: StringAVT<T>,
+) -> Result<IntegerArray<T>, KernelError> {
+    let (array, offset, len) = input;
+
+    let mask_opt = array.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let mut data = Vec64::<T>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        if valid {
+            let start = array.offsets[offset + i].to_usize();
+            let end = array.offsets[offset + i + 1].to_usize();
+            data[i] = T::from_usize(end - start);
+        } else {
+            data[i] = T::zero();
+        }
+    }
+
+    Ok(IntegerArray {
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+/// Computes the byte length of each string in a CategoricalArray slice.
+pub fn byte_length_dict<T: Integer>(
+    input: CategoricalAVT<T>,
+) -> Result<IntegerArray<T>, KernelError> {
+    let (array, offset, len) = input;
+
+    let mask_opt = array.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let mut data = Vec64::<T>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            T::from_usize(unsafe { array.get_str_unchecked(offset + i) }.len())
+        } else {
+            T::zero()
+        };
+    }
+
+    Ok(IntegerArray {
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+// Find and count
+
+/// Finds the first byte index of `needle` in each string element. Returns -1 if not found.
+pub fn find_str<T: Integer>(
+    input: StringAVT<T>,
+    needle: &str,
+) -> Result<IntegerArray<i32>, KernelError> {
+    let (arr, offset, len) = input;
+
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let mut data = Vec64::<i32>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            let s = unsafe { arr.get_str_unchecked(offset + i) };
+            s.find(needle).map_or(-1, |pos| pos as i32)
+        } else {
+            0
+        };
+    }
+
+    Ok(IntegerArray {
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+/// Finds the first byte index of `needle` in each categorical string element. Returns -1 if not found.
+pub fn find_dict<T: Integer>(
+    input: CategoricalAVT<T>,
+    needle: &str,
+) -> Result<IntegerArray<i32>, KernelError> {
+    let (arr, offset, len) = input;
+
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let mut data = Vec64::<i32>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            let s = unsafe { arr.get_str_unchecked(offset + i) };
+            s.find(needle).map_or(-1, |pos| pos as i32)
+        } else {
+            0
+        };
+    }
+
+    Ok(IntegerArray {
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+/// Counts non-overlapping occurrences of `needle` in each string element.
+pub fn count_match_str<T: Integer>(
+    input: StringAVT<T>,
+    needle: &str,
+) -> Result<IntegerArray<i32>, KernelError> {
+    let (arr, offset, len) = input;
+
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let mut data = Vec64::<i32>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            let s = unsafe { arr.get_str_unchecked(offset + i) };
+            s.matches(needle).count() as i32
+        } else {
+            0
+        };
+    }
+
+    Ok(IntegerArray {
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+/// Counts non-overlapping occurrences of `needle` in each categorical string element.
+pub fn count_match_dict<T: Integer>(
+    input: CategoricalAVT<T>,
+    needle: &str,
+) -> Result<IntegerArray<i32>, KernelError> {
+    let (arr, offset, len) = input;
+
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let mut data = Vec64::<i32>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            let s = unsafe { arr.get_str_unchecked(offset + i) };
+            s.matches(needle).count() as i32
+        } else {
+            0
+        };
+    }
+
+    Ok(IntegerArray {
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+// Substring
+
+/// Extracts a character-based substring from each string element.
+/// `start` is the 0-based character offset. `opt_len` limits the number of characters taken.
+pub fn substring_str<T: Integer>(
+    input: StringAVT<T>,
+    start: usize,
+    opt_len: Option<usize>,
+) -> Result<StringArray<T>, KernelError> {
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let input_bytes = arr.offsets[offset + len].to_usize()
+        - arr.offsets[offset].to_usize();
+    let mut offsets = Vec64::<T>::with_capacity(len + 1);
+    unsafe { offsets.set_len(len + 1); }
+    let mut data = Vec64::<u8>::with_capacity(input_bytes);
+
+    offsets[0] = T::zero();
+    let mut cur = 0usize;
+
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        if valid {
+            let s = unsafe { arr.get_str_unchecked(offset + i) };
+            let chars = s.chars().skip(start);
+            let t: String = match opt_len {
+                Some(n) => chars.take(n).collect(),
+                None => chars.collect(),
+            };
+            data.extend_from_slice(t.as_bytes());
+            cur += t.len();
+        }
+        offsets[i + 1] = T::from_usize(cur);
+    }
+
+    Ok(StringArray {
+        offsets: offsets.into(),
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+/// Extracts a character-based substring from each categorical string element.
+pub fn substring_dict<T: Integer>(
+    input: CategoricalAVT<T>,
+    start: usize,
+    opt_len: Option<usize>,
+) -> Result<CategoricalArray<T>, KernelError> {
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    #[cfg(feature = "fast_hash")]
+    let mut seen: AHashMap<String, T> = AHashMap::with_capacity(arr.unique_values.len());
+    #[cfg(not(feature = "fast_hash"))]
+    let mut seen: std::collections::HashMap<String, T> =
+        std::collections::HashMap::with_capacity(arr.unique_values.len());
+
+    let mut new_unique = Vec64::<String>::new();
+    let mut idx_map = Vec64::<T>::with_capacity(arr.unique_values.len());
+
+    for old_val in arr.unique_values.iter() {
+        let chars = old_val.chars().skip(start);
+        let t: String = match opt_len {
+            Some(n) => chars.take(n).collect(),
+            None => chars.collect(),
+        };
+        let new_idx = match seen.get(&t) {
+            Some(&ix) => ix,
+            None => {
+                let ix = T::from_usize(new_unique.len());
+                new_unique.push(t.clone());
+                seen.insert(t, ix);
+                ix
+            }
+        };
+        idx_map.push(new_idx);
+    }
+
+    let mut data = Vec64::<T>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            idx_map[arr.data[offset + i].to_usize()]
+        } else {
+            T::zero()
+        };
+    }
+
+    Ok(CategoricalArray {
+        data: data.into(),
+        unique_values: new_unique,
+        null_mask: mask_opt,
+    })
+}
+
+// Replace
+
+/// Replaces all occurrences of `from` with `to` in each string element.
+pub fn replace_str<T: Integer>(
+    input: StringAVT<T>,
+    from: &str,
+    to: &str,
+) -> Result<StringArray<T>, KernelError> {
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let input_bytes = arr.offsets[offset + len].to_usize()
+        - arr.offsets[offset].to_usize();
+    let mut offsets = Vec64::<T>::with_capacity(len + 1);
+    unsafe { offsets.set_len(len + 1); }
+    let mut data = Vec64::<u8>::with_capacity(input_bytes);
+
+    offsets[0] = T::zero();
+    let mut cur = 0usize;
+
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        if valid {
+            let s = unsafe { arr.get_str_unchecked(offset + i) };
+            let t = s.replace(from, to);
+            data.extend_from_slice(t.as_bytes());
+            cur += t.len();
+        }
+        offsets[i + 1] = T::from_usize(cur);
+    }
+
+    Ok(StringArray {
+        offsets: offsets.into(),
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+/// Replaces all occurrences of `from` with `to` in each categorical string element.
+pub fn replace_dict<T: Integer>(
+    input: CategoricalAVT<T>,
+    from: &str,
+    to: &str,
+) -> Result<CategoricalArray<T>, KernelError> {
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    #[cfg(feature = "fast_hash")]
+    let mut seen: AHashMap<String, T> = AHashMap::with_capacity(arr.unique_values.len());
+    #[cfg(not(feature = "fast_hash"))]
+    let mut seen: std::collections::HashMap<String, T> =
+        std::collections::HashMap::with_capacity(arr.unique_values.len());
+
+    let mut new_unique = Vec64::<String>::new();
+    let mut idx_map = Vec64::<T>::with_capacity(arr.unique_values.len());
+
+    for old_val in arr.unique_values.iter() {
+        let t = old_val.replace(from, to);
+        let new_idx = match seen.get(&t) {
+            Some(&ix) => ix,
+            None => {
+                let ix = T::from_usize(new_unique.len());
+                new_unique.push(t.clone());
+                seen.insert(t, ix);
+                ix
+            }
+        };
+        idx_map.push(new_idx);
+    }
+
+    let mut data = Vec64::<T>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            idx_map[arr.data[offset + i].to_usize()]
+        } else {
+            T::zero()
+        };
+    }
+
+    Ok(CategoricalArray {
+        data: data.into(),
+        unique_values: new_unique,
+        null_mask: mask_opt,
+    })
+}
+
+// Repeat
+
+/// Repeats each string element `n` times.
+pub fn repeat_str<T: Integer>(
+    input: StringAVT<T>,
+    n: usize,
+) -> Result<StringArray<T>, KernelError> {
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let input_bytes = arr.offsets[offset + len].to_usize()
+        - arr.offsets[offset].to_usize();
+    let mut offsets = Vec64::<T>::with_capacity(len + 1);
+    unsafe { offsets.set_len(len + 1); }
+    let mut data = Vec64::<u8>::with_capacity(input_bytes * n);
+
+    offsets[0] = T::zero();
+    let mut cur = 0usize;
+
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        if valid {
+            let s = unsafe { arr.get_str_unchecked(offset + i) };
+            let bytes = s.as_bytes();
+            for _ in 0..n {
+                data.extend_from_slice(bytes);
+            }
+            cur += bytes.len() * n;
+        }
+        offsets[i + 1] = T::from_usize(cur);
+    }
+
+    Ok(StringArray {
+        offsets: offsets.into(),
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+/// Repeats each categorical string element `n` times.
+pub fn repeat_dict<T: Integer>(
+    input: CategoricalAVT<T>,
+    n: usize,
+) -> Result<CategoricalArray<T>, KernelError> {
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    // Repeat is a 1:1 mapping on dictionary values, no merging possible
+    let mut new_unique = Vec64::<String>::new();
+    for old_val in arr.unique_values.iter() {
+        new_unique.push(old_val.repeat(n));
+    }
+
+    let mut data = Vec64::<T>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            arr.data[offset + i]
+        } else {
+            T::zero()
+        };
+    }
+
+    Ok(CategoricalArray {
+        data: data.into(),
+        unique_values: new_unique,
+        null_mask: mask_opt,
+    })
+}
+
+// Pad
+
+/// Pads each string element to `width` characters using `fill_char`.
+pub fn pad_str<T: Integer>(
+    input: StringAVT<T>,
+    width: usize,
+    fill_char: char,
+    side: PadSide,
+) -> Result<StringArray<T>, KernelError> {
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let max_padded = width * fill_char.len_utf8();
+    let mut offsets = Vec64::<T>::with_capacity(len + 1);
+    unsafe { offsets.set_len(len + 1); }
+    let mut data = Vec64::<u8>::with_capacity(len * max_padded);
+
+    offsets[0] = T::zero();
+    let mut cur = 0usize;
+
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        if valid {
+            let s = unsafe { arr.get_str_unchecked(offset + i) };
+            let char_len = s.chars().count();
+            if char_len >= width {
+                data.extend_from_slice(s.as_bytes());
+                cur += s.len();
+            } else {
+                let padding = width - char_len;
+                let pad_bytes = fill_char.len_utf8();
+                let mut pad_buf = [0u8; 4];
+                let pad_slice = fill_char.encode_utf8(&mut pad_buf);
+                match side {
+                    PadSide::Left => {
+                        for _ in 0..padding { data.extend_from_slice(pad_slice.as_bytes()); }
+                        data.extend_from_slice(s.as_bytes());
+                    }
+                    PadSide::Right => {
+                        data.extend_from_slice(s.as_bytes());
+                        for _ in 0..padding { data.extend_from_slice(pad_slice.as_bytes()); }
+                    }
+                    PadSide::Both => {
+                        let left = padding / 2;
+                        let right = padding - left;
+                        for _ in 0..left { data.extend_from_slice(pad_slice.as_bytes()); }
+                        data.extend_from_slice(s.as_bytes());
+                        for _ in 0..right { data.extend_from_slice(pad_slice.as_bytes()); }
+                    }
+                }
+                cur += s.len() + padding * pad_bytes;
+            }
+        }
+        offsets[i + 1] = T::from_usize(cur);
+    }
+
+    Ok(StringArray {
+        offsets: offsets.into(),
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+/// Pads each categorical string element to `width` characters using `fill_char`.
+pub fn pad_dict<T: Integer>(
+    input: CategoricalAVT<T>,
+    width: usize,
+    fill_char: char,
+    side: PadSide,
+) -> Result<CategoricalArray<T>, KernelError> {
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let pad_one = |s: &str| -> String {
+        let char_len = s.chars().count();
+        if char_len >= width {
+            return s.to_owned();
+        }
+        let padding = width - char_len;
+        match side {
+            PadSide::Left => {
+                let mut out = String::with_capacity(s.len() + padding * fill_char.len_utf8());
+                for _ in 0..padding { out.push(fill_char); }
+                out.push_str(s);
+                out
+            }
+            PadSide::Right => {
+                let mut out = String::with_capacity(s.len() + padding * fill_char.len_utf8());
+                out.push_str(s);
+                for _ in 0..padding { out.push(fill_char); }
+                out
+            }
+            PadSide::Both => {
+                let left = padding / 2;
+                let right = padding - left;
+                let mut out = String::with_capacity(s.len() + padding * fill_char.len_utf8());
+                for _ in 0..left { out.push(fill_char); }
+                out.push_str(s);
+                for _ in 0..right { out.push(fill_char); }
+                out
+            }
+        }
+    };
+
+    // Pad is 1:1 on dictionary values since padding a unique string always produces a unique result
+    let mut new_unique = Vec64::<String>::new();
+    for old_val in arr.unique_values.iter() {
+        new_unique.push(pad_one(old_val));
+    }
+
+    let mut data = Vec64::<T>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            arr.data[offset + i]
+        } else {
+            T::zero()
+        };
+    }
+
+    Ok(CategoricalArray {
+        data: data.into(),
+        unique_values: new_unique,
+        null_mask: mask_opt,
+    })
+}
+
+// Join (aggregation)
+
+/// Joins all non-null string elements with `delimiter`, returning a single string.
+/// Returns `None` if all elements are null.
+pub fn join_str<T: Integer>(input: StringAVT<T>, delimiter: &str) -> Option<String> {
+    let (arr, offset, len) = input;
+    let mut parts: Vec<&str> = Vec::with_capacity(len);
+    for i in offset..offset + len {
+        let valid = arr.null_mask.as_ref().map_or(true, |b| unsafe { b.get_unchecked(i) });
+        if valid {
+            parts.push(unsafe { arr.get_str_unchecked(i) });
+        }
+    }
+    if parts.is_empty() { None } else { Some(parts.join(delimiter)) }
+}
+
+/// Joins all non-null categorical string elements with `delimiter`, returning a single string.
+/// Returns `None` if all elements are null.
+pub fn join_dict<T: Integer>(input: CategoricalAVT<T>, delimiter: &str) -> Option<String> {
+    let (arr, offset, len) = input;
+    let mut parts: Vec<&str> = Vec::with_capacity(len);
+    for i in offset..offset + len {
+        let valid = arr.null_mask.as_ref().map_or(true, |b| unsafe { b.get_unchecked(i) });
+        if valid {
+            parts.push(unsafe { arr.get_str_unchecked(i) });
+        }
+    }
+    if parts.is_empty() { None } else { Some(parts.join(delimiter)) }
+}
+
+// Regex replace
+
+/// Replaces all regex matches in each string element with `replacement`.
+#[cfg(feature = "regex")]
+pub fn regex_replace_str<T: Integer>(
+    input: StringAVT<T>,
+    pattern: &str,
+    replacement: &str,
+) -> Result<StringArray<T>, KernelError> {
+    let re = Regex::new(pattern).map_err(|_| {
+        KernelError::InvalidArguments("Invalid regex pattern".to_string())
+    })?;
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    let input_bytes = arr.offsets[offset + len].to_usize()
+        - arr.offsets[offset].to_usize();
+    let mut offsets = Vec64::<T>::with_capacity(len + 1);
+    unsafe { offsets.set_len(len + 1); }
+    let mut data = Vec64::<u8>::with_capacity(input_bytes);
+
+    offsets[0] = T::zero();
+    let mut cur = 0usize;
+
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        if valid {
+            let s = unsafe { arr.get_str_unchecked(offset + i) };
+            let t = re.replace_all(s, replacement).into_owned();
+            data.extend_from_slice(t.as_bytes());
+            cur += t.len();
+        }
+        offsets[i + 1] = T::from_usize(cur);
+    }
+
+    Ok(StringArray {
+        offsets: offsets.into(),
+        data: data.into(),
+        null_mask: mask_opt,
+    })
+}
+
+/// Replaces all regex matches in each categorical string element with `replacement`.
+#[cfg(feature = "regex")]
+pub fn regex_replace_dict<T: Integer>(
+    input: CategoricalAVT<T>,
+    pattern: &str,
+    replacement: &str,
+) -> Result<CategoricalArray<T>, KernelError> {
+    let re = Regex::new(pattern).map_err(|_| {
+        KernelError::InvalidArguments("Invalid regex pattern".to_string())
+    })?;
+    let (arr, offset, len) = input;
+    let mask_opt = arr.null_mask.as_ref().map(|orig| {
+        let mut m = Bitmask::new_set_all(len, true);
+        for i in 0..len {
+            unsafe { m.set_unchecked(i, orig.get_unchecked(offset + i)); }
+        }
+        m
+    });
+
+    #[cfg(feature = "fast_hash")]
+    let mut seen: AHashMap<String, T> = AHashMap::with_capacity(arr.unique_values.len());
+    #[cfg(not(feature = "fast_hash"))]
+    let mut seen: std::collections::HashMap<String, T> =
+        std::collections::HashMap::with_capacity(arr.unique_values.len());
+
+    let mut new_unique = Vec64::<String>::new();
+    let mut idx_map = Vec64::<T>::with_capacity(arr.unique_values.len());
+
+    for old_val in arr.unique_values.iter() {
+        let t = re.replace_all(old_val, replacement).into_owned();
+        let new_idx = match seen.get(&t) {
+            Some(&ix) => ix,
+            None => {
+                let ix = T::from_usize(new_unique.len());
+                new_unique.push(t.clone());
+                seen.insert(t, ix);
+                ix
+            }
+        };
+        idx_map.push(new_idx);
+    }
+
+    let mut data = Vec64::<T>::with_capacity(len);
+    unsafe { data.set_len(len); }
+    for i in 0..len {
+        let valid = mask_opt.as_ref().map_or(true, |m| unsafe { m.get_unchecked(i) });
+        data[i] = if valid {
+            idx_map[arr.data[offset + i].to_usize()]
+        } else {
+            T::zero()
+        };
+    }
+
+    Ok(CategoricalArray {
+        data: data.into(),
+        unique_values: new_unique,
+        null_mask: mask_opt,
+    })
 }
 
 #[cfg(test)]
@@ -1684,5 +2626,294 @@ mod tests {
         };
         let result = max_categorical_array((&cat, 0, indices.len()));
         assert_eq!(result, Some("zebra".to_string())); // Only positions 0 and 2 valid: "zebra", "dog" -> "zebra" is larger
+    }
+
+    // --- Unary transforms
+
+    #[test]
+    fn test_to_uppercase_str() {
+        let a = str_array::<u32>(&["hello", "World", "FOO"]);
+        let out = to_uppercase_str((&a, 0, a.len())).unwrap();
+        assert_eq!(out.get(0), Some("HELLO"));
+        assert_eq!(out.get(1), Some("WORLD"));
+        assert_eq!(out.get(2), Some("FOO"));
+    }
+
+    #[test]
+    fn test_to_uppercase_str_chunk() {
+        let a = str_array::<u32>(&["skip", "hello", "world", "skip"]);
+        let out = to_uppercase_str((&a, 1, 2)).unwrap();
+        assert_eq!(out.get(0), Some("HELLO"));
+        assert_eq!(out.get(1), Some("WORLD"));
+    }
+
+    #[test]
+    fn test_to_uppercase_dict() {
+        let a = dict_array::<u32>(&["hello", "world"]);
+        let out = to_uppercase_dict((&a, 0, a.data.len())).unwrap();
+        assert_eq!(out.get_str(0), Some("HELLO"));
+        assert_eq!(out.get_str(1), Some("WORLD"));
+    }
+
+    #[test]
+    fn test_to_lowercase_str() {
+        let a = str_array::<u32>(&["HELLO", "World"]);
+        let out = to_lowercase_str((&a, 0, a.len())).unwrap();
+        assert_eq!(out.get(0), Some("hello"));
+        assert_eq!(out.get(1), Some("world"));
+    }
+
+    #[test]
+    fn test_trim_str() {
+        let a = str_array::<u32>(&["  hello  ", "world ", " foo"]);
+        let out = trim_str((&a, 0, a.len())).unwrap();
+        assert_eq!(out.get(0), Some("hello"));
+        assert_eq!(out.get(1), Some("world"));
+        assert_eq!(out.get(2), Some("foo"));
+    }
+
+    #[test]
+    fn test_ltrim_str() {
+        let a = str_array::<u32>(&["  hello", "  world "]);
+        let out = ltrim_str((&a, 0, a.len())).unwrap();
+        assert_eq!(out.get(0), Some("hello"));
+        assert_eq!(out.get(1), Some("world "));
+    }
+
+    #[test]
+    fn test_rtrim_str() {
+        let a = str_array::<u32>(&["hello  ", " world "]);
+        let out = rtrim_str((&a, 0, a.len())).unwrap();
+        assert_eq!(out.get(0), Some("hello"));
+        assert_eq!(out.get(1), Some(" world"));
+    }
+
+    #[test]
+    fn test_reverse_str() {
+        let a = str_array::<u32>(&["abc", "hello"]);
+        let out = reverse_str((&a, 0, a.len())).unwrap();
+        assert_eq!(out.get(0), Some("cba"));
+        assert_eq!(out.get(1), Some("olleh"));
+    }
+
+    #[test]
+    fn test_reverse_dict() {
+        let a = dict_array::<u32>(&["abc", "xy"]);
+        let out = reverse_dict((&a, 0, a.data.len())).unwrap();
+        assert_eq!(out.get_str(0), Some("cba"));
+        assert_eq!(out.get_str(1), Some("yx"));
+    }
+
+    // --- Byte length
+
+    #[test]
+    fn test_byte_length_str() {
+        let a = str_array::<u32>(&["hi", "café"]);
+        let out = byte_length_str((&a, 0, a.len())).unwrap();
+        assert_eq!(out.data[0], 2u32); // "hi" = 2 bytes
+        assert_eq!(out.data[1], 5u32); // "café" = 5 bytes (é is 2 bytes in UTF-8)
+    }
+
+    #[test]
+    fn test_byte_length_dict() {
+        let a = dict_array::<u32>(&["hi", "café"]);
+        let out = byte_length_dict((&a, 0, a.data.len())).unwrap();
+        assert_eq!(out.data[0], 2u32);
+        assert_eq!(out.data[1], 5u32);
+    }
+
+    // --- Find and count
+
+    #[test]
+    fn test_find_str() {
+        let a = str_array::<u32>(&["hello world", "foo bar", "baz"]);
+        let out = find_str((&a, 0, a.len()), "world").unwrap();
+        assert_eq!(out.data[0], 6);
+        assert_eq!(out.data[1], -1);
+        assert_eq!(out.data[2], -1);
+    }
+
+    #[test]
+    fn test_find_dict() {
+        let a = dict_array::<u32>(&["hello", "world"]);
+        let out = find_dict((&a, 0, a.data.len()), "llo").unwrap();
+        assert_eq!(out.data[0], 2);
+        assert_eq!(out.data[1], -1);
+    }
+
+    #[test]
+    fn test_count_match_str() {
+        let a = str_array::<u32>(&["abcabc", "abc", "xyz"]);
+        let out = count_match_str((&a, 0, a.len()), "abc").unwrap();
+        assert_eq!(out.data[0], 2);
+        assert_eq!(out.data[1], 1);
+        assert_eq!(out.data[2], 0);
+    }
+
+    #[test]
+    fn test_count_match_dict() {
+        let a = dict_array::<u32>(&["aaa", "a"]);
+        let out = count_match_dict((&a, 0, a.data.len()), "a").unwrap();
+        assert_eq!(out.data[0], 3);
+        assert_eq!(out.data[1], 1);
+    }
+
+    // --- Substring
+
+    #[test]
+    fn test_substring_str() {
+        let a = str_array::<u32>(&["hello world", "foo"]);
+        let out = substring_str((&a, 0, a.len()), 6, None).unwrap();
+        assert_eq!(out.get(0), Some("world"));
+        assert_eq!(out.get(1), Some(""));
+    }
+
+    #[test]
+    fn test_substring_str_with_len() {
+        let a = str_array::<u32>(&["hello world"]);
+        let out = substring_str((&a, 0, a.len()), 0, Some(5)).unwrap();
+        assert_eq!(out.get(0), Some("hello"));
+    }
+
+    #[test]
+    fn test_substring_dict() {
+        let a = dict_array::<u32>(&["hello", "world"]);
+        let out = substring_dict((&a, 0, a.data.len()), 1, Some(3)).unwrap();
+        assert_eq!(out.get_str(0), Some("ell"));
+        assert_eq!(out.get_str(1), Some("orl"));
+    }
+
+    // --- Replace
+
+    #[test]
+    fn test_replace_str() {
+        let a = str_array::<u32>(&["hello world", "foo bar foo"]);
+        let out = replace_str((&a, 0, a.len()), "foo", "baz").unwrap();
+        assert_eq!(out.get(0), Some("hello world"));
+        assert_eq!(out.get(1), Some("baz bar baz"));
+    }
+
+    #[test]
+    fn test_replace_dict() {
+        let a = dict_array::<u32>(&["aXb", "cXd"]);
+        let out = replace_dict((&a, 0, a.data.len()), "X", "Y").unwrap();
+        assert_eq!(out.get_str(0), Some("aYb"));
+        assert_eq!(out.get_str(1), Some("cYd"));
+    }
+
+    // --- Repeat
+
+    #[test]
+    fn test_repeat_str() {
+        let a = str_array::<u32>(&["ab", "x"]);
+        let out = repeat_str((&a, 0, a.len()), 3).unwrap();
+        assert_eq!(out.get(0), Some("ababab"));
+        assert_eq!(out.get(1), Some("xxx"));
+    }
+
+    #[test]
+    fn test_repeat_dict() {
+        let a = dict_array::<u32>(&["ha"]);
+        let out = repeat_dict((&a, 0, a.data.len()), 2).unwrap();
+        assert_eq!(out.get_str(0), Some("haha"));
+    }
+
+    // --- Pad
+
+    #[test]
+    fn test_pad_str_left() {
+        let a = str_array::<u32>(&["hi", "hello"]);
+        let out = pad_str((&a, 0, a.len()), 5, ' ', PadSide::Left).unwrap();
+        assert_eq!(out.get(0), Some("   hi"));
+        assert_eq!(out.get(1), Some("hello")); // already 5 chars
+    }
+
+    #[test]
+    fn test_pad_str_right() {
+        let a = str_array::<u32>(&["hi"]);
+        let out = pad_str((&a, 0, a.len()), 5, '-', PadSide::Right).unwrap();
+        assert_eq!(out.get(0), Some("hi---"));
+    }
+
+    #[test]
+    fn test_pad_str_both() {
+        let a = str_array::<u32>(&["hi"]);
+        let out = pad_str((&a, 0, a.len()), 6, '*', PadSide::Both).unwrap();
+        assert_eq!(out.get(0), Some("**hi**"));
+    }
+
+    #[test]
+    fn test_pad_dict() {
+        let a = dict_array::<u32>(&["x"]);
+        let out = pad_dict((&a, 0, a.data.len()), 3, '0', PadSide::Left).unwrap();
+        assert_eq!(out.get_str(0), Some("00x"));
+    }
+
+    // --- Join
+
+    #[test]
+    fn test_join_str() {
+        let a = str_array::<u32>(&["a", "b", "c"]);
+        assert_eq!(join_str((&a, 0, a.len()), ", "), Some("a, b, c".to_owned()));
+    }
+
+    #[test]
+    fn test_join_str_chunk() {
+        let a = str_array::<u32>(&["skip", "a", "b", "skip"]);
+        assert_eq!(join_str((&a, 1, 2), "-"), Some("a-b".to_owned()));
+    }
+
+    #[test]
+    fn test_join_dict() {
+        let a = dict_array::<u32>(&["x", "y"]);
+        assert_eq!(join_dict((&a, 0, a.data.len()), "+"), Some("x+y".to_owned()));
+    }
+
+    // --- Regex replace (feature-gated)
+
+    #[cfg(feature = "regex")]
+    #[test]
+    fn test_regex_replace_str() {
+        let a = str_array::<u32>(&["abc123def456", "no digits"]);
+        let out = regex_replace_str((&a, 0, a.len()), r"\d+", "N").unwrap();
+        assert_eq!(out.get(0), Some("abcNdefN"));
+        assert_eq!(out.get(1), Some("no digits"));
+    }
+
+    #[cfg(feature = "regex")]
+    #[test]
+    fn test_regex_replace_dict() {
+        let a = dict_array::<u32>(&["foo123"]);
+        let out = regex_replace_dict((&a, 0, a.data.len()), r"\d+", "").unwrap();
+        assert_eq!(out.get_str(0), Some("foo"));
+    }
+
+    // --- Null handling tests
+
+    #[test]
+    fn test_to_uppercase_str_with_nulls() {
+        let mut a = str_array::<u32>(&["hello", "skip", "world"]);
+        a.null_mask = Some(bm(&[true, false, true]));
+        let out = to_uppercase_str((&a, 0, a.len())).unwrap();
+        assert_eq!(out.get(0), Some("HELLO"));
+        assert!(!out.null_mask.as_ref().unwrap().get(1));
+        assert_eq!(out.get(2), Some("WORLD"));
+    }
+
+    #[test]
+    fn test_find_str_with_nulls() {
+        let mut a = str_array::<u32>(&["hello", "skip"]);
+        a.null_mask = Some(bm(&[true, false]));
+        let out = find_str((&a, 0, a.len()), "ello").unwrap();
+        assert_eq!(out.data[0], 1);
+        assert_eq!(out.data[1], 0);
+        assert!(!out.null_mask.as_ref().unwrap().get(1));
+    }
+
+    #[test]
+    fn test_join_str_with_nulls() {
+        let mut a = str_array::<u32>(&["a", "SKIP", "b"]);
+        a.null_mask = Some(bm(&[true, false, true]));
+        assert_eq!(join_str((&a, 0, a.len()), ","), Some("a,b".to_owned()));
     }
 }

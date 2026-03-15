@@ -209,6 +209,18 @@ impl ArrayV {
         }
     }
 
+    /// Returns the value at logical index `i` as a `Scalar`, respecting nulls.
+    ///
+    /// Delegates to `Array::get_scalar` with the view's offset applied.
+    #[cfg(feature = "scalar_type")]
+    #[inline]
+    pub fn get_scalar(&self, i: usize) -> Option<crate::Scalar> {
+        if i >= self.len {
+            return None;
+        }
+        self.array.get_scalar(self.offset + i)
+    }
+
     /// Returns a new window view into a sub-range of this view.
     #[inline]
     pub fn slice(&self, offset: usize, len: usize) -> Self {

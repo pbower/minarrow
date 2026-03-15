@@ -54,6 +54,16 @@ pub fn int_dense_body_std<T: PrimInt + ToPrimitive + WrappingAdd + WrappingSub +
                 }
             }
             ArithmeticOperator::Power => lhs[i].pow(rhs[i].to_u32().unwrap_or(0)),
+            ArithmeticOperator::FloorDiv => {
+                if rhs[i] == T::zero() {
+                    panic!("Floor division by zero")
+                } else {
+                    let d = lhs[i] / rhs[i];
+                    let r = lhs[i] % rhs[i];
+                    // If remainder is non-zero and signs differ, floor toward -inf
+                    if r != T::zero() && (lhs[i] ^ rhs[i]) < T::zero() { d - T::one() } else { d }
+                }
+            }
         };
     }
 }
@@ -93,6 +103,15 @@ pub fn int_masked_body_std<T: PrimInt + ToPrimitive + WrappingAdd + WrappingSub 
                     }
                 }
                 ArithmeticOperator::Power => (lhs[i].pow(rhs[i].to_u32().unwrap_or(0)), true),
+                ArithmeticOperator::FloorDiv => {
+                    if rhs[i] == T::zero() {
+                        (T::zero(), false)
+                    } else {
+                        let d = lhs[i] / rhs[i];
+                        let r = lhs[i] % rhs[i];
+                        if r != T::zero() && (lhs[i] ^ rhs[i]) < T::zero() { (d - T::one(), true) } else { (d, true) }
+                    }
+                }
             };
             out[i] = result;
             unsafe {
@@ -121,6 +140,7 @@ pub fn float_dense_body_std<T: Float>(op: ArithmeticOperator, lhs: &[T], rhs: &[
             ArithmeticOperator::Divide => lhs[i] / rhs[i],
             ArithmeticOperator::Remainder => lhs[i] % rhs[i],
             ArithmeticOperator::Power => (rhs[i] * lhs[i].ln()).exp(),
+            ArithmeticOperator::FloorDiv => (lhs[i] / rhs[i]).floor(),
         };
     }
 }
@@ -148,6 +168,7 @@ pub fn float_masked_body_std<T: Float>(
                 ArithmeticOperator::Divide => lhs[i] / rhs[i],
                 ArithmeticOperator::Remainder => lhs[i] % rhs[i],
                 ArithmeticOperator::Power => (rhs[i] * lhs[i].ln()).exp(),
+                ArithmeticOperator::FloorDiv => (lhs[i] / rhs[i]).floor(),
             };
             unsafe {
                 out_mask.set_unchecked(i, true);

@@ -41,9 +41,6 @@ use num_traits::ToPrimitive;
 
 use crate::enums::operators::ArithmeticOperator::{self};
 #[cfg(feature = "str_arithmetic")]
-use crate::kernels::string::string_predicate_masks;
-
-#[cfg(feature = "str_arithmetic")]
 use crate::utils::{
     confirm_mask_capacity, estimate_categorical_cardinality, estimate_string_cardinality,
 };
@@ -673,8 +670,10 @@ where
     let lmask_ref = lmask_slice.as_ref();
     let rmask_ref = rmask_slice.as_ref();
 
-    // build per‐position validity
-    let (lmask, rmask, mut out_mask) = string_predicate_masks(lmask_ref, rmask_ref, llen);
+    // build per-position validity
+    let lmask = lmask_ref;
+    let rmask = rmask_ref;
+    let mut out_mask = Bitmask::new_set_all(llen, false);
     let _ = confirm_mask_capacity(llen, lmask)?;
     let _ = confirm_mask_capacity(llen, rmask)?;
 

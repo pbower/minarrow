@@ -1908,6 +1908,395 @@ impl Array {
         crate::traits::print::value_to_string(self, idx)
     }
 
+    /// Extract the element at `idx` as a `Scalar`, or `None` if out of bounds.
+    ///
+    /// Returns `Scalar::Null` for null elements.
+    #[cfg(feature = "scalar_type")]
+    pub fn get_scalar(&self, idx: usize) -> Option<crate::Scalar> {
+        use crate::Scalar;
+        if idx >= self.len() {
+            return None;
+        }
+        let is_null = self.null_mask().is_some_and(|m| !m.get(idx));
+        if is_null {
+            return Some(Scalar::Null);
+        }
+        match self {
+            Array::NumericArray(num) => match num {
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => Some(Scalar::Int8(a.data[idx])),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => Some(Scalar::Int16(a.data[idx])),
+                NumericArray::Int32(a) => Some(Scalar::Int32(a.data[idx])),
+                NumericArray::Int64(a) => Some(Scalar::Int64(a.data[idx])),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => Some(Scalar::UInt8(a.data[idx])),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => Some(Scalar::UInt16(a.data[idx])),
+                NumericArray::UInt32(a) => Some(Scalar::UInt32(a.data[idx])),
+                NumericArray::UInt64(a) => Some(Scalar::UInt64(a.data[idx])),
+                NumericArray::Float32(a) => Some(Scalar::Float32(a.data[idx])),
+                NumericArray::Float64(a) => Some(Scalar::Float64(a.data[idx])),
+                NumericArray::Null => Some(Scalar::Null),
+            },
+            Array::TextArray(text) => match text {
+                TextArray::String32(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
+                #[cfg(feature = "large_string")]
+                TextArray::String64(a) => Some(Scalar::String64(a.get_str(idx)?.to_owned())),
+                TextArray::Categorical32(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical8(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical16(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
+                #[cfg(feature = "extended_categorical")]
+                TextArray::Categorical64(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
+                TextArray::Null => Some(Scalar::Null),
+            },
+            Array::BooleanArray(a) => Some(Scalar::Boolean(a.get(idx)?)),
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(temp) => match temp {
+                crate::TemporalArray::Datetime32(a) => Some(Scalar::Datetime32(a.data[idx])),
+                crate::TemporalArray::Datetime64(a) => Some(Scalar::Datetime64(a.data[idx])),
+                crate::TemporalArray::Null => Some(Scalar::Null),
+            },
+            Array::Null => Some(Scalar::Null),
+        }
+    }
+
+    /// Create an all-null array of the given ArrowType with `n_rows` elements.
+    ///
+    /// The data buffer is zero-filled and every element is masked as null.
+    /// For datetime types, set the time_unit on the returned array afterwards.
+    pub fn null_array(arrow_type: &ArrowType, n_rows: usize) -> Array {
+        let mask = Bitmask::with_capacity(n_rows);
+        match arrow_type {
+            ArrowType::Null => Array::Null,
+            ArrowType::Boolean => {
+                Array::BooleanArray(Arc::new(BooleanArray::from_vec(vec![false; n_rows], Some(mask))))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::Int8 => {
+                Array::from_int8(IntegerArray::new(Vec64::from_slice(&vec![0i8; n_rows]), Some(mask)))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::Int16 => {
+                Array::from_int16(IntegerArray::new(Vec64::from_slice(&vec![0i16; n_rows]), Some(mask)))
+            }
+            ArrowType::Int32 => {
+                Array::from_int32(IntegerArray::new(Vec64::from_slice(&vec![0i32; n_rows]), Some(mask)))
+            }
+            ArrowType::Int64 => {
+                Array::from_int64(IntegerArray::new(Vec64::from_slice(&vec![0i64; n_rows]), Some(mask)))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::UInt8 => {
+                Array::NumericArray(NumericArray::UInt8(Arc::new(IntegerArray::new(Vec64::from_slice(&vec![0u8; n_rows]), Some(mask)))))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            ArrowType::UInt16 => {
+                Array::NumericArray(NumericArray::UInt16(Arc::new(IntegerArray::new(Vec64::from_slice(&vec![0u16; n_rows]), Some(mask)))))
+            }
+            ArrowType::UInt32 => {
+                Array::NumericArray(NumericArray::UInt32(Arc::new(IntegerArray::new(Vec64::from_slice(&vec![0u32; n_rows]), Some(mask)))))
+            }
+            ArrowType::UInt64 => {
+                Array::NumericArray(NumericArray::UInt64(Arc::new(IntegerArray::new(Vec64::from_slice(&vec![0u64; n_rows]), Some(mask)))))
+            }
+            ArrowType::Float32 => {
+                Array::NumericArray(NumericArray::Float32(Arc::new(FloatArray::new(Vec64::from_slice(&vec![0.0f32; n_rows]), Some(mask)))))
+            }
+            ArrowType::Float64 => {
+                Array::from_float64(FloatArray::new(Vec64::from_slice(&vec![0.0f64; n_rows]), Some(mask)))
+            }
+            ArrowType::String => {
+                let strs: Vec<&str> = vec![""; n_rows];
+                let mut arr = StringArray::<u32>::from_slice(&strs);
+                arr.null_mask = Some(mask);
+                Array::from_string32(arr)
+            }
+            #[cfg(feature = "large_string")]
+            ArrowType::LargeString => {
+                let strs: Vec<&str> = vec![""; n_rows];
+                let mut arr = StringArray::<u64>::from_slice(&strs);
+                arr.null_mask = Some(mask);
+                Array::TextArray(TextArray::String64(Arc::new(arr)))
+            }
+            ArrowType::Dictionary(cat_idx) => {
+                let strs: Vec<&str> = vec![""; n_rows];
+                match cat_idx {
+                    CategoricalIndexType::UInt32 => {
+                        let mut arr = CategoricalArray::<u32>::from_vec(strs, None);
+                        arr.null_mask = Some(mask);
+                        Array::TextArray(TextArray::Categorical32(Arc::new(arr)))
+                    }
+                    #[cfg(feature = "extended_categorical")]
+                    _ => Array::Null,
+                }
+            }
+            #[cfg(feature = "datetime")]
+            ArrowType::Date32 | ArrowType::Time32(_) | ArrowType::Duration32(_) => {
+                Array::TemporalArray(crate::TemporalArray::Datetime32(Arc::new(
+                    crate::DatetimeArray::new(Vec64::from_slice(&vec![0i32; n_rows]), Some(mask), None),
+                )))
+            }
+            #[cfg(feature = "datetime")]
+            ArrowType::Date64
+            | ArrowType::Time64(_)
+            | ArrowType::Duration64(_)
+            | ArrowType::Timestamp(_, _) => {
+                Array::TemporalArray(crate::TemporalArray::Datetime64(Arc::new(
+                    crate::DatetimeArray::new(Vec64::from_slice(&vec![0i64; n_rows]), Some(mask), None),
+                )))
+            }
+            #[cfg(feature = "datetime")]
+            ArrowType::Interval(_) => Array::Null,
+            ArrowType::Utf8View => {
+                let strs: Vec<&str> = vec![""; n_rows];
+                let mut arr = StringArray::<u32>::from_slice(&strs);
+                arr.null_mask = Some(mask);
+                Array::from_string32(arr)
+            }
+        }
+    }
+
+    /// Build an array from a slice of Scalars.
+    ///
+    /// All scalars must be the same type. The type is inferred from the first
+    /// non-Null element. If all elements are Null, returns `Array::Null`.
+    #[cfg(feature = "scalar_type")]
+    pub fn from_scalars(scalars: &[crate::Scalar]) -> Array {
+        use crate::Scalar;
+        if scalars.is_empty() {
+            return Array::default();
+        }
+
+        // Find the first non-null to determine type
+        let template = scalars.iter().find(|s| !matches!(s, Scalar::Null));
+        let Some(template) = template else {
+            return Array::Null;
+        };
+
+        match template {
+            Scalar::Float64(_) => {
+                let mut data = Vec64::<f64>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::Float64(v) => data.push(*v),
+                        Scalar::Null => { data.push(0.0); mask.set(i, false); }
+                        _ => data.push(s.f64()),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::from_float64(FloatArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+            }
+            Scalar::Float32(_) => {
+                let mut data = Vec64::<f32>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::Float32(v) => data.push(*v),
+                        Scalar::Null => { data.push(0.0); mask.set(i, false); }
+                        _ => data.push(s.f64() as f32),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::NumericArray(NumericArray::Float32(Arc::new(FloatArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))))
+            }
+            Scalar::Int32(_) => {
+                let mut data = Vec64::<i32>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::Int32(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(s.f64() as i32),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::from_int32(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+            }
+            Scalar::Int64(_) => {
+                let mut data = Vec64::<i64>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::Int64(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(s.f64() as i64),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::from_int64(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+            }
+            Scalar::UInt32(_) => {
+                let mut data = Vec64::<u32>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::UInt32(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(s.f64() as u32),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::NumericArray(NumericArray::UInt32(Arc::new(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))))
+            }
+            Scalar::UInt64(_) => {
+                let mut data = Vec64::<u64>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::UInt64(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(s.f64() as u64),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::NumericArray(NumericArray::UInt64(Arc::new(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))))
+            }
+            Scalar::Boolean(_) => {
+                let mut data = Vec::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::Boolean(v) => data.push(*v),
+                        Scalar::Null => { data.push(false); mask.set(i, false); }
+                        _ => data.push(false),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::BooleanArray(Arc::new(BooleanArray::from_vec(data, if has_nulls { Some(mask) } else { None })))
+            }
+            Scalar::String32(_) => {
+                let strs: Vec<String> = scalars.iter().map(|s| match s {
+                    Scalar::String32(v) => v.clone(),
+                    #[cfg(feature = "large_string")]
+                    Scalar::String64(v) => v.clone(),
+                    Scalar::Null => String::new(),
+                    _ => String::new(),
+                }).collect();
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    if matches!(s, Scalar::Null) { mask.set(i, false); }
+                }
+                let refs: Vec<&str> = strs.iter().map(|s| s.as_str()).collect();
+                let mut arr = StringArray::<u32>::from_slice(&refs);
+                let has_nulls = mask.count_zeros() > 0;
+                if has_nulls { arr.null_mask = Some(mask); }
+                Array::from_string32(arr)
+            }
+            #[cfg(feature = "large_string")]
+            Scalar::String64(_) => {
+                let strs: Vec<String> = scalars.iter().map(|s| match s {
+                    Scalar::String64(v) | Scalar::String32(v) => v.clone(),
+                    Scalar::Null => String::new(),
+                    _ => String::new(),
+                }).collect();
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    if matches!(s, Scalar::Null) { mask.set(i, false); }
+                }
+                let refs: Vec<&str> = strs.iter().map(|s| s.as_str()).collect();
+                let mut arr = StringArray::<u64>::from_slice(&refs);
+                let has_nulls = mask.count_zeros() > 0;
+                if has_nulls { arr.null_mask = Some(mask); }
+                Array::TextArray(TextArray::String64(Arc::new(arr)))
+            }
+            #[cfg(feature = "datetime")]
+            Scalar::Datetime32(_) => {
+                let mut data = Vec64::<i32>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::Datetime32(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(0),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::TemporalArray(crate::TemporalArray::Datetime32(Arc::new(
+                    crate::DatetimeArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }, None),
+                )))
+            }
+            #[cfg(feature = "datetime")]
+            Scalar::Datetime64(_) => {
+                let mut data = Vec64::<i64>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::Datetime64(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(0),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::TemporalArray(crate::TemporalArray::Datetime64(Arc::new(
+                    crate::DatetimeArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }, None),
+                )))
+            }
+            #[cfg(feature = "datetime")]
+            Scalar::Interval => Array::Null,
+            #[cfg(feature = "extended_numeric_types")]
+            Scalar::Int8(_) => {
+                let mut data = Vec64::<i8>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::Int8(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(s.f64() as i8),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::from_int8(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            Scalar::Int16(_) => {
+                let mut data = Vec64::<i16>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::Int16(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(s.f64() as i16),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::from_int16(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            Scalar::UInt8(_) => {
+                let mut data = Vec64::<u8>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::UInt8(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(s.f64() as u8),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::from_uint8(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+            }
+            #[cfg(feature = "extended_numeric_types")]
+            Scalar::UInt16(_) => {
+                let mut data = Vec64::<u16>::with_capacity(scalars.len());
+                let mut mask = Bitmask::new_set_all(scalars.len(), true);
+                for (i, s) in scalars.iter().enumerate() {
+                    match s {
+                        Scalar::UInt16(v) => data.push(*v),
+                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        _ => data.push(s.f64() as u16),
+                    }
+                }
+                let has_nulls = mask.count_zeros() > 0;
+                Array::from_uint16(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+            }
+            Scalar::Null => Array::Null,
+        }
+    }
+
     /// Compare two elements within the same array by index.
     ///
     /// Uses total ordering for floats via `total_cmp()`. Nulls sort last:
@@ -2080,11 +2469,11 @@ impl Array {
                 TextArray::Categorical32(arr) => {
                     Arc::make_mut(arr).set_null_mask(Some(mask));
                 }
-                #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+                #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical8(arr) => {
                     Arc::make_mut(arr).set_null_mask(Some(mask));
                 }
-                #[cfg(all(feature = "extended_categorical", feature = "extended_numeric_types"))]
+                #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(arr) => {
                     Arc::make_mut(arr).set_null_mask(Some(mask));
                 }

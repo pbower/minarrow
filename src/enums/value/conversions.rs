@@ -874,6 +874,20 @@ impl TryFrom<Value> for NumericArrayV {
                     }),
                 }
             }
+            Value::Array(inner) => {
+                let arr = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                match arr {
+                    Array::NumericArray(num_arr) => {
+                        let len = num_arr.len();
+                        Ok(NumericArrayV::new(num_arr, 0, len))
+                    }
+                    _ => Err(MinarrowError::TypeError {
+                        from: "Value",
+                        to: "NumericArrayV",
+                        message: Some("Array is not a NumericArray".to_owned()),
+                    }),
+                }
+            }
             _ => Err(MinarrowError::TypeError {
                 from: "Value",
                 to: "NumericArrayV",
