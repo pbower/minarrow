@@ -51,7 +51,15 @@ pub fn broadcast_table_with_operator(
         result_field_arrays.push(result_field_array);
     }
 
-    Ok(Table::new(table_l.name.clone(), Some(result_field_arrays)))
+    let table = Table::new(table_l.name.clone(), Some(result_field_arrays));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table;
+        t.metadata = table_l.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table)
 }
 
 /// Broadcasts addition over table columns element-wise
@@ -206,7 +214,15 @@ pub fn broadcast_table_to_array(
         })
         .collect();
 
-    Ok(Table::new(table.name.clone(), Some(new_cols?)))
+    let table_out = Table::new(table.name.clone(), Some(new_cols?));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = table.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Helper function for table-scalar broadcasting - apply table columns to scalar
@@ -249,7 +265,15 @@ pub fn broadcast_table_to_scalar(
         })
         .collect();
 
-    Ok(Table::new(table.name.clone(), Some(new_cols?)))
+    let table_out = Table::new(table.name.clone(), Some(new_cols?));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = table.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Helper function for table-arrayview broadcasting - work directly with view without conversion
@@ -294,7 +318,15 @@ pub fn broadcast_table_to_arrayview(
         })
         .collect();
 
-    Ok(Table::new(table.name.clone(), Some(new_cols?)))
+    let table_out = Table::new(table.name.clone(), Some(new_cols?));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = table.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Helper function for Table-SuperArrayView broadcasting - promote Table to aligned SuperTableView
@@ -630,14 +662,14 @@ mod tests {
         use crate::ffi::arrow_dtype::ArrowType;
 
         // Table with 3 rows to match each chunk size
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 Array::from_int32(IntegerArray::from_slice(&vec64![2, 3, 4])),
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         let field = Field::new("data".to_string(), ArrowType::Int32, false, None);
         let chunks = vec![
@@ -676,14 +708,14 @@ mod tests {
     fn test_broadcast_table_to_superarrayview() {
         use crate::ffi::arrow_dtype::ArrowType;
 
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 Array::from_int32(IntegerArray::from_slice(&vec64![1, 2, 3, 4, 5, 6])),
             )],
-            n_rows: 6,
-            name: "test".to_string(),
-        };
+            6,
+            "test".to_string(),
+        );
 
         let arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30, 40, 50, 60]));
         let field = Field::new("data".to_string(), ArrowType::Int32, false, None);

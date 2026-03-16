@@ -649,14 +649,14 @@ mod tests {
     }
 
     fn create_test_table(name: &str, data1: &[i32], data2: &[i32]) -> Table {
-        Table {
-            cols: vec![
+        Table::build(
+            vec![
                 create_field_array("col1", data1),
                 create_field_array("col2", data2),
             ],
-            n_rows: 3,
-            name: name.to_string(),
-        }
+            3,
+            name.to_string(),
+        )
     }
 
     fn create_super_table(batches: Vec<Table>) -> SuperTable {

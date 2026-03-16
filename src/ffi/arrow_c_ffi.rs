@@ -1739,8 +1739,20 @@ struct ArrayStreamHolder {
 ///
 /// The resulting `ArrowArray` has format `"+s"` with one child per column.
 /// Callers must eventually call the release callback on the returned pointers.
+///
+/// When `metadata` is provided, it is encoded and attached to the top-level
+/// struct ArrowSchema. The `table_metadata` feature controls whether metadata
+/// is preserved on the minarrow rust side during import.
 pub fn export_struct_to_c(
     columns: Vec<(Arc<Array>, Schema)>,
+    metadata: Option<std::collections::BTreeMap<String, String>>,
+) -> (*mut ArrowArray, *mut ArrowSchema) {
+    export_struct_to_c_inner(columns, metadata)
+}
+
+fn export_struct_to_c_inner(
+    columns: Vec<(Arc<Array>, Schema)>,
+    metadata: Option<std::collections::BTreeMap<String, String>>,
 ) -> (*mut ArrowArray, *mut ArrowSchema) {
     let n_cols = columns.len();
     let n_rows = if n_cols > 0 {
@@ -1783,16 +1795,22 @@ pub fn export_struct_to_c(
     let format_cstr = CString::new("+s").unwrap();
     let name_cstr = CString::new("").unwrap();
 
+    let metadata_bytes = metadata.map(|m| encode_arrow_metadata(&m));
+    let metadata_ptr = metadata_bytes
+        .as_ref()
+        .map(|b| b.as_ptr() as *const i8)
+        .unwrap_or(ptr::null());
+
     let struct_holder = Box::new(StructSchemaHolder {
         format_cstr,
         name_cstr,
-        metadata_bytes: None,
+        metadata_bytes,
     });
 
     let struct_sch = Box::new(ArrowSchema {
         format: struct_holder.format_cstr.as_ptr(),
         name: struct_holder.name_cstr.as_ptr(),
-        metadata: ptr::null(),
+        metadata: metadata_ptr,
         flags: 0,
         n_children: n_cols as i64,
         children: children_sch_ptr,
@@ -2096,7 +2114,7 @@ unsafe extern "C" fn rb_stream_get_next(
     let batch = holder.batches[holder.cursor].clone();
     holder.cursor += 1;
 
-    let (arr_ptr, _sch_ptr) = export_struct_to_c(batch);
+    let (arr_ptr, _sch_ptr) = export_struct_to_c_inner(batch, None);
 
     // Copy the exported struct array into the caller's out pointer
     unsafe {
@@ -3091,5 +3109,61 @@ mod tests {
                 "Field metadata should survive record batch stream round-trip"
             );
         }
+    }
+
+    #[test]
+    #[cfg(feature = "table_metadata")]
+    fn test_table_metadata_round_trip() {
+        use super::{
+            export_record_batch_stream_with_metadata, import_record_batch_stream_with_metadata,
+        };
+        use std::collections::BTreeMap;
+
+        // Build a simple column
+        let mut arr = IntegerArray::<i32>::default();
+        arr.push(1);
+        arr.push(2);
+        arr.push(3);
+        let array = Arc::new(Array::from_int32(arr));
+        let field = Field::new("col1", ArrowType::Int32, false, None);
+        let col_schema = Schema {
+            fields: vec![field.clone()],
+            metadata: Default::default(),
+        };
+
+        // Schema-level metadata simulating pandas categorical info
+        let mut table_meta = BTreeMap::new();
+        table_meta.insert(
+            "pandas".to_string(),
+            r#"{"columns":[{"name":"col1","pandas_type":"categorical","metadata":{"ordered":true}}]}"#.to_string(),
+        );
+
+        // Export as stream with metadata
+        let stream = export_record_batch_stream_with_metadata(
+            vec![vec![(array, col_schema)]],
+            vec![field],
+            Some(table_meta.clone()),
+        );
+        let stream_ptr = Box::into_raw(stream);
+
+        // Import with metadata
+        let (batches, schema_meta) =
+            unsafe { import_record_batch_stream_with_metadata(stream_ptr) };
+
+        // Verify metadata survived the roundtrip
+        assert_eq!(schema_meta, Some(table_meta.clone()));
+
+        // Verify we can construct a Table with the imported metadata
+        let imported_cols: Vec<_> = batches[0]
+            .iter()
+            .map(|(arr, f)| crate::FieldArray::from_arr(f.name.as_str(), (**arr).clone()))
+            .collect();
+        let table = crate::Table::new_with_metadata(
+            "test".to_string(),
+            Some(imported_cols),
+            table_meta.clone(),
+        );
+        assert_eq!(table.metadata(), &table_meta);
+        assert_eq!(table.n_rows(), 3);
     }
 }

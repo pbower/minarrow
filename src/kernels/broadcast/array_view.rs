@@ -52,7 +52,15 @@ pub fn broadcast_arrayview_to_table(
         })
         .collect();
 
-    Ok(Table::new(table.name.clone(), Some(field_arrays)))
+    let table_out = Table::new(table.name.clone(), Some(field_arrays));
+    #[cfg(feature = "table_metadata")]
+    {
+        let mut t = table_out;
+        t.metadata = table.metadata.clone();
+        return Ok(t);
+    }
+    #[cfg(not(feature = "table_metadata"))]
+    Ok(table_out)
 }
 
 /// Helper function for arrayview-tableview broadcasting - work with views
@@ -154,8 +162,8 @@ mod tests {
         // Create a table with 2 columns
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![100, 200, 300]));
-        let table = Table {
-            cols: vec![
+        let table = Table::build(
+            vec![
                 FieldArray::new(
                     Field::new("col1".to_string(), ArrowType::Int32, false, None),
                     arr1,
@@ -165,9 +173,9 @@ mod tests {
                     arr2,
                 ),
             ],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
 
         let result =
             broadcast_arrayview_to_table(ArithmeticOperator::Add, &array_view, &table).unwrap();
@@ -198,14 +206,14 @@ mod tests {
 
         // Create a table and table view
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 10, 10]));
-        let table = Table {
-            cols: vec![FieldArray::new(
+        let table = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 3);
 
         let result = broadcast_arrayview_to_tableview(
@@ -234,8 +242,8 @@ mod tests {
         // Create a table view
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![100, 200, 300]));
-        let table = Table {
-            cols: vec![
+        let table = Table::build(
+            vec![
                 FieldArray::new(
                     Field::new("col1".to_string(), ArrowType::Int32, false, None),
                     arr1,
@@ -245,9 +253,9 @@ mod tests {
                     arr2,
                 ),
             ],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view = TableV::from_table(table, 0, 3);
 
         let result = broadcast_arrayview_to_tableview(
@@ -283,25 +291,25 @@ mod tests {
 
         // Create SuperTableView with 2 slices
         let table1_arr = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table1_arr,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view1 = TableV::from_table(table1, 0, 3);
 
         let table2_arr = Array::from_int32(IntegerArray::from_slice(&vec64![40, 50, 60]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 table2_arr,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view2 = TableV::from_table(table2, 0, 3);
 
         let super_table_view = SuperTableV {
@@ -347,25 +355,25 @@ mod tests {
 
         // Create a SuperTableView with 6 total rows (mismatch)
         let arr1 = Array::from_int32(IntegerArray::from_slice(&vec64![10, 20, 30]));
-        let table1 = Table {
-            cols: vec![FieldArray::new(
+        let table1 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr1,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view1 = TableV::from_table(table1, 0, 3);
 
         let arr2 = Array::from_int32(IntegerArray::from_slice(&vec64![40, 50, 60]));
-        let table2 = Table {
-            cols: vec![FieldArray::new(
+        let table2 = Table::build(
+            vec![FieldArray::new(
                 Field::new("col1".to_string(), ArrowType::Int32, false, None),
                 arr2,
             )],
-            n_rows: 3,
-            name: "test".to_string(),
-        };
+            3,
+            "test".to_string(),
+        );
         let table_view2 = TableV::from_table(table2, 0, 3);
 
         let super_table_view = SuperTableV {
