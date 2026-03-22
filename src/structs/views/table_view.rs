@@ -210,6 +210,50 @@ impl TableV {
         self.fields.iter().map(|f| f.name.as_str()).collect()
     }
 
+    /// Rename columns in place. Each pair is (old_name, new_name).
+    ///
+    /// Returns an error if any old name is not found.
+    /// This is metadata-only - array data is not touched. If the Arc<Field>
+    /// is the sole reference it is mutated in place, otherwise a new Arc is
+    /// created with the renamed field.
+    pub fn rename_columns(
+        &mut self,
+        mapping: &[(&str, &str)],
+    ) -> Result<(), MinarrowError> {
+        for &(old, _) in mapping {
+            if !self.fields.iter().any(|f| f.name == old) {
+                return Err(MinarrowError::IndexError(format!(
+                    "rename_columns: column '{}' not found",
+                    old
+                )));
+            }
+        }
+        for field_arc in &mut self.fields {
+            for &(old, new) in mapping {
+                if field_arc.name == old {
+                    match Arc::get_mut(field_arc) {
+                        Some(f) => f.name = new.to_string(),
+                        None => {
+                            let f = field_arc.as_ref();
+                            *field_arc = Arc::new(Field::new(
+                                new,
+                                f.dtype.clone(),
+                                f.nullable,
+                                if f.metadata.is_empty() {
+                                    None
+                                } else {
+                                    Some(f.metadata.clone())
+                                },
+                            ));
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Returns the index of a column by name.
     #[inline]
     pub fn col_name_index(&self, name: &str) -> Option<usize> {

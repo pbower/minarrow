@@ -234,6 +234,43 @@ impl Table {
         self.cols.iter().map(|fa| fa.field.name.as_str()).collect()
     }
 
+    /// Rename columns in place. Each pair is (old_name, new_name).
+    ///
+    /// Returns an error if any old name is not found.
+    /// This is metadata-only - array data is not touched.
+    pub fn rename_columns(
+        &mut self,
+        mapping: &[(&str, &str)],
+    ) -> Result<(), MinarrowError> {
+        for &(old, _) in mapping {
+            if !self.cols.iter().any(|fa| fa.field.name == old) {
+                return Err(MinarrowError::IndexError(format!(
+                    "rename_columns: column '{}' not found",
+                    old
+                )));
+            }
+        }
+        for col in &mut self.cols {
+            for &(old, new) in mapping {
+                if col.field.name == old {
+                    let f = &col.field;
+                    col.field = Arc::new(Field::new(
+                        new,
+                        f.dtype.clone(),
+                        f.nullable,
+                        if f.metadata.is_empty() {
+                            None
+                        } else {
+                            Some(f.metadata.clone())
+                        },
+                    ));
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Returns the index of a column by name.
     pub fn col_name_index(&self, name: &str) -> Option<usize> {
         self.cols.iter().position(|fa| fa.field.name == name)
