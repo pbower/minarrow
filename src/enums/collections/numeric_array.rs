@@ -16,7 +16,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{Bitmask, FloatArray, IntegerArray, MaskedArray};
+use crate::{Bitmask, FloatArray, IntegerArray, MaskedArray, Vec64};
 use crate::{BooleanArray, StringArray};
 use crate::{
     enums::{error::MinarrowError, shape_dim::ShapeDim},
@@ -532,6 +532,54 @@ impl NumericArray {
             },
             NumericArray::Float64(a) => Ok(FloatArray::<f32>::from(&*a)),
             NumericArray::Null => Err(MinarrowError::NullError { message: None }),
+        }
+    }
+
+    /// Cast this NumericArray to Float64, staying wrapped as NumericArray.
+    ///
+    /// If already Float64, returns self unchanged. Otherwise casts element
+    /// data to f64, preserving the null mask. Uses `Arc::try_unwrap` so that
+    /// if this is the sole owner of the backing Arc, the old data is consumed
+    /// and freed rather than cloned.
+    pub fn cow_into_f64(self) -> Self {
+        macro_rules! cast_arc {
+            ($arc:expr) => {
+                match Arc::try_unwrap($arc) {
+                    Ok(owned) => {
+                        let data: Vec64<f64> =
+                            owned.data.as_slice().iter().map(|&v| v as f64).collect();
+                        NumericArray::Float64(Arc::new(FloatArray::new(data, owned.null_mask)))
+                    }
+                    Err(shared) => {
+                        let data: Vec64<f64> =
+                            shared.data.as_slice().iter().map(|&v| v as f64).collect();
+                        NumericArray::Float64(Arc::new(FloatArray::new(
+                            data,
+                            shared.null_mask.clone(),
+                        )))
+                    }
+                }
+            };
+        }
+
+        match self {
+            NumericArray::Float64(_) => self,
+            NumericArray::Float32(arc) => cast_arc!(arc),
+            NumericArray::Int32(arc) => cast_arc!(arc),
+            NumericArray::Int64(arc) => cast_arc!(arc),
+            NumericArray::UInt32(arc) => cast_arc!(arc),
+            NumericArray::UInt64(arc) => cast_arc!(arc),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::Int8(arc) => cast_arc!(arc),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::Int16(arc) => cast_arc!(arc),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt8(arc) => cast_arc!(arc),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt16(arc) => cast_arc!(arc),
+            NumericArray::Null => {
+                NumericArray::Float64(Arc::new(FloatArray::new(Vec64::new(), None)))
+            }
         }
     }
 

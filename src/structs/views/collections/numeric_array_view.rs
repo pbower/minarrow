@@ -38,7 +38,7 @@ use crate::structs::views::bitmask_view::BitmaskV;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::{Array, ArrayV, FieldArray, MaskedArray, NumericArray};
+use crate::{Array, ArrayV, Bitmask, FieldArray, MaskedArray, NumericArray};
 
 /// # NumericArrayView
 ///
@@ -148,7 +148,13 @@ impl NumericArrayV {
             NumericArray::Float64(arr) => arr.get(phys_idx),
             NumericArray::Null => None,
             #[cfg(feature = "extended_numeric_types")]
-            _ => unreachable!("get_f64: not implemented for extended numeric types"),
+            NumericArray::Int8(arr) => arr.get(phys_idx).map(|v| v as f64),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::Int16(arr) => arr.get(phys_idx).map(|v| v as f64),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt8(arr) => arr.get(phys_idx).map(|v| v as f64),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt16(arr) => arr.get(phys_idx).map(|v| v as f64),
         }
     }
 
@@ -168,7 +174,13 @@ impl NumericArrayV {
             NumericArray::Float64(arr) => unsafe { arr.get_unchecked(phys_idx) },
             NumericArray::Null => None,
             #[cfg(feature = "extended_numeric_types")]
-            _ => unreachable!("get_f64_unchecked: not implemented for extended numeric types"),
+            NumericArray::Int8(arr) => unsafe { arr.get_unchecked(phys_idx) }.map(|v| v as f64),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::Int16(arr) => unsafe { arr.get_unchecked(phys_idx) }.map(|v| v as f64),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt8(arr) => unsafe { arr.get_unchecked(phys_idx) }.map(|v| v as f64),
+            #[cfg(feature = "extended_numeric_types")]
+            NumericArray::UInt16(arr) => unsafe { arr.get_unchecked(phys_idx) }.map(|v| v as f64),
         }
     }
 
@@ -248,6 +260,39 @@ impl NumericArrayV {
     pub fn set_null_count(&self, count: usize) -> Result<(), usize> {
         self.null_count.set(count).map_err(|_| count)
     }
+
+    /// Guarantees the backing array is Float64, then returns the f64 slice,
+    /// null mask, and null count for this view's window.
+    ///
+    /// **If already Float64, this is a pass-through.** Otherwise the full backing
+    /// NumericArray is cast to Float64 via [`NumericArray::cow_into_f64`],
+    /// preserving the window offset and length.
+    ///
+    /// When multiple views share the same backing array, the first view to
+    /// call this will trigger the cast. If it holds the sole Arc reference,
+    /// the old data is consumed in place. If other references exist, the data
+    /// is cloned, leaving the shared original untouched. Subsequent views
+    /// that still reference the original will cast independently when they
+    /// reach this call, so it generally is best avoided in such contexts as it would
+    /// clone for every independent window view.
+    pub fn guarantee_f64(&mut self) -> (&[f64], Option<&Bitmask>, Option<usize>) {
+        if !matches!(&self.array, NumericArray::Float64(_)) {
+            // Take the old array out, leaving Null as placeholder
+            let old = std::mem::take(&mut self.array);
+            self.array = old.cow_into_f64();
+        }
+        // Safe: the branch above guarantees Float64 at this point
+        let NumericArray::Float64(arr) = &self.array else { unreachable!() };
+        let slice = &arr.data.as_slice()[self.offset..self.offset + self.len];
+        let mask = arr.null_mask.as_ref();
+        let nc = if mask.is_some() {
+            Some(self.null_count())
+        } else {
+            None
+        };
+        (slice, mask, nc)
+    }
+
 }
 
 impl From<NumericArray> for NumericArrayV {

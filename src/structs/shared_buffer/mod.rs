@@ -127,6 +127,26 @@ impl SharedBuffer {
             },
         }
     }
+    /// Constructs a `SharedBuffer` from a SIMD-aligned Vec64<T>, reinterpreting
+    /// the allocation as raw bytes. This is a zero-copy operation that transfers
+    /// ownership of the allocation to the SharedBuffer.
+    ///
+    /// Used by Matrix::to_table to freeze the matrix data buffer so that
+    /// per-column Buffer<f64> instances can share it via zero-copy windows.
+    ///
+    /// # Safety
+    /// T must be a plain data type with no drop logic.
+    pub unsafe fn from_vec64_typed<T>(v: Vec64<T>) -> Self {
+        let byte_len = v.len() * std::mem::size_of::<T>();
+        let byte_cap = v.0.capacity() * std::mem::size_of::<T>();
+        let ptr = v.0.as_ptr() as *mut u8;
+        std::mem::forget(v);
+        let raw_vec = unsafe {
+            Vec::from_raw_parts_in(ptr, byte_len, byte_cap, vec64::Vec64Alloc::default())
+        };
+        Self::from_vec64(Vec64(raw_vec))
+    }
+
     /// Constructs a `SharedBuffer` from an arbitrary owner (e.g. Arc<[u8]>, mmap, etc).
     ///
     /// The owner must implement `AsRef<[u8]> + Send + Sync + 'static`.

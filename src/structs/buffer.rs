@@ -200,6 +200,21 @@ impl<T> Buffer<T> {
         }
     }
 
+    /// Construct a zero-copy buffer as a window into a SharedBuffer.
+    ///
+    /// The buffer views elements `[offset .. offset + len]` of type T within
+    /// the shared allocation. The SharedBuffer is cloned (via a refcount bump) 
+    /// so the underlying memory stays alive.
+    ///
+    /// This is used by Matrix::to_table to create per-column FloatArray
+    /// buffers that all share the same contiguous allocation.
+    #[inline]
+    pub fn from_shared_column(owner: SharedBuffer, offset: usize, len: usize) -> Self {
+        Self {
+            storage: Storage::Shared { owner, offset, len },
+        }
+    }
+
     /// Construct a zero-copy buffer from an Arc-backed foreign allocation.
     ///
     /// Because all `Minarrow` types work off 64-byte alignment at the outset
