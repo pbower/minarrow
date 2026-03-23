@@ -154,8 +154,12 @@ impl SharedBuffer {
     where
         T: AsRef<[u8]> + Send + Sync + 'static,
     {
+        unsafe fn drop_typed<T: AsRef<[u8]> + Send + Sync + 'static>(ptr: *mut ()) {
+            unsafe { drop(Box::from_raw(ptr as *mut Owned<T>)); }
+        }
         let raw: *mut Owned<T> = Box::into_raw(Box::new(Owned {
             ref_cnt: AtomicUsize::new(1),
+            drop_fn: drop_typed::<T>,
             owner,
         }));
         let buf = unsafe { (*raw).owner.as_ref() };
