@@ -21,11 +21,17 @@ use crate::structs::shared_buffer::internal::vtable::Vtable;
 ///
 /// Enables SharedBuffer to manage any container implementing AsRef<[u8]>
 /// with atomic reference counting for safe sharing.
+///
+/// The `drop_fn` field stores a type-erased destructor so that
+/// `owned_drop` can properly clean up the concrete `Owned<T>` without
+/// knowing T at the vtable level.
 #[repr(C)]
 pub(crate) struct Owned<T: AsRef<[u8]> + Send + Sync + 'static> {
     pub(crate) ref_cnt: AtomicUsize,
+    pub(crate) drop_fn: unsafe fn(*mut ()),
     pub(crate) owner: T,
 }
+
 
 /// Clones owned buffer by incrementing reference count.
 unsafe fn owned_clone(h: &AtomicPtr<()>, p: *const u8, l: usize) -> SharedBuffer {
@@ -43,6 +49,9 @@ unsafe fn owned_clone(h: &AtomicPtr<()>, p: *const u8, l: usize) -> SharedBuffer
 }
 
 /// Decrements reference count, deallocating if last reference.
+///
+/// Reads the type-erased destructor stored in the `Owned` header
+/// to properly drop the concrete `Owned<T>` and run T's destructor.
 unsafe fn owned_drop(h: &mut AtomicPtr<()>, _p: *const u8, _l: usize) {
     let raw = h.load(Ordering::Acquire);
     if raw.is_null() {
@@ -50,7 +59,16 @@ unsafe fn owned_drop(h: &mut AtomicPtr<()>, _p: *const u8, _l: usize) {
     }
     let ref_cnt = unsafe { &*(raw as *const AtomicUsize) };
     if ref_cnt.fetch_sub(1, Ordering::AcqRel) == 1 {
-        drop(unsafe { Box::from_raw(raw) });
+        // Read the drop function stored after ref_cnt in the Owned header.
+        // Owned is #[repr(C)] with ref_cnt first, drop_fn second, so the
+        // layout is the same for all Owned<T>.
+        unsafe {
+            let drop_fn_ptr =
+                (raw as *const u8).add(std::mem::size_of::<AtomicUsize>())
+                    as *const unsafe fn(*mut ());
+            let drop_fn = *drop_fn_ptr;
+            drop_fn(raw);
+        }
     }
 }
 
