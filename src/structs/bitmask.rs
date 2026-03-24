@@ -503,6 +503,35 @@ impl Bitmask {
         }
     }
 
+    /// Appends bits `[offset..offset+len)` from another bitmask into self.
+    /// Byte-aligned sources copy whole bytes directly. Unaligned sources
+    /// shift bytes to align before copying.
+    pub fn extend_from_bitmask_range(&mut self, other: &Bitmask, offset: usize, len: usize) {
+        if len == 0 { return; }
+        let src_bytes = other.bits.as_slice();
+        if offset & 7 == 0 {
+            // Source is byte-aligned - pass the bytes starting at the offset
+            self.extend_from_slice(&src_bytes[offset >> 3..], len);
+        } else {
+            // Unaligned source - shift bytes to produce an aligned slice
+            let src_byte_start = offset >> 3;
+            let bit_shift = (offset & 7) as u32;
+            let n_src_bytes = ((len + 7) >> 3) + 1; // +1 for the shifted tail
+            let end = (src_byte_start + n_src_bytes).min(src_bytes.len());
+            let mut shifted = Vec::with_capacity(n_src_bytes);
+            for i in src_byte_start..end {
+                let lo = src_bytes[i] >> bit_shift;
+                let hi = if i + 1 < src_bytes.len() {
+                    src_bytes[i + 1] << (8 - bit_shift)
+                } else {
+                    0
+                };
+                shifted.push(lo | hi);
+            }
+            self.extend_from_slice(&shifted, len);
+        }
+    }
+
     /// Extends the bitmask by appending `len` bits from a bit-packed `[u8]` slice.
     ///
     /// - `src`: The source byte slice (bit-packed; LSB = first bit).

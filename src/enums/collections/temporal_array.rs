@@ -122,6 +122,19 @@ impl TemporalArray {
         }
     }
 
+    pub fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), MinarrowError> {
+        match (self, other) {
+            (TemporalArray::Datetime32(a), TemporalArray::Datetime32(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            (TemporalArray::Datetime64(a), TemporalArray::Datetime64(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            (TemporalArray::Null, TemporalArray::Null) => Ok(()),
+            (lhs, rhs) => Err(MinarrowError::TypeError {
+                from: "TemporalArray",
+                to: "TemporalArray",
+                message: Some(format!("Cannot append_range {:?} into {:?}", rhs, lhs)),
+            }),
+        }
+    }
+
     /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
     ///
     /// This is an **O(n)** operation.

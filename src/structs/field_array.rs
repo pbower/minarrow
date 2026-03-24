@@ -255,6 +255,14 @@ impl FieldArray {
         self.refresh_null_count();
     }
 
+    /// Appends rows `[offset..offset+len)` from another FieldArray into self.
+    /// Extends data directly from the source's backing buffer.
+    pub fn concat_range(&mut self, other: &FieldArray, offset: usize, len: usize) -> Result<(), MinarrowError> {
+        self.array.concat_array_range(&other.array, offset, len)?;
+        self.refresh_null_count();
+        Ok(())
+    }
+
     /// Provides mutable access to the underlying array with automatic null_count refresh.
     /// Uses copy-on-write semantics - clones array data if Arc reference count > 1.
     /// Use this for operations that may change the null count.

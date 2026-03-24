@@ -505,6 +505,7 @@ impl TableV {
                     }
 
                     let mut unique_values = Vec64::<String>::with_capacity(value_map.len());
+                    unique_values.resize(value_map.len(), String::new());
                     for (val, code) in value_map {
                         unique_values[code as usize] = val;
                     }
@@ -540,6 +541,7 @@ impl TableV {
                     }
 
                     let mut unique_values = Vec64::<String>::with_capacity(value_map.len());
+                    unique_values.resize(value_map.len(), String::new());
                     for (val, code) in value_map {
                         unique_values[code as usize] = val;
                     }
@@ -575,6 +577,7 @@ impl TableV {
                     }
 
                     let mut unique_values = Vec64::<String>::with_capacity(value_map.len());
+                    unique_values.resize(value_map.len(), String::new());
                     for (val, code) in value_map {
                         unique_values[code as usize] = val;
                     }
@@ -610,6 +613,7 @@ impl TableV {
                     }
 
                     let mut unique_values = Vec64::<String>::with_capacity(value_map.len());
+                    unique_values.resize(value_map.len(), String::new());
                     for (val, code) in value_map {
                         unique_values[code as usize] = val;
                     }
