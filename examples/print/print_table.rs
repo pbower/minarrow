@@ -19,7 +19,9 @@
 //!     cargo run --example print_table
 //! ---------------------------------------------------------
 
-use minarrow::aliases::{BoolArr, CatArr, FltArr, IntArr, StrArr};
+use minarrow::aliases::{BoolArr, FltArr, IntArr, StrArr};
+#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+use minarrow::aliases::CatArr;
 use minarrow::{Bitmask, FieldArray, MaskedArray, Print, Table};
 #[cfg(feature = "datetime")]
 use minarrow::{DatetimeArray, enums::time_units::TimeUnit};
@@ -41,6 +43,7 @@ fn main() {
 
     // String and Dictionary/Categorical
     let col_str32 = StrArr::<u32>::from_slice(&["red", "blue", "green", "yellow", "purple"]);
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     let col_cat32 = CatArr::<u32>::from_values(
         ["apple", "banana", "cherry", "banana", "apple"]
             .iter()
@@ -74,6 +77,7 @@ fn main() {
     let fa_f64 = FieldArray::from_arr("float64_col", col_f64);
     let fa_bool = FieldArray::from_arr("bool_col", col_bool);
     let fa_str32 = FieldArray::from_arr("utf8_col", col_str32);
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     let fa_cat32 = FieldArray::from_arr("dict32_col", col_cat32);
     #[cfg(feature = "datetime")]
     let fa_dt32 = FieldArray::from_arr("datetime32_col", col_dt32);
@@ -90,6 +94,7 @@ fn main() {
     tbl.add_col(fa_f64);
     tbl.add_col(fa_bool);
     tbl.add_col(fa_str32);
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     tbl.add_col(fa_cat32);
     #[cfg(feature = "datetime")]
     tbl.add_col(fa_dt32);

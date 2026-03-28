@@ -1711,6 +1711,7 @@ mod tests {
             }
         }
 
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
         #[test]
         fn test_from_arena_boolean_and_categorical() {
             use crate::ffi::arrow_dtype::CategoricalIndexType;

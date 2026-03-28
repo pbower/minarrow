@@ -131,8 +131,9 @@ pub enum ArrowType {
 /// - Smaller widths reduce memory footprint for low-cardinality data.
 /// - Larger widths enable more distinct categories without overflow.
 /// - Variant availability depends on feature flags:
-///   - `UInt8`, `UInt16`, and `UInt64` require `extended_categorical`.
-///   - `UInt32` is always available.
+///   - `UInt8` requires `default_categorical_8` or `extended_categorical`.
+///   - `UInt16` and `UInt64` require `extended_categorical`.
+///   - `UInt32` is available unless `default_categorical_8` is enabled without `extended_categorical`.
 ///
 /// ## Interoperability
 /// - Maps directly to the integer index type in Apache Arrow's `DictionaryType`.
@@ -140,10 +141,11 @@ pub enum ArrowType {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum CategoricalIndexType {
-    #[cfg(feature = "extended_categorical")]
+    #[cfg(feature = "default_categorical_8")]
     UInt8,
     #[cfg(feature = "extended_categorical")]
     UInt16,
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     UInt32,
     #[cfg(feature = "extended_categorical")]
     UInt64,
@@ -177,7 +179,7 @@ impl<T: Integer> CategoricalArray<T> {
     /// The arrow type that backs this array
     pub fn arrow_type() -> ArrowType {
         let t = TypeId::of::<T>();
-        #[cfg(feature = "extended_categorical")]
+        #[cfg(feature = "default_categorical_8")]
         if t == TypeId::of::<u8>() {
             return ArrowType::Dictionary(CategoricalIndexType::UInt8);
         }
@@ -185,6 +187,7 @@ impl<T: Integer> CategoricalArray<T> {
         if t == TypeId::of::<u16>() {
             return ArrowType::Dictionary(CategoricalIndexType::UInt16);
         }
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
         if t == TypeId::of::<u32>() {
             return ArrowType::Dictionary(CategoricalIndexType::UInt32);
         }
@@ -296,10 +299,11 @@ impl Display for ArrowType {
 impl Display for CategoricalIndexType {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            #[cfg(feature = "extended_categorical")]
+            #[cfg(feature = "default_categorical_8")]
             CategoricalIndexType::UInt8 => f.write_str("UInt8"),
             #[cfg(feature = "extended_categorical")]
             CategoricalIndexType::UInt16 => f.write_str("UInt16"),
+            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
             CategoricalIndexType::UInt32 => f.write_str("UInt32"),
             #[cfg(feature = "extended_categorical")]
             CategoricalIndexType::UInt64 => f.write_str("UInt64"),

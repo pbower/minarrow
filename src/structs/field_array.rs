@@ -343,10 +343,11 @@ pub fn create_field_for_array(
             TextArray::String32(_) => ArrowType::String,
             #[cfg(feature = "large_string")]
             TextArray::String64(_) => ArrowType::LargeString,
-            #[cfg(feature = "extended_categorical")]
+            #[cfg(feature = "default_categorical_8")]
             TextArray::Categorical8(_) => ArrowType::Dictionary(CategoricalIndexType::UInt8),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical16(_) => ArrowType::Dictionary(CategoricalIndexType::UInt16),
+            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
             TextArray::Categorical32(_) => ArrowType::Dictionary(CategoricalIndexType::UInt32),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(_) => ArrowType::Dictionary(CategoricalIndexType::UInt64),

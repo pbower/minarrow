@@ -494,6 +494,7 @@ impl TableV {
                     }
                     Array::from_string64(new_arr)
                 }
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(_) => {
                     use crate::{Bitmask, Vec64};
                     use std::collections::HashMap;
@@ -529,7 +530,7 @@ impl TableV {
                     let new_arr = CategoricalArray::<u32>::new(codes, unique_values, null_mask);
                     Array::from_categorical32(new_arr)
                 }
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(_) => {
                     use crate::{Bitmask, Vec64};
                     use std::collections::HashMap;
