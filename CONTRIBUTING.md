@@ -202,7 +202,7 @@ When fixing bugs:
 
 4. ### Licensing
 
-- All contributions are accepted under the project’s MIT licence.
+- All contributions are accepted under the project’s Apache-2.0 licence.
 - By submitting a contribution, you confirm that you have the legal right to do so and agree to the Contributor Licence Agreement (`CLA.md`).
 - Please ensure no code is copied or derived from other repositories or source without appropriate rights or permissions.
 
