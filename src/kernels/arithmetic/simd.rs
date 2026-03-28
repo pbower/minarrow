@@ -43,7 +43,7 @@ use num_traits::{One, PrimInt, ToPrimitive, WrappingAdd, WrappingMul, WrappingSu
 
 use crate::enums::operators::ArithmeticOperator;
 use crate::kernels::bitmask::simd::all_true_mask_simd;
-use crate::utils::simd_mask;
+use crate::utils::{simd_mask, write_simd_mask_bits};
 
 /// SIMD integer arithmetic kernel for dense arrays (no nulls).
 /// Vectorised operations with scalar fallback for power operations and array tails.
@@ -198,15 +198,7 @@ pub fn int_masked_body_simd<T, const LANES: usize>(
             };
             r.copy_to_slice(&mut out[i..i + LANES]);
             // Write the out_mask based on the op
-            let valid_bits = valid.to_bitmask();
-            for l in 0..LANES {
-                let idx = i + l;
-                if idx < n {
-                    unsafe {
-                        out_mask.set_unchecked(idx, ((valid_bits >> l) & 1) == 1);
-                    }
-                }
-            }
+            write_simd_mask_bits(out_mask, i, valid);
             i += LANES;
         }
         // Scalar tail
@@ -331,13 +323,7 @@ pub fn int_masked_body_simd<T, const LANES: usize>(
             }
             _ => m_src,
         };
-        let mbits = final_mask.to_bitmask();
-        for l in 0..LANES {
-            let idx = i + l;
-            if idx < n {
-                unsafe { out_mask.set_unchecked(idx, ((mbits >> l) & 1) == 1) };
-            }
-        }
+        write_simd_mask_bits(out_mask, i, final_mask);
         i += LANES;
     }
 
@@ -398,17 +384,19 @@ pub fn float_masked_body_f32_simd<const LANES: usize>(
     type M = <f32 as SimdElement>::Mask;
 
     let n = lhs.len();
-    let mut i = 0;
     let dense = all_true_mask_simd::<LANES>(mask);
 
+    if dense {
+        float_dense_body_f32_simd::<LANES>(op, lhs, rhs, out);
+        out_mask.fill(true);
+        return;
+    }
+
+    let mut i = 0;
     while i + LANES <= n {
         let a = Simd::<f32, LANES>::from_slice(&lhs[i..i + LANES]);
         let b = Simd::<f32, LANES>::from_slice(&rhs[i..i + LANES]);
-        let m: Mask<M, LANES> = if dense {
-            Mask::splat(true)
-        } else {
-            simd_mask::<M, LANES>(mask, i, n)
-        };
+        let m: Mask<M, LANES> = simd_mask::<M, LANES>(mask, i, n);
 
         let res = match op {
             ArithmeticOperator::Add => a + b,
@@ -423,19 +411,13 @@ pub fn float_masked_body_f32_simd<const LANES: usize>(
         let selected = m.select(res, Simd::<f32, LANES>::splat(0.0));
         selected.copy_to_slice(&mut out[i..i + LANES]);
 
-        let mbits = m.to_bitmask();
-        for l in 0..LANES {
-            let idx = i + l;
-            if idx < n {
-                unsafe { out_mask.set_unchecked(idx, ((mbits >> l) & 1) == 1) };
-            }
-        }
+        write_simd_mask_bits(out_mask, i, m);
         i += LANES;
     }
 
-    // Tail often caused by `n % LANES =! 0`; uses scalar fallback
+    // Tail often caused by `n % LANES != 0`; uses scalar fallback
     for j in i..n {
-        let valid = dense || unsafe { mask.get_unchecked(j) };
+        let valid = unsafe { mask.get_unchecked(j) };
         if valid {
             out[j] = match op {
                 ArithmeticOperator::Add => lhs[j] + rhs[j],
@@ -497,13 +479,7 @@ pub fn float_masked_body_f64_simd<const LANES: usize>(
         let selected = m.select(res, Simd::<f64, LANES>::splat(0.0));
         selected.copy_to_slice(&mut out[i..i + LANES]);
 
-        let mbits = m.to_bitmask();
-        for l in 0..LANES {
-            let idx = i + l;
-            if idx < n {
-                unsafe { out_mask.set_unchecked(idx, ((mbits >> l) & 1) == 1) };
-            }
-        }
+        write_simd_mask_bits(out_mask, i, m);
         i += LANES;
     }
 
@@ -646,13 +622,7 @@ pub fn fma_masked_body_f32_simd<const LANES: usize>(
         let selected = m.select(res, Simd::<f32, LANES>::splat(0.0));
         selected.copy_to_slice(&mut out[i..i + LANES]);
 
-        let mbits = m.to_bitmask();
-        for l in 0..LANES {
-            let idx = i + l;
-            if idx < n {
-                unsafe { out_mask.set_unchecked(idx, ((mbits >> l) & 1) == 1) };
-            }
-        }
+        write_simd_mask_bits(out_mask, i, m);
         i += LANES;
     }
 
@@ -705,13 +675,7 @@ pub fn fma_masked_body_f64_simd<const LANES: usize>(
         let selected = m.select(res, Simd::<f64, LANES>::splat(0.0));
         selected.copy_to_slice(&mut out[i..i + LANES]);
 
-        let mbits = m.to_bitmask();
-        for l in 0..LANES {
-            let idx = i + l;
-            if idx < n {
-                unsafe { out_mask.set_unchecked(idx, ((mbits >> l) & 1) == 1) };
-            }
-        }
+        write_simd_mask_bits(out_mask, i, m);
         i += LANES;
     }
 
