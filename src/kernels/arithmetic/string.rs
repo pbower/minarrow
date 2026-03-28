@@ -365,34 +365,34 @@ where
 /// Deduplicates strings and assigns numeric codes for memory efficiency.
 #[cfg(feature = "fast_hash")]
 #[inline(always)]
-fn intern(s: &str, dict: &mut AHashMap<String, u32>, uniq: &mut Vec64<String>) -> u32 {
+fn intern<T: Integer>(s: &str, dict: &mut AHashMap<String, T>, uniq: &mut Vec64<String>) -> T {
     if let Some(&code) = dict.get(s) {
         code
     } else {
-        let idx = uniq.len() as u32;
+        let idx = T::from_usize(uniq.len());
         uniq.push(s.to_owned());
         dict.insert(s.to_owned(), idx);
         idx
     }
 }
 
-/// String interning helper for categorical array generation with standard hashing.
+/// String interning for categorical array generation with standard hashing.
 /// Deduplicates strings and assigns numeric codes for memory efficiency.
 #[cfg(not(feature = "fast_hash"))]
 #[inline(always)]
-fn intern(s: &str, dict: &mut HashMap<String, u32>, uniq: &mut Vec64<String>) -> u32 {
+fn intern<T: Integer>(s: &str, dict: &mut HashMap<String, T>, uniq: &mut Vec64<String>) -> T {
     if let Some(&code) = dict.get(s) {
         code
     } else {
-        let idx = uniq.len() as u32;
+        let idx = T::from_usize(uniq.len());
         uniq.push(s.to_owned());
         dict.insert(s.to_owned(), idx);
         idx
     }
 }
 
-/// Applies an element-wise binary operation between two `CategoricalArray<u32>` arrays,
-/// producing a new `CategoricalArray<u32>`. The result reuses or extends the unified dictionary
+/// Applies an element-wise binary operation between two `CategoricalArray<T>` arrays,
+/// producing a new `CategoricalArray<T>`. The result reuses or extends the unified dictionary
 /// from both input arrays and ensures deterministic interned value codes.
 ///
 /// Supported operations:
@@ -400,7 +400,7 @@ fn intern(s: &str, dict: &mut HashMap<String, u32>, uniq: &mut Vec64<String>) ->
 /// - `Add`: Concatenates strings from `lhs` and `rhs`. Result is interned into the output dictionary.
 /// - `Subtract`: Removes the first occurrence of `rhs` from `lhs`. If `rhs` is empty or not found,
 ///               returns `lhs` unchanged.
-/// - `Multiply`: Returns `lhs` unchanged. No actual repetition occurs-identity operation.
+/// - `Multiply`: Returns `lhs` unchanged. No actual repetition occurs - identity operation.
 /// - `Divide`: Splits `lhs` by occurrences of `rhs`, and each resulting segment is interned separately.
 ///             If `rhs` is empty, `lhs` is returned unchanged.
 ///
@@ -409,7 +409,7 @@ fn intern(s: &str, dict: &mut HashMap<String, u32>, uniq: &mut Vec64<String>) ->
 /// - Null mask is propagated accordingly.
 ///
 /// Output:
-/// - The resulting `CategoricalArray<u32>` may have a different length than the input
+/// - The resulting `CategoricalArray<T>` may have a different length than the input
 ///   if `Divide` produces multiple segments per row.
 /// - The dictionary (`unique_values`) is the union of all unique values observed in inputs and results,
 ///   with stable interned codes.
@@ -420,18 +420,19 @@ fn intern(s: &str, dict: &mut HashMap<String, u32>, uniq: &mut Vec64<String>) ->
 ///
 /// # Panics
 /// - Panics if internal memory allocation fails or if invariants are violated in unsafe regions.
-pub fn apply_dict32_dict32(
-    lhs: CategoricalAVT<u32>,
-    rhs: CategoricalAVT<u32>,
+/// - Panics if the dictionary grows beyond `T::MAX` entries (relevant for small index types like `u8`).
+fn apply_dict_dict_impl<T: Integer>(
+    lhs: CategoricalAVT<T>,
+    rhs: CategoricalAVT<T>,
     op: ArithmeticOperator,
-) -> Result<CategoricalArray<u32>, KernelError> {
+) -> Result<CategoricalArray<T>, KernelError> {
     // Destructure slice tuples for offset/length-local processing
     let (lhs_array, lhs_offset, lhs_logical_len) = lhs;
     let (rhs_array, rhs_offset, rhs_logical_len) = rhs;
 
     if lhs_logical_len != rhs_logical_len {
         return Err(KernelError::LengthMismatch(log_length_mismatch(
-            "apply_dict32_dict32".into(),
+            "apply_dict_dict_impl".into(),
             lhs_logical_len,
             rhs_logical_len,
         )));
@@ -450,10 +451,10 @@ pub fn apply_dict32_dict32(
     );
 
     #[cfg(feature = "fast_hash")]
-    let mut dict: AHashMap<String, u32> = AHashMap::with_capacity(uniq.capacity());
+    let mut dict: AHashMap<String, T> = AHashMap::with_capacity(uniq.capacity());
 
     #[cfg(not(feature = "fast_hash"))]
-    let mut dict: HashMap<String, u32> = HashMap::with_capacity(uniq.capacity());
+    let mut dict: HashMap<String, T> = HashMap::with_capacity(uniq.capacity());
 
     for v in lhs_array
         .unique_values
@@ -461,7 +462,7 @@ pub fn apply_dict32_dict32(
         .chain(rhs_array.unique_values.iter())
     {
         if !dict.contains_key(v) {
-            let idx = uniq.len() as u32;
+            let idx = T::from_usize(uniq.len());
             uniq.push(v.clone());
             dict.insert(uniq.last().unwrap().clone(), idx);
         }
@@ -469,7 +470,7 @@ pub fn apply_dict32_dict32(
 
     // Ensure "" is present and get its code
     let empty_code = *dict.entry("".to_owned()).or_insert_with(|| {
-        let idx = uniq.len() as u32;
+        let idx = T::from_usize(uniq.len());
         uniq.push("".to_owned());
         idx
     });
@@ -598,7 +599,7 @@ pub fn apply_dict32_dict32(
             }
             _ => {
                 return Err(KernelError::UnsupportedType(format!(
-                    "Unsupported apply_dict32_dict32 op={:?}",
+                    "Unsupported apply_dict_dict_impl op={:?}",
                     op
                 )));
             }
@@ -788,6 +789,25 @@ where
         null_mask: Some(out_mask),
     })
 }
+
+/// Generates a public dict-dict arithmetic function for a specific index type.
+macro_rules! impl_apply_dict_dict {
+    ($fn_name:ident, $idx:ty) => {
+        pub fn $fn_name(
+            lhs: CategoricalAVT<$idx>,
+            rhs: CategoricalAVT<$idx>,
+            op: ArithmeticOperator,
+        ) -> Result<CategoricalArray<$idx>, KernelError> {
+            apply_dict_dict_impl(lhs, rhs, op)
+        }
+    };
+}
+
+#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+impl_apply_dict_dict!(apply_dict32_dict32, u32);
+
+#[cfg(feature = "default_categorical_8")]
+impl_apply_dict_dict!(apply_dict8_dict8, u8);
 
 /// Applies element-wise binary arithmetic ops between a `CategoricalArray<u32>` and a `StringArray<T>`.
 #[cfg(feature = "str_arithmetic")]

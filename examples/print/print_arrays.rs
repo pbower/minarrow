@@ -21,7 +21,7 @@
 
 use std::sync::Arc;
 
-use minarrow::aliases::{BoolArr, CatArr, FltArr, IntArr, StrArr};
+use minarrow::aliases::{BoolArr, FltArr, IntArr, StrArr};
 use minarrow::enums::array::Array;
 use minarrow::{Bitmask, MaskedArray, NumericArray, Print, TextArray};
 
@@ -44,12 +44,6 @@ fn main() {
     // String and Dictionary/Categorical
     let col_str32 = StrArr::from_slice(&["red", "blue", "green", "yellow", "purple"]);
 
-    let col_cat32 = CatArr::<u32>::from_values(
-        ["apple", "banana", "cherry", "banana", "apple"]
-            .iter()
-            .copied(),
-    );
-
     // --- Print NumericArray, TextArray, TemporalArray enums
     println!("\n--- Enums: NumericArray, TextArray, TemporalArray ---");
     NumericArray::Int32(Arc::new(col_i32.clone())).print();
@@ -60,7 +54,6 @@ fn main() {
     println!("\n");
     TextArray::String32(Arc::new(col_str32.clone())).print();
     println!("\n");
-    let _ = &TextArray::Categorical32(Arc::new(col_cat32.clone())).print();
 
     println!("\n--- Array (top-level) ---");
     Array::from_int32(col_i32.clone()).print();
@@ -70,8 +63,6 @@ fn main() {
     Array::from_float32(col_f32.clone()).print();
     println!("\n");
     Array::from_string32(col_str32.clone()).print();
-    println!("\n");
-    Array::from_categorical32(col_cat32.clone()).print();
     println!("\n");
     // --- Print Array Views (ArrayV, NumericArrayV, TextArrayV, TemporalArrayV)
     #[cfg(feature = "views")]

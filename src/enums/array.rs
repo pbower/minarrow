@@ -95,7 +95,7 @@ use crate::{
 /// ## Examples
 /// ```rust
 /// use minarrow::{
-///     Array, IntegerArray, NumericArray, arr_bool, arr_cat32, arr_f64, arr_i32, arr_i64,
+///     Array, IntegerArray, NumericArray, arr_bool, arr_f64, arr_i32, arr_i64,
 ///     arr_str32, vec64
 /// };
 ///
@@ -104,7 +104,6 @@ use crate::{
 /// let float_arr = arr_f64![0.5, 1.5, 2.5];
 /// let bool_arr = arr_bool![true, false, true];
 /// let str_arr = arr_str32!["a", "b", "c"];
-/// let cat_arr = arr_cat32!["x", "y", "x", "z"];
 ///
 /// assert_eq!(int_arr.len(), 4);
 /// assert_eq!(str_arr.len(), 3);
@@ -193,12 +192,13 @@ impl Array {
     }
 
     /// Creates an Array enum with a Categorical32 array.
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     pub fn from_categorical32(arr: CategoricalArray<u32>) -> Self {
         Array::TextArray(TextArray::Categorical32(Arc::new(arr)))
     }
 
     /// Creates an Array enum with a Categorical8 array.
-    #[cfg(feature = "extended_categorical")]
+    #[cfg(feature = "default_categorical_8")]
     pub fn from_categorical8(arr: CategoricalArray<u8>) -> Self {
         Array::TextArray(TextArray::Categorical8(Arc::new(arr)))
     }
@@ -490,6 +490,7 @@ impl Array {
     }
 
     /// Returns a reference to the inner `CategoricalArray<u32>`.
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     pub fn try_cat32_ref(&self) -> Result<&CategoricalArray<u32>, MinarrowError> {
         match self {
             Array::TextArray(TextArray::Categorical32(arc)) => Ok(arc.as_ref()),
@@ -503,7 +504,7 @@ impl Array {
     }
 
     /// Returns a reference to the inner `CategoricalArray<u8>`.
-    #[cfg(feature = "extended_categorical")]
+    #[cfg(feature = "default_categorical_8")]
     pub fn try_cat8_ref(&self) -> Result<&CategoricalArray<u8>, MinarrowError> {
         match self {
             Array::TextArray(TextArray::Categorical8(arc)) => Ok(arc.as_ref()),
@@ -684,7 +685,7 @@ impl Array {
                     )))
                 }
 
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(cat) => {
                     let mut out = Vec64::with_capacity(cat.len());
                     let mut mask = Bitmask::with_capacity(cat.len());
@@ -736,6 +737,7 @@ impl Array {
                     NumericArray::Int32(Arc::new(IntegerArray::<i32>::from_vec64(out, Some(mask))))
                 }
 
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(cat) => {
                     let mut out = Vec64::with_capacity(cat.len());
                     let mut mask = Bitmask::with_capacity(cat.len());
@@ -1146,10 +1148,11 @@ impl Array {
         match_arm!(TextArray, String32, StringArray<u32>);
         #[cfg(feature = "large_string")]
         match_arm!(TextArray, String64, StringArray<u64>);
-        #[cfg(feature = "extended_categorical")]
+        #[cfg(feature = "default_categorical_8")]
         match_arm!(TextArray, Categorical8, CategoricalArray<u8>);
         #[cfg(feature = "extended_categorical")]
         match_arm!(TextArray, Categorical16, CategoricalArray<u16>);
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
         match_arm!(TextArray, Categorical32, CategoricalArray<u32>);
         #[cfg(feature = "extended_categorical")]
         match_arm!(TextArray, Categorical64, CategoricalArray<u64>);
@@ -1216,10 +1219,11 @@ impl Array {
         match_arm!(TextArray, String32, StringArray<u32>);
         #[cfg(feature = "large_string")]
         match_arm!(TextArray, String64, StringArray<u64>);
-        #[cfg(feature = "extended_categorical")]
+        #[cfg(feature = "default_categorical_8")]
         match_arm!(TextArray, Categorical8, CategoricalArray<u8>);
         #[cfg(feature = "extended_categorical")]
         match_arm!(TextArray, Categorical16, CategoricalArray<u16>);
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
         match_arm!(TextArray, Categorical32, CategoricalArray<u32>);
         #[cfg(feature = "extended_categorical")]
         match_arm!(TextArray, Categorical64, CategoricalArray<u64>);
@@ -1284,10 +1288,11 @@ impl Array {
         match_inner_type!(TextArray, String32, StringArray<u32>);
         #[cfg(feature = "large_string")]
         match_inner_type!(TextArray, String64, StringArray<u64>);
-        #[cfg(feature = "extended_categorical")]
+        #[cfg(feature = "default_categorical_8")]
         match_inner_type!(TextArray, Categorical8, CategoricalArray<u8>);
         #[cfg(feature = "extended_categorical")]
         match_inner_type!(TextArray, Categorical16, CategoricalArray<u16>);
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
         match_inner_type!(TextArray, Categorical32, CategoricalArray<u32>);
         #[cfg(feature = "extended_categorical")]
         match_inner_type!(TextArray, Categorical64, CategoricalArray<u64>);
@@ -1347,10 +1352,11 @@ impl Array {
         match_inner_type_mut!(TextArray, String32, StringArray<u32>);
         #[cfg(feature = "large_string")]
         match_inner_type_mut!(TextArray, String64, StringArray<u64>);
-        #[cfg(feature = "extended_categorical")]
+        #[cfg(feature = "default_categorical_8")]
         match_inner_type_mut!(TextArray, Categorical8, CategoricalArray<u8>);
         #[cfg(feature = "extended_categorical")]
         match_inner_type_mut!(TextArray, Categorical16, CategoricalArray<u16>);
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
         match_inner_type_mut!(TextArray, Categorical32, CategoricalArray<u32>);
         #[cfg(feature = "extended_categorical")]
         match_inner_type_mut!(TextArray, Categorical64, CategoricalArray<u64>);
@@ -1432,7 +1438,7 @@ impl Array {
                         "Strings use UTF-8 + offsets. Use logical accessor instead, or `slice_raw` if you do want byte access."
                     )
                 }
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(arr) => {
                     cast_slice::<u8, T>(arr.data(), offset, len).expect("cast failed")
                 }
@@ -1440,6 +1446,7 @@ impl Array {
                 TextArray::Categorical16(arr) => {
                     cast_slice::<u16, T>(arr.data(), offset, len).expect("cast failed")
                 }
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(arr) => {
                     cast_slice::<u32, T>(arr.data(), offset, len).expect("cast failed")
                 }
@@ -1527,10 +1534,11 @@ impl Array {
                 TextArray::String64(a) if TypeId::of::<T>() == TypeId::of::<u8>() => {
                     cast_slice::<u8, T>(&a.data, offset, len)
                 }
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(a) if TypeId::of::<T>() == TypeId::of::<u32>() => {
                     cast_slice::<u32, T>(&a.data, offset, len)
                 }
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(a) if TypeId::of::<T>() == TypeId::of::<u8>() => {
                     cast_slice::<u8, T>(&a.data, offset, len)
                 }
@@ -1589,7 +1597,7 @@ impl Array {
                 TextArray::String32(arr) => TextArray::String32(arr.slice_clone(offset, len)),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(arr) => TextArray::String64(arr.slice_clone(offset, len)),
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(arr) => {
                     TextArray::Categorical8(arr.slice_clone(offset, len))
                 }
@@ -1597,6 +1605,7 @@ impl Array {
                 TextArray::Categorical16(arr) => {
                     TextArray::Categorical16(arr.slice_clone(offset, len))
                 }
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(arr) => {
                     TextArray::Categorical32(arr.slice_clone(offset, len))
                 }
@@ -1645,10 +1654,11 @@ impl Array {
                 TextArray::String32(_) => ArrowType::String,
                 #[cfg(feature = "large_string")]
                 TextArray::String64(_) => ArrowType::LargeString,
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(_) => ArrowType::Dictionary(CategoricalIndexType::UInt8),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(_) => ArrowType::Dictionary(CategoricalIndexType::UInt16),
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(_) => ArrowType::Dictionary(CategoricalIndexType::UInt32),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical64(_) => ArrowType::Dictionary(CategoricalIndexType::UInt64),
@@ -1680,8 +1690,9 @@ impl Array {
     pub fn is_categorical_array(&self) -> bool {
         match self {
             Array::TextArray(text) => match text {
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(_) => true,
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(_) => true,
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(_) => true,
@@ -1708,8 +1719,9 @@ impl Array {
                 TextArray::String32(_) => true,
                 #[cfg(feature = "large_string")]
                 TextArray::String64(_) => true,
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(_) => false,
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(_) => false,
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(_) => false,
@@ -1733,8 +1745,9 @@ impl Array {
                 TextArray::String32(_) => true,
                 #[cfg(feature = "large_string")]
                 TextArray::String64(_) => true,
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(_) => true,
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(_) => true,
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(_) => true,
@@ -1892,10 +1905,11 @@ impl Array {
                 TextArray::String32(arr) => arr.null_mask.as_ref(),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(arr) => arr.null_mask.as_ref(),
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(arr) => arr.null_mask.as_ref(),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(arr) => arr.null_mask.as_ref(),
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(arr) => arr.null_mask.as_ref(),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical64(arr) => arr.null_mask.as_ref(),
@@ -1957,8 +1971,9 @@ impl Array {
                 TextArray::String32(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(a) => Some(Scalar::String64(a.get_str(idx)?.to_owned())),
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
@@ -2038,6 +2053,13 @@ impl Array {
             ArrowType::Dictionary(cat_idx) => {
                 let strs: Vec<&str> = vec![""; n_rows];
                 match cat_idx {
+                    #[cfg(feature = "default_categorical_8")]
+                    CategoricalIndexType::UInt8 => {
+                        let mut arr = CategoricalArray::<u8>::from_vec(strs, None);
+                        arr.null_mask = Some(mask);
+                        Array::TextArray(TextArray::Categorical8(Arc::new(arr)))
+                    }
+                    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                     CategoricalIndexType::UInt32 => {
                         let mut arr = CategoricalArray::<u32>::from_vec(strs, None);
                         arr.null_mask = Some(mask);
@@ -2352,8 +2374,9 @@ impl Array {
                 TextArray::String32(s) => s.get_str(i).cmp(&s.get_str(j)),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(s) => s.get_str(i).cmp(&s.get_str(j)),
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(c) => c.get_str(i).cmp(&c.get_str(j)),
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(c) => c.get_str(i).cmp(&c.get_str(j)),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(c) => c.get_str(i).cmp(&c.get_str(j)),
@@ -2411,8 +2434,9 @@ impl Array {
                 TextArray::String32(s) => s.get_str(idx).hash(state),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(s) => s.get_str(idx).hash(state),
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(c) => c.get_str(idx).hash(state),
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(c) => c.get_str(idx).hash(state),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(c) => c.get_str(idx).hash(state),
@@ -2480,10 +2504,11 @@ impl Array {
                 TextArray::String64(arr) => {
                     Arc::make_mut(arr).set_null_mask(Some(mask));
                 }
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(arr) => {
                     Arc::make_mut(arr).set_null_mask(Some(mask));
                 }
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(arr) => {
                     Arc::make_mut(arr).set_null_mask(Some(mask));
                 }
@@ -2582,7 +2607,7 @@ impl Array {
                 TextArray::String32(a) => (a.data.as_ptr(), a.data.len(), 1),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(a) => (a.data.as_ptr(), a.data.len(), 1),
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(a) => (
                     a.data.as_ptr() as *const u8,
                     a.len(),
@@ -2594,6 +2619,7 @@ impl Array {
                     a.len(),
                     std::mem::size_of::<u16>(),
                 ),
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(a) => (
                     a.data.as_ptr() as *const u8,
                     a.len(),
@@ -2654,7 +2680,7 @@ impl Array {
                 TextArray::String32(a) => a.null_mask.as_ref().map(|m| (m.as_ptr(), m.len())),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(a) => a.null_mask.as_ref().map(|m| (m.as_ptr(), m.len())),
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(a) => {
                     a.null_mask.as_ref().map(|m| (m.as_ptr(), m.capacity()))
                 }
@@ -2662,6 +2688,7 @@ impl Array {
                 TextArray::Categorical16(a) => {
                     a.null_mask.as_ref().map(|m| (m.as_ptr(), m.capacity()))
                 }
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(a) => {
                     a.null_mask.as_ref().map(|m| (m.as_ptr(), m.capacity()))
                 }
@@ -2729,10 +2756,11 @@ impl Array {
                 TextArray::String32(a) => a.null_count(),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(a) => a.null_count(),
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(a) => a.null_count(),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(a) => a.null_count(),
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(a) => a.null_count(),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical64(a) => a.null_count(),
@@ -3102,7 +3130,7 @@ impl Array {
 
             crate::ffi::arrow_dtype::ArrowType::Dictionary(idx) => {
                 let key: polars_arrow::datatypes::IntegerType = match idx {
-                    #[cfg(feature = "extended_categorical")]
+                    #[cfg(feature = "default_categorical_8")]
                     crate::ffi::arrow_dtype::CategoricalIndexType::UInt8 => {
                         polars_arrow::datatypes::IntegerType::UInt8
                     }
@@ -3110,6 +3138,7 @@ impl Array {
                     crate::ffi::arrow_dtype::CategoricalIndexType::UInt16 => {
                         polars_arrow::datatypes::IntegerType::UInt16
                     }
+                    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                     crate::ffi::arrow_dtype::CategoricalIndexType::UInt32 => {
                         polars_arrow::datatypes::IntegerType::UInt32
                     }
@@ -3581,7 +3610,7 @@ macro_rules! arr_str64 {
 
 // ======== Categorical ========
 
-#[cfg(feature = "extended_categorical")]
+#[cfg(feature = "default_categorical_8")]
 #[macro_export]
 macro_rules! arr_cat8 {
     ($v:expr) => {
@@ -3615,6 +3644,7 @@ macro_rules! arr_cat16 {
     };
 }
 
+#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
 #[macro_export]
 macro_rules! arr_cat32 {
     ($v:expr) => {
@@ -3925,7 +3955,7 @@ macro_rules! arr_str64_opt {
 
 // ======== Categorical ========
 
-#[cfg(feature = "extended_categorical")]
+#[cfg(feature = "default_categorical_8")]
 #[macro_export]
 macro_rules! arr_cat8_opt {
     ($v:expr) => {{
@@ -3967,6 +3997,7 @@ macro_rules! arr_cat16_opt {
     }};
 }
 
+#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
 #[macro_export]
 macro_rules! arr_cat32_opt {
     ($v:expr) => {{
@@ -4055,11 +4086,14 @@ mod tests {
             ArrowType::Boolean
         );
 
-        let dict32 = Array::from_categorical32(CategoricalArray::<u32>::default());
-        assert_eq!(
-            dict32.arrow_type(),
-            ArrowType::Dictionary(CategoricalIndexType::UInt32)
-        );
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        {
+            let dict32 = Array::from_categorical32(CategoricalArray::<u32>::default());
+            assert_eq!(
+                dict32.arrow_type(),
+                ArrowType::Dictionary(CategoricalIndexType::UInt32)
+            );
+        }
     }
 
     #[test]
@@ -4124,6 +4158,7 @@ mod tests {
         assert_eq!(sz, 1);
     }
 
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     #[test]
     fn test_data_ptr_and_len_for_dictionary() {
         let mut dict = CategoricalArray::<u32>::default();
@@ -4256,6 +4291,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     #[test]
     fn test_num_from_categorical_array() {
         let arr = StringArray::<u32>::from_slice(&["42", "hi", "999"]);
@@ -4453,6 +4489,7 @@ mod tests {
         assert!(array.try_str32_ref().is_err());
     }
 
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     #[test]
     fn test_try_cat32_ref_success() {
         let arr = CategoricalArray::<u32>::from_vec(vec!["a", "b", "a"], None);
@@ -4802,6 +4839,7 @@ mod macro_tests {
 
     // ===== categorical =====
 
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     #[test]
     fn arr_cat32_vec64_dense() {
         let v = vec64!["red", "green", "red"];
@@ -4816,6 +4854,7 @@ mod macro_tests {
         }
     }
 
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     #[test]
     fn arr_cat32_vec64_opt() {
         let v = vec64![Some("red"), None::<&str>, Some("blue")];
@@ -4997,23 +5036,26 @@ mod macro_tests {
 
     #[test]
     fn test_categorical_types() {
-        let arr = arr_cat32!(vec64!["red", "green", "red"]);
-        if let Array::TextArray(TextArray::Categorical32(a)) = arr {
-            assert_eq!(a.get_str(0), Some("red"));
-            assert_eq!(a.get_str(1), Some("green"));
-            assert_eq!(a.get_str(2), Some("red"));
-        } else {
-            panic!("Wrong variant");
-        }
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        {
+            let arr = arr_cat32!(vec64!["red", "green", "red"]);
+            if let Array::TextArray(TextArray::Categorical32(a)) = arr {
+                assert_eq!(a.get_str(0), Some("red"));
+                assert_eq!(a.get_str(1), Some("green"));
+                assert_eq!(a.get_str(2), Some("red"));
+            } else {
+                panic!("Wrong variant");
+            }
 
-        let arr = arr_cat32_opt!(vec64![Some("red"), None::<&str>, Some("blue")]);
-        if let Array::TextArray(TextArray::Categorical32(a)) = arr {
-            assert_eq!(a.get_str(0), Some("red"));
-            assert_eq!(a.get_str(1), None);
-            assert_eq!(a.get_str(2), Some("blue"));
-            assert_mask(&a.null_mask, &[true, false, true]);
-        } else {
-            panic!("Wrong variant");
+            let arr = arr_cat32_opt!(vec64![Some("red"), None::<&str>, Some("blue")]);
+            if let Array::TextArray(TextArray::Categorical32(a)) = arr {
+                assert_eq!(a.get_str(0), Some("red"));
+                assert_eq!(a.get_str(1), None);
+                assert_eq!(a.get_str(2), Some("blue"));
+                assert_mask(&a.null_mask, &[true, false, true]);
+            } else {
+                panic!("Wrong variant");
+            }
         }
 
         #[cfg(feature = "extended_categorical")]
@@ -5118,15 +5160,18 @@ mod macro_tests {
         }
 
         // Categorical
-        let arr = arr_cat32!["x", "y", "x", "z"];
-        if let Array::TextArray(TextArray::Categorical32(a)) = arr {
-            assert_eq!(a.get_str(0), Some("x"));
-            assert_eq!(a.get_str(1), Some("y"));
-            assert_eq!(a.get_str(2), Some("x"));
-            assert_eq!(a.get_str(3), Some("z"));
-            assert!(a.null_mask.is_none());
-        } else {
-            panic!("Wrong variant");
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        {
+            let arr = arr_cat32!["x", "y", "x", "z"];
+            if let Array::TextArray(TextArray::Categorical32(a)) = arr {
+                assert_eq!(a.get_str(0), Some("x"));
+                assert_eq!(a.get_str(1), Some("y"));
+                assert_eq!(a.get_str(2), Some("x"));
+                assert_eq!(a.get_str(3), Some("z"));
+                assert!(a.null_mask.is_none());
+            } else {
+                panic!("Wrong variant");
+            }
         }
     }
 
@@ -5164,14 +5209,17 @@ mod macro_tests {
             panic!("Wrong variant");
         }
 
-        let arr = arr_cat32_opt![Some("red"), None::<&str>, Some("blue")];
-        if let Array::TextArray(TextArray::Categorical32(a)) = arr {
-            assert_eq!(a.get_str(0), Some("red"));
-            assert_eq!(a.get_str(1), None);
-            assert_eq!(a.get_str(2), Some("blue"));
-            assert!(a.null_mask.is_some());
-        } else {
-            panic!("Wrong variant");
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        {
+            let arr = arr_cat32_opt![Some("red"), None::<&str>, Some("blue")];
+            if let Array::TextArray(TextArray::Categorical32(a)) = arr {
+                assert_eq!(a.get_str(0), Some("red"));
+                assert_eq!(a.get_str(1), None);
+                assert_eq!(a.get_str(2), Some("blue"));
+                assert!(a.null_mask.is_some());
+            } else {
+                panic!("Wrong variant");
+            }
         }
     }
 

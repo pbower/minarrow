@@ -563,7 +563,7 @@ pub fn broadcast_scalar_to_text_arrayview(
         (Scalar::String64(val), TextArray::String64(_)) => {
             Array::from_string64(StringArray::from_slice(&[val.as_str()]))
         }
-        #[cfg(feature = "extended_categorical")]
+        #[cfg(feature = "default_categorical_8")]
         (Scalar::String32(val), TextArray::Categorical8(_)) => {
             Array::from_categorical8(CategoricalArray::<u8>::from_values(vec![val.as_str()]))
         }
@@ -571,6 +571,7 @@ pub fn broadcast_scalar_to_text_arrayview(
         (Scalar::String32(val), TextArray::Categorical16(_)) => {
             Array::from_categorical16(CategoricalArray::<u16>::from_values(vec![val.as_str()]))
         }
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
         (Scalar::String32(val), TextArray::Categorical32(_)) => {
             Array::from_categorical32(CategoricalArray::<u32>::from_values(vec![val.as_str()]))
         }
@@ -578,7 +579,7 @@ pub fn broadcast_scalar_to_text_arrayview(
         (Scalar::String32(val), TextArray::Categorical64(_)) => {
             Array::from_categorical64(CategoricalArray::<u64>::from_values(vec![val.as_str()]))
         }
-        #[cfg(all(feature = "large_string", feature = "extended_categorical"))]
+        #[cfg(all(feature = "large_string", feature = "default_categorical_8"))]
         (Scalar::String64(val), TextArray::Categorical8(_)) => {
             Array::from_categorical8(CategoricalArray::<u8>::from_values(vec![val.as_str()]))
         }
@@ -586,7 +587,7 @@ pub fn broadcast_scalar_to_text_arrayview(
         (Scalar::String64(val), TextArray::Categorical16(_)) => {
             Array::from_categorical16(CategoricalArray::<u16>::from_values(vec![val.as_str()]))
         }
-        #[cfg(feature = "large_string")]
+        #[cfg(all(feature = "large_string", any(not(feature = "default_categorical_8"), feature = "extended_categorical")))]
         (Scalar::String64(val), TextArray::Categorical32(_)) => {
             Array::from_categorical32(CategoricalArray::<u32>::from_values(vec![val.as_str()]))
         }
@@ -661,7 +662,7 @@ pub fn broadcast_text_arrayview_to_scalar(
         (TextArray::String64(_), Scalar::String64(val)) => {
             Array::from_string64(StringArray::from_slice(&[val.as_str()]))
         }
-        #[cfg(feature = "extended_categorical")]
+        #[cfg(feature = "default_categorical_8")]
         (TextArray::Categorical8(_), Scalar::String32(val)) => {
             Array::from_categorical8(CategoricalArray::<u8>::from_values(vec![val.as_str()]))
         }
@@ -669,6 +670,7 @@ pub fn broadcast_text_arrayview_to_scalar(
         (TextArray::Categorical16(_), Scalar::String32(val)) => {
             Array::from_categorical16(CategoricalArray::<u16>::from_values(vec![val.as_str()]))
         }
+        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
         (TextArray::Categorical32(_), Scalar::String32(val)) => {
             Array::from_categorical32(CategoricalArray::<u32>::from_values(vec![val.as_str()]))
         }
@@ -676,7 +678,7 @@ pub fn broadcast_text_arrayview_to_scalar(
         (TextArray::Categorical64(_), Scalar::String32(val)) => {
             Array::from_categorical64(CategoricalArray::<u64>::from_values(vec![val.as_str()]))
         }
-        #[cfg(all(feature = "large_string", feature = "extended_categorical"))]
+        #[cfg(all(feature = "large_string", feature = "default_categorical_8"))]
         (TextArray::Categorical8(_), Scalar::String64(val)) => {
             Array::from_categorical8(CategoricalArray::<u8>::from_values(vec![val.as_str()]))
         }
@@ -684,7 +686,7 @@ pub fn broadcast_text_arrayview_to_scalar(
         (TextArray::Categorical16(_), Scalar::String64(val)) => {
             Array::from_categorical16(CategoricalArray::<u16>::from_values(vec![val.as_str()]))
         }
-        #[cfg(feature = "large_string")]
+        #[cfg(all(feature = "large_string", any(not(feature = "default_categorical_8"), feature = "extended_categorical")))]
         (TextArray::Categorical32(_), Scalar::String64(val)) => {
             Array::from_categorical32(CategoricalArray::<u32>::from_values(vec![val.as_str()]))
         }

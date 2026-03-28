@@ -1676,6 +1676,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     #[test]
     fn test_consolidate_arena_categorical() {
         use crate::CategoricalArray;

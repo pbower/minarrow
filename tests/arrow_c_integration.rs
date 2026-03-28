@@ -205,6 +205,7 @@ mod arrow_c_integration {
         );
     }
 
+    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     #[test]
     fn rt_dict32() {
         let cat = minarrow::CategoricalArray::<u32>::from_slices(

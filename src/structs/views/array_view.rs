@@ -155,10 +155,11 @@ impl ArrayV {
             Array::TextArray(TextArray::String32(arr)) => arr.get_str(self.offset + i),
             #[cfg(feature = "large_string")]
             Array::TextArray(TextArray::String64(arr)) => arr.get_str(self.offset + i),
-            #[cfg(feature = "extended_categorical")]
+            #[cfg(feature = "default_categorical_8")]
             Array::TextArray(TextArray::Categorical8(arr)) => arr.get_str(self.offset + i),
             #[cfg(feature = "extended_categorical")]
             Array::TextArray(TextArray::Categorical16(arr)) => arr.get_str(self.offset + i),
+            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
             Array::TextArray(TextArray::Categorical32(arr)) => arr.get_str(self.offset + i),
             #[cfg(feature = "extended_categorical")]
             Array::TextArray(TextArray::Categorical64(arr)) => arr.get_str(self.offset + i),
@@ -188,7 +189,7 @@ impl ArrayV {
                     Some(unsafe { arr.get_str_unchecked(self.offset + i) })
                 }
             }
-            #[cfg(feature = "extended_categorical")]
+            #[cfg(feature = "default_categorical_8")]
             Array::TextArray(TextArray::Categorical8(arr)) => {
                 if arr.is_null(self.offset + i) {
                     None
@@ -204,6 +205,7 @@ impl ArrayV {
                     Some(unsafe { arr.get_str_unchecked(self.offset + i) })
                 }
             }
+            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
             Array::TextArray(TextArray::Categorical32(arr)) => {
                 if arr.is_null(self.offset + i) {
                     None
@@ -491,6 +493,7 @@ impl ArrayV {
                     }
                     Array::from_string64(new_arr)
                 }
+                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
                 TextArray::Categorical32(_) => {
                     let mut values: Vec<&str> = Vec::with_capacity(indices.len());
                     for &idx in indices {
@@ -508,7 +511,7 @@ impl ArrayV {
                     }
                     Array::from_categorical32(new_arr)
                 }
-                #[cfg(feature = "extended_categorical")]
+                #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(_) => {
                     let mut values: Vec<&str> = Vec::with_capacity(indices.len());
                     for &idx in indices {
