@@ -211,12 +211,61 @@ pub fn simd_mask<T: MaskElement, const N: usize>(
 ) -> Mask<T, N>
 where
 {
-    let mut bits = [false; N];
-    for l in 0..N {
-        let idx = offset + l;
-        bits[l] = idx < len && unsafe { mask.get_unchecked(idx) };
+    // Extract the packed bits covering this SIMD chunk from the bitmask.
+    // The bitmask is LSB-ordered which matches Mask::from_bitmask convention.
+    let word_idx = offset / 64;
+    let bit_shift = offset % 64;
+    let raw = unsafe { mask.word_unchecked(word_idx) } >> bit_shift;
+
+    // If the chunk straddles a word boundary, pull in bits from the next word
+    let raw = if bit_shift > 0 && word_idx + 1 < (mask.len + 63) / 64 {
+        raw | (unsafe { mask.word_unchecked(word_idx + 1) } << (64 - bit_shift))
+    } else {
+        raw
+    };
+
+    // Zero out lanes that are beyond the array length
+    let remaining = if offset < len { len - offset } else { 0 };
+    let raw = if remaining < N && remaining < 64 {
+        raw & ((1u64 << remaining) - 1)
+    } else {
+        raw
+    };
+
+    Mask::from_bitmask(raw)
+}
+
+/// Writes a SIMD mask's packed bits directly into the output bitmask at the given offset.
+/// This is the write-side complement to `simd_mask`, avoiding per-lane `set_unchecked` calls.
+#[inline(always)]
+pub fn write_simd_mask_bits<T: MaskElement, const N: usize>(
+    out_mask: &mut Bitmask,
+    offset: usize,
+    m: Mask<T, N>,
+)
+where
+{
+    let mbits = m.to_bitmask();
+    let word_idx = offset / 64;
+    let bit_shift = offset % 64;
+
+    unsafe {
+        // Read-modify-write the target word
+        let existing = out_mask.word_unchecked(word_idx);
+        // Clear the N bits at bit_shift, then OR in the new bits
+        let lane_mask = if N >= 64 { !0u64 } else { (1u64 << N) - 1 };
+        let cleared = existing & !(lane_mask << bit_shift);
+        out_mask.set_word_unchecked(word_idx, cleared | (mbits << bit_shift));
+
+        // If the chunk straddles a word boundary, write the overflow to the next word
+        if bit_shift > 0 && bit_shift + N > 64 {
+            let overflow_bits = N - (64 - bit_shift);
+            let next_existing = out_mask.word_unchecked(word_idx + 1);
+            let overflow_mask = (1u64 << overflow_bits) - 1;
+            let cleared_next = next_existing & !overflow_mask;
+            out_mask.set_word_unchecked(word_idx + 1, cleared_next | (mbits >> (64 - bit_shift)));
+        }
     }
-    Mask::from_array(bits)
 }
 
 /// Checks the mask capacity is large enough
