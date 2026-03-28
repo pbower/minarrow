@@ -160,6 +160,27 @@ impl TextArray {
         }
     }
 
+    pub fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), MinarrowError> {
+        match (self, other) {
+            (TextArray::String32(a), TextArray::String32(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            #[cfg(feature = "large_string")]
+            (TextArray::String64(a), TextArray::String64(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            #[cfg(feature = "extended_categorical")]
+            (TextArray::Categorical8(a), TextArray::Categorical8(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            #[cfg(feature = "extended_categorical")]
+            (TextArray::Categorical16(a), TextArray::Categorical16(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            (TextArray::Categorical32(a), TextArray::Categorical32(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            #[cfg(feature = "extended_categorical")]
+            (TextArray::Categorical64(a), TextArray::Categorical64(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            (TextArray::Null, TextArray::Null) => Ok(()),
+            (lhs, rhs) => Err(MinarrowError::TypeError {
+                from: "TextArray",
+                to: "TextArray",
+                message: Some(format!("Cannot append_range {:?} into {:?}", rhs, lhs)),
+            }),
+        }
+    }
+
     /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
     ///
     /// This is an **O(n)** operation.

@@ -291,6 +291,18 @@ pub trait MaskedArray {
     /// is an alternative option.
     fn append_array(&mut self, other: &Self);
 
+    /// Appends rows `[offset..offset+len)` from another array into self.
+    ///
+    /// Like `append_array` but for a sub-range. Data and null masks are
+    /// extended from the source range. The destination grows via its
+    /// backing allocator.
+    fn append_range(
+        &mut self,
+        other: &Self,
+        offset: usize,
+        len: usize,
+    ) -> Result<(), MinarrowError>;
+
     /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
     ///
     /// The inserted array must be of the same concrete type and element type.

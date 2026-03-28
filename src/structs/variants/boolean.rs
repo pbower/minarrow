@@ -624,6 +624,35 @@ impl MaskedArray for BooleanArray<()> {
         }
     }
 
+    fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), MinarrowError> {
+        if len == 0 { return Ok(()); }
+        if offset + len > other.len() {
+            return Err(MinarrowError::IndexError(
+                format!("append_range: offset {} + len {} exceeds source length {}", offset, len, other.len())
+            ));
+        }
+        let orig_len = self.len();
+
+        self.data.extend_from_bitmask_range(&other.data, offset, len);
+        self.len += len;
+
+        match (self.null_mask_mut(), other.null_mask()) {
+            (Some(self_mask), Some(other_mask)) => {
+                self_mask.extend_from_bitmask_range(other_mask, offset, len);
+            }
+            (Some(self_mask), None) => {
+                self_mask.resize(orig_len + len, true);
+            }
+            (None, Some(other_mask)) => {
+                let mut mask = Bitmask::new_set_all(orig_len, true);
+                mask.extend_from_bitmask_range(other_mask, offset, len);
+                self.set_null_mask(Some(mask));
+            }
+            (None, None) => {}
+        }
+        Ok(())
+    }
+
     /// Inserts all values from `other` into `self` at the specified index.
     ///
     /// This is an O(n) operation for BooleanArray due to bit-packed data.

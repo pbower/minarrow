@@ -990,24 +990,17 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     fn append_array(&mut self, other: &Self) {
         let orig_len = self.len();
         let other_len = other.len();
+        if other_len == 0 { return; }
 
-        if other_len == 0 {
-            return;
-        }
-
-        // 1. Append data
         self.data.extend_from_slice(&other.data);
 
-        let prev_last_offset = *self
-            .offsets
-            .last()
+        let prev_last_offset = *self.offsets.last()
             .expect("StringArray must have at least one offset");
         for off in other.offsets.iter().skip(1) {
             let new_offset = prev_last_offset + (*off - other.offsets[0]);
             self.offsets.push(new_offset);
         }
 
-        // 3. Null mask
         match (self.null_mask_mut(), other.null_mask()) {
             (Some(self_mask), Some(other_mask)) => {
                 self_mask.extend_from_bitmask(other_mask);
@@ -1016,16 +1009,53 @@ impl<T: Integer> MaskedArray for StringArray<T> {
                 self_mask.resize(orig_len + other_len, true);
             }
             (None, Some(other_mask)) => {
-                let mut mask = Bitmask::new_set_all(orig_len + other_len, true);
-                for i in 0..other_len {
-                    mask.set(orig_len + i, other_mask.get(i));
-                }
+                let mut mask = Bitmask::new_set_all(orig_len, true);
+                mask.extend_from_bitmask(other_mask);
                 self.set_null_mask(Some(mask));
             }
-            (None, None) => {
-                // No mask in either: nothing to do.
-            }
+            (None, None) => {}
         }
+    }
+
+    fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), MinarrowError> {
+        if len == 0 { return Ok(()); }
+        if offset + len > other.len() {
+            return Err(MinarrowError::IndexError(
+                format!("append_range: offset {} + len {} exceeds source length {}", offset, len, other.len())
+            ));
+        }
+        let orig_len = self.len();
+
+        // Byte range in other's data buffer for rows [offset..offset+len)
+        let src_byte_start = other.offsets[offset].to_usize();
+        let src_byte_end = other.offsets[offset + len].to_usize();
+        self.data.extend_from_slice(&other.data[src_byte_start..src_byte_end]);
+
+        // Rebase offsets relative to self's current end
+        let prev_last_offset = *self.offsets.last()
+            .expect("StringArray must have at least one offset");
+        let base = other.offsets[offset];
+        for i in 1..=len {
+            let new_offset = prev_last_offset + (other.offsets[offset + i] - base);
+            self.offsets.push(new_offset);
+        }
+
+        // Null mask
+        match (self.null_mask_mut(), other.null_mask()) {
+            (Some(self_mask), Some(other_mask)) => {
+                self_mask.extend_from_bitmask_range(other_mask, offset, len);
+            }
+            (Some(self_mask), None) => {
+                self_mask.resize(orig_len + len, true);
+            }
+            (None, Some(other_mask)) => {
+                let mut mask = Bitmask::new_set_all(orig_len, true);
+                mask.extend_from_bitmask_range(other_mask, offset, len);
+                self.set_null_mask(Some(mask));
+            }
+            (None, None) => {}
+        }
+        Ok(())
     }
 
     /// Inserts all values from `other` into `self` at the specified index.

@@ -344,6 +344,34 @@ macro_rules! impl_masked_array {
                 }
             }
 
+            fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), $crate::enums::error::MinarrowError> {
+                if len == 0 { return Ok(()); }
+                if offset + len > other.len() {
+                    return Err($crate::enums::error::MinarrowError::IndexError(
+                        format!("append_range: offset {} + len {} exceeds source length {}", offset, len, other.len())
+                    ));
+                }
+                let orig_len = self.len();
+
+                self.data_mut().extend_from_slice(&other.data()[offset..offset + len]);
+
+                match (self.null_mask_mut(), other.null_mask()) {
+                    (Some(self_mask), Some(other_mask)) => {
+                        self_mask.extend_from_bitmask_range(other_mask, offset, len);
+                    }
+                    (Some(self_mask), None) => {
+                        self_mask.resize(orig_len + len, true);
+                    }
+                    (None, Some(other_mask)) => {
+                        let mut mask = Bitmask::new_set_all(orig_len, true);
+                        mask.extend_from_bitmask_range(other_mask, offset, len);
+                        self.set_null_mask(Some(mask));
+                    }
+                    (None, None) => {}
+                }
+                Ok(())
+            }
+
             /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
             ///
             /// This is an **O(n)** operation.
@@ -947,6 +975,9 @@ macro_rules! impl_arc_masked_array {
             fn append_array(&mut self, other: &Self) {
                 ::std::sync::Arc::make_mut(self).append_array(&**other)
             }
+            fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), $crate::enums::error::MinarrowError> {
+                ::std::sync::Arc::make_mut(self).append_range(&**other, offset, len)
+            }
             fn insert_rows(
                 &mut self,
                 index: usize,
@@ -1067,6 +1098,9 @@ macro_rules! impl_arc_masked_array {
             }
             fn append_array(&mut self, other: &Self) {
                 ::std::sync::Arc::make_mut(self).append_array(&**other)
+            }
+            fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), $crate::enums::error::MinarrowError> {
+                ::std::sync::Arc::make_mut(self).append_range(&**other, offset, len)
             }
             fn insert_rows(
                 &mut self,

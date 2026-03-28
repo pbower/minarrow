@@ -2773,6 +2773,28 @@ impl Array {
         }
     }
 
+    /// Appends rows `[offset..offset+len)` from another array into self.
+    /// Extends data and null masks directly from the source range.
+    pub fn concat_array_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), MinarrowError> {
+        match (self, other) {
+            (Array::NumericArray(lhs), Array::NumericArray(rhs)) => lhs.append_range(rhs, offset, len),
+            (Array::BooleanArray(a), Array::BooleanArray(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            (Array::TextArray(lhs), Array::TextArray(rhs)) => lhs.append_range(rhs, offset, len),
+            #[cfg(feature = "datetime")]
+            (Array::TemporalArray(lhs), Array::TemporalArray(rhs)) => lhs.append_range(rhs, offset, len),
+            (Array::Null, Array::Null) => Ok(()),
+            (lhs, rhs) => Err(MinarrowError::TypeError {
+                from: "Array",
+                to: "Array",
+                message: Some(format!(
+                    "Cannot append_range {:?} into {:?}",
+                    rhs.arrow_type(),
+                    lhs.arrow_type()
+                )),
+            }),
+        }
+    }
+
     /// Inserts all values (and null mask if present) from `other` into `self` at the specified index.
     ///
     /// This is an **O(n)** operation.
