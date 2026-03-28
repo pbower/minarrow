@@ -10,7 +10,7 @@
 //! - **High runtime performance** – see benchmarks below.
 //! - Cohesive, well-documented API with extensive coverage.
 //! - Built-in FFI with simple `to_apache_arrow()` and `to_polars()` conversions.
-//! - MIT Licensed.
+//! - Apache-2.0 Licensed.
 //!
 //! ## Upcoming Additions
 //! 1. **Lightstream-IO** – IPC streaming and Tokio async integration.  

@@ -200,7 +200,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 Copyright © 2025–2026 Peter Garfield Bower.
 
-Released under the MIT License. See [LICENSE](LICENSE) for details.
+Released under the Apache 2.0 License. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgements
 

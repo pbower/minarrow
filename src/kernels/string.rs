@@ -1,5 +1,5 @@
 // Copyright Peter Bower 2025. All Rights Reserved.
-// Licensed under MIT License.
+// Licensed under Apache-2.0.
 
 //! # **String Operations Kernels Module** - *High-Performance String Processing and Text Analysis*
 //!

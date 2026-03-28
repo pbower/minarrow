@@ -1,5 +1,5 @@
 // Copyright Peter Bower 2025. All Rights Reserved.
-// Licensed under MIT License.
+// Licensed under Apache-2.0.
 
 //! # **Bitmask Scalar Kernels** - *Word-Level Bitmask Operations*
 //!
