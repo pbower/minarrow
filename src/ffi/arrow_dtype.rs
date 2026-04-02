@@ -77,7 +77,7 @@ use crate::{BooleanArray, CategoricalArray, Float, FloatArray, Integer, StringAr
 /// - For `DatetimeArray` types, `ArrowType` reflects only the physical encoding.  
 ///   Logical distinctions (e.g., interpreting a `Date64` as a timestamp vs. a duration) are stored in `Field` metadata.
 /// - Dictionary key widths are defined by the associated `CategoricalIndexType`.
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum ArrowType {
     Null,
     Boolean,
@@ -139,7 +139,7 @@ pub enum ArrowType {
 /// - Maps directly to the integer index type in Apache Arrow's `DictionaryType`.
 /// - Preserved when sending categorical arrays over the Arrow C Data Interface.
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum CategoricalIndexType {
     #[cfg(feature = "default_categorical_8")]
     UInt8,

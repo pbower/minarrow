@@ -27,6 +27,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(feature = "datetime")]
@@ -64,7 +65,7 @@ static UNNAMED_FIELD_COUNTER: AtomicUsize = AtomicUsize::new(1);
 /// - This ensures that when sent over Arrow C-FFI (or `to_apache_arrow()`),
 /// it converts to the correct external type. Whilst, avoiding proliferating many
 /// specialised types prematurely, keeping the API and binary size minimal.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Field {
     pub name: String,
     pub dtype: ArrowType,
@@ -232,6 +233,12 @@ impl Display for Field {
         }
 
         Ok(())
+    }
+}
+
+impl From<Arc<Field>> for Field {
+    fn from(arc: Arc<Field>) -> Self {
+        Arc::try_unwrap(arc).unwrap_or_else(|a| (*a).clone())
     }
 }
 
