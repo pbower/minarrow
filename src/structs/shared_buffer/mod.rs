@@ -19,6 +19,8 @@
 //! This is an internal module that backs the `Buffer` type supporting
 //! the typed Arrays in *Minarrow*.
 
+use std::sync::Arc;
+
 use crate::Vec64;
 use crate::structs::shared_buffer::internal::owned::{OWNED_VT, Owned};
 use crate::structs::shared_buffer::internal::pvec::PromotableVec;
@@ -159,6 +161,24 @@ impl SharedBuffer {
             Vec::from_raw_parts_in(ptr, byte_len, byte_cap, vec64::Vec64Alloc::default())
         };
         Self::from_vec64(Vec64(raw_vec))
+    }
+
+    /// Constructs a `SharedBuffer` from an `Arc<M>` where `M: AsRef<[u8]>`.
+    ///
+    /// Handles the double deref internally so callers don't need a wrapper
+    /// type. Use `.slice()` for sub-region views.
+    pub fn from_arc<M: ?Sized + AsRef<[u8]> + Send + Sync + 'static>(arc: Arc<M>) -> Self {
+        // ArcOwner adapts Arc<M> to AsRef<[u8]> for from_owner.
+        // Always Sized since Arc is a pointer regardless of M.
+        struct ArcOwner<M: ?Sized>(Arc<M>);
+        impl<M: ?Sized + AsRef<[u8]>> AsRef<[u8]> for ArcOwner<M> {
+            #[inline]
+            fn as_ref(&self) -> &[u8] { (*self.0).as_ref() }
+        }
+        unsafe impl<M: ?Sized + Send + Sync> Send for ArcOwner<M> {}
+        unsafe impl<M: ?Sized + Send + Sync> Sync for ArcOwner<M> {}
+
+        Self::from_owner(ArcOwner(arc))
     }
 
     /// Constructs a `SharedBuffer` from an arbitrary owner (e.g. Arc<[u8]>, mmap, etc).

@@ -38,7 +38,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 /// ## Behaviour
 /// - Unit values are stored on the `DatetimeArray`, enabling variant-specific logic.
 /// - When transmitted over FFI, an `Apache Arrow`- produces compatible native format.
-#[derive(PartialEq, Clone, Copy, Debug, Default)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, Default)]
 pub enum TimeUnit {
     /// Seconds for Apache Arrow `Time32` and `Time64` units.
     Seconds,
@@ -64,7 +64,7 @@ pub enum TimeUnit {
 /// T-integer represents an interval, rather than an epoch value.
 /// Then, it will materialise as an `Interval` *Apache Arrow* type
 /// when sent over FFI.
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum IntervalUnit {
     YearMonth,
     DaysTime,
