@@ -271,6 +271,21 @@ impl Value {
             Value::Custom(_) => panic!("Slicing is not implemented for custom value types."),
         }
     }
+
+    /// Returns how many piped data arguments a Value carries.
+    ///
+    /// Non-tuple Values represent a single argument and return 1.
+    /// Tuple variants carry multiple arguments and return their width (2-6).
+    pub fn arity(&self) -> usize {
+        match self {
+            Value::Tuple2(_) => 2,
+            Value::Tuple3(_) => 3,
+            Value::Tuple4(_) => 4,
+            Value::Tuple5(_) => 5,
+            Value::Tuple6(_) => 6,
+            _ => 1,
+        }
+    }
 }
 
 // Also see typed accessors in ./conversions.rs and trait impls in ./impls.rs
