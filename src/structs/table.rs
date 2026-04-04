@@ -1011,14 +1011,10 @@ impl ColumnSelection for Table {
     type ColView = ArrayV;
 
     fn c<S: FieldSelector>(&self, selection: S) -> TableV {
-        let fields = self
-            .cols
-            .iter()
-            .map(|fa| fa.field.clone())
-            .collect::<Vec<_>>();
-        let col_indices = selection.resolve_fields(&fields);
+        let all_fields: Vec<Arc<Field>> = self.cols.iter().map(|fa| fa.field.clone()).collect();
+        let col_indices = selection.resolve_fields(&all_fields);
 
-        // Filter to selected columns
+        // Create a view with only the selected columns
         let selected_fields: Vec<Arc<Field>> = col_indices
             .iter()
             .filter_map(|&i| self.cols.get(i).map(|fa| fa.field.clone()))
@@ -1034,6 +1030,7 @@ impl ColumnSelection for Table {
             cols: selected_cols,
             offset: 0,
             len: self.n_rows,
+            active_col_selection: None,
         }
     }
 

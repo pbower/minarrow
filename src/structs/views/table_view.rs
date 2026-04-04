@@ -81,32 +81,40 @@ use crate::{Field, FieldArray, Table};
 /// Row-aligned view into a `Table` over `[offset .. offset+len)`.
 ///
 /// ## Fields
-/// - `name`: table name - propagated from the parent `Table`.
-/// - `fields`: shared schema - `Arc<Field>` per column.
+/// - `name`: table name, propagated from the parent `Table`.
+/// - `fields`: shared schema, one `Arc<Field>` per column.
 /// - `cols`: column windows as `ArrayV`, all with the same `(offset, len)`.
 /// - `offset`: starting row, relative to parent table.
 /// - `len`: number of rows in the window.
-/// - `active_col_selection`: Optional column selection indices (for pandas-style `.c[...]` syntax).
-/// - `active_row_selection`: Optional row selection indices (for pandas-style `.r[...]` syntax).
+/// - `active_col_selection`: optional column selection indices for lazy
+///   column filtering. When set, access methods transparently return only
+///   the selected columns. Row windowing is handled by `offset`/`len`.
 ///
 /// ## Notes
 /// - Construction from a `Table`/`Arc<Table>` is zero-copy for column data.
 /// - Use `from_self` to take sub-windows cheaply.
 /// - Use `to_table()` to materialise an owned copy of just this window.
 /// - Column helpers (`col`, `col_ix`, `col_vec`) provide ergonomic access.
-/// - Active selections are transparently applied to all access methods.
+/// - When `active_col_selection` is set, all access methods filter transparently.
+///   The underlying `fields` and `cols` vectors retain the full schema so that
+///   selections can be composed or cleared without reallocating.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableV {
     /// Table name
     pub name: String,
-    /// Fields
+    /// Full schema - one entry per column in the parent table
     pub fields: Vec<Arc<Field>>,
-    /// Column slices (field metadata + windowed array)
+    /// Full column windows - one ArrayV per column, all with the same (offset, len)
     pub cols: Vec<ArrayV>,
     /// Row offset from start of parent table
     pub offset: usize,
-    /// Length of slice (in rows)
+    /// Number of rows in the window
     pub len: usize,
+    /// Lazy column selection. When Some, only these indices into `fields`/`cols`
+    /// are considered active. Access methods, iteration, and materialisation
+    /// all filter through this selection transparently.
+    #[cfg(feature = "select")]
+    pub active_col_selection: Option<Vec<usize>>,
 }
 
 impl TableV {
@@ -128,6 +136,8 @@ impl TableV {
             cols,
             offset,
             len,
+            #[cfg(feature = "select")]
+            active_col_selection: None,
         }
     }
 
@@ -149,10 +159,13 @@ impl TableV {
             cols,
             offset,
             len,
+            #[cfg(feature = "select")]
+            active_col_selection: None,
         }
     }
 
     /// Derives a subwindow from this `TableView`, adjusted by `offset` and `len`.
+    /// Preserves the active column selection from the parent view.
     #[inline]
     pub fn from_self(&self, offset: usize, len: usize) -> Self {
         assert!(
@@ -179,7 +192,46 @@ impl TableV {
             cols,
             offset: self.offset + offset,
             len,
+            #[cfg(feature = "select")]
+            active_col_selection: self.active_col_selection.clone(),
         }
+    }
+
+    /// Clear the active column selection, making all columns active again.
+    #[cfg(feature = "select")]
+    #[inline]
+    pub fn clear_col_selection(&mut self) {
+        self.active_col_selection = None;
+    }
+
+    /// Returns the active column indices, or all indices if no selection is set.
+    #[inline]
+    pub fn active_col_indices(&self) -> Vec<usize> {
+        #[cfg(feature = "select")]
+        if let Some(indices) = &self.active_col_selection {
+            return indices.clone();
+        }
+        (0..self.fields.len()).collect()
+    }
+
+    /// Returns true if a column selection is active.
+    #[inline]
+    pub fn has_col_selection(&self) -> bool {
+        #[cfg(feature = "select")]
+        { self.active_col_selection.is_some() }
+        #[cfg(not(feature = "select"))]
+        { false }
+    }
+
+    /// Resolve an active column index to the raw index into fields/cols.
+    /// When no selection is active, the index is used directly.
+    #[inline]
+    fn resolve_col_index(&self, idx: usize) -> Option<usize> {
+        #[cfg(feature = "select")]
+        if let Some(indices) = &self.active_col_selection {
+            return indices.get(idx).copied();
+        }
+        if idx < self.fields.len() { Some(idx) } else { None }
     }
 
     /// Returns true if the window contains no rows.
@@ -194,9 +246,13 @@ impl TableV {
         self.offset + self.len
     }
 
-    /// Returns the number of columns in the table window.
+    /// Returns the number of active columns in the table window.
     #[inline]
     pub fn n_cols(&self) -> usize {
+        #[cfg(feature = "select")]
+        if let Some(indices) = &self.active_col_selection {
+            return indices.len();
+        }
         self.cols.len()
     }
 
@@ -218,87 +274,107 @@ impl TableV {
         &self.name
     }
 
-    /// Returns an iterator over all column names.
+    /// Returns the names of all active columns.
     #[inline]
     pub fn col_names(&self) -> Vec<&str> {
+        #[cfg(feature = "select")]
+        if let Some(indices) = &self.active_col_selection {
+            return indices
+                .iter()
+                .filter_map(|&i| self.fields.get(i).map(|f| f.name.as_str()))
+                .collect();
+        }
         self.fields.iter().map(|f| f.name.as_str()).collect()
     }
 
     /// Rename columns in place. Each pair is (old_name, new_name).
     ///
-    /// Returns an error if any old name is not found.
-    /// This is metadata-only - array data is not touched. If the Arc<Field>
-    /// is the sole reference it is mutated in place, otherwise a new Arc is
-    /// created with the renamed field.
+    /// Only searches active columns when a selection is set.
+    /// Returns an error if any old name is not found among active columns.
+    /// This is metadata-only - array data is not touched.
+    #[cfg(feature = "select")]
     pub fn rename_columns(
         &mut self,
         mapping: &[(&str, &str)],
     ) -> Result<(), MinarrowError> {
+        let active = self.active_col_indices();
         for &(old, _) in mapping {
-            if !self.fields.iter().any(|f| f.name == old) {
+            if !active.iter().any(|&i| self.fields.get(i).is_some_and(|f| f.name == old)) {
                 return Err(MinarrowError::IndexError(format!(
                     "rename_columns: column '{}' not found",
                     old
                 )));
             }
         }
-        for field_arc in &mut self.fields {
-            for &(old, new) in mapping {
-                if field_arc.name == old {
-                    match Arc::get_mut(field_arc) {
-                        Some(f) => f.name = new.to_string(),
-                        None => {
-                            let f = field_arc.as_ref();
-                            *field_arc = Arc::new(Field::new(
-                                new,
-                                f.dtype.clone(),
-                                f.nullable,
-                                if f.metadata.is_empty() {
-                                    None
-                                } else {
-                                    Some(f.metadata.clone())
-                                },
-                            ));
+        for &idx in &active {
+            if let Some(field_arc) = self.fields.get_mut(idx) {
+                for &(old, new) in mapping {
+                    if field_arc.name == old {
+                        match Arc::get_mut(field_arc) {
+                            Some(f) => f.name = new.to_string(),
+                            None => {
+                                let f = field_arc.as_ref();
+                                *field_arc = Arc::new(Field::new(
+                                    new,
+                                    f.dtype.clone(),
+                                    f.nullable,
+                                    if f.metadata.is_empty() {
+                                        None
+                                    } else {
+                                        Some(f.metadata.clone())
+                                    },
+                                ));
+                            }
                         }
+                        break;
                     }
-                    break;
                 }
             }
         }
         Ok(())
     }
 
-    /// Returns the index of a column by name.
+    /// Returns the position of a column by name within the active selection.
     #[inline]
     pub fn col_name_index(&self, name: &str) -> Option<usize> {
+        #[cfg(feature = "select")]
+        if let Some(indices) = &self.active_col_selection {
+            return indices
+                .iter()
+                .position(|&i| self.fields.get(i).is_some_and(|f| f.name == name));
+        }
         self.fields.iter().position(|f| f.name == name)
     }
 
-    /// Returns the window tuple of the column at the given index.
+    /// Returns the window of the column at the given active index.
     #[inline]
     pub fn col_window(&self, idx: usize) -> Option<ArrayV> {
-        self.cols.get(idx).map(|av| {
+        let raw = self.resolve_col_index(idx)?;
+        self.cols.get(raw).map(|av| {
             let (array, offset, len) = &av.as_tuple();
             ArrayV::new(array.clone(), *offset, *len)
         })
     }
 
-    /// Returns the name of the column at the given index.
+    /// Returns the name of the column at the given active index.
     #[inline]
     pub fn col_name(&self, idx: usize) -> Option<&str> {
-        self.fields.get(idx).map(|f| f.name.as_str())
+        let raw = self.resolve_col_index(idx)?;
+        self.fields.get(raw).map(|f| f.name.as_str())
     }
 
-    /// Returns a `Vec<bool>` indicating which columns are nullable.
+    /// Returns a `Vec<bool>` indicating which active columns are nullable.
     #[inline]
     pub fn nullable_cols(&self) -> Vec<bool> {
-        self.fields.iter().map(|f| f.nullable).collect()
+        self.active_col_indices()
+            .iter()
+            .filter_map(|&i| self.fields.get(i).map(|f| f.nullable))
+            .collect()
     }
 
-    /// Consumes the TableView, producing an owned Table with the sliced data.
-    /// Copies the data.
+    /// Materialise the view into an owned Table. Respects active column selection.
     pub fn to_table(&self) -> Table {
-        let col_indices: Vec<usize> = (0..self.cols.len()).collect();
+        let col_indices = self.active_col_indices();
         let cols: Vec<_> = col_indices
             .iter()
             .filter_map(|&col_idx| {
@@ -306,7 +382,6 @@ impl TableV {
                 let window = self.cols.get(col_idx)?;
                 let w = window.as_tuple();
 
-                // The ArrayV window already contains the correct offset/len
                 let sliced = w.0.slice_clone(w.1, w.2);
                 let null_count = sliced.null_count();
 
@@ -322,7 +397,7 @@ impl TableV {
         Table::build(cols, n_rows, self.name.clone())
     }
 
-    /// Apply a transformation to each column view, producing a new table.
+    /// Apply a transformation to each active column view, producing a new table.
     ///
     /// The closure receives the field and column view directly without
     /// materialisation. To pass a column through unchanged, materialise
@@ -332,11 +407,14 @@ impl TableV {
         &self,
         mut f: impl FnMut(&Arc<Field>, &ArrayV) -> Result<FieldArray, E>,
     ) -> Result<Table, E> {
-        let cols = self
-            .fields
+        let indices = self.active_col_indices();
+        let cols = indices
             .iter()
-            .zip(self.cols.iter())
-            .map(|(field, col_view)| f(field, col_view))
+            .filter_map(|&i| {
+                let field = self.fields.get(i)?;
+                let col_view = self.cols.get(i)?;
+                Some(f(field, col_view))
+            })
             .collect::<Result<Vec<_>, E>>()?;
         Ok(Table::new(self.name.clone(), Some(cols)))
     }
@@ -711,11 +789,12 @@ impl TableV {
             return Table::new(self.name.clone(), Some(vec![]));
         }
 
-        let cols: Vec<_> = self
-            .fields
+        let active = self.active_col_indices();
+        let cols: Vec<_> = active
             .iter()
-            .zip(&self.cols)
-            .filter_map(|(field, window)| {
+            .filter_map(|&col_idx| {
+                let field = self.fields.get(col_idx)?;
+                let window = self.cols.get(col_idx)?;
                 let gathered_array = self.gather_rows_from_window(window, indices)?;
                 let null_count = gathered_array.null_count();
 
@@ -861,41 +940,16 @@ impl From<Table> for TableV {
             cols,
             offset: 0,
             len: table.n_rows,
+            #[cfg(feature = "select")]
+            active_col_selection: None,
         }
     }
 }
 
-/// TableV -> Table conversion
+/// TableV -> Table conversion. Respects active column selection.
 impl From<TableV> for Table {
     fn from(view: TableV) -> Self {
-        let field_arrays: Vec<FieldArray> = view
-            .cols
-            .into_iter()
-            .enumerate()
-            .map(|(i, array_v)| {
-                let field = if i < view.fields.len() {
-                    (*view.fields[i]).clone()
-                } else {
-                    Field::new(format!("col_{}", i), array_v.array.arrow_type(), true, None)
-                };
-
-                // If the view is windowed, we need to materialise the slice
-                let array = if view.offset > 0 || view.len < array_v.len() {
-                    // Need to slice the array - use the existing slice method
-                    array_v.slice(0, view.len).array
-                } else {
-                    array_v.array
-                };
-
-                FieldArray {
-                    field: Arc::new(field),
-                    array: array.clone(),
-                    null_count: array.null_count(),
-                }
-            })
-            .collect();
-
-        Table::new(view.name, Some(field_arrays))
+        view.to_table()
     }
 }
 
@@ -907,38 +961,46 @@ impl ColumnSelection for TableV {
     type ColView = ArrayV;
 
     fn c<S: FieldSelector>(&self, selection: S) -> TableV {
-        // Resolve selector to field indices
-        let indices = selection.resolve_fields(&self.fields);
+        // Resolve against the full field set so indices are always raw
+        let resolved = selection.resolve_fields(&self.fields);
 
-        // Filter fields and cols to only selected ones
-        let selected_fields: Vec<Arc<Field>> = indices
-            .iter()
-            .filter_map(|&i| self.fields.get(i).cloned())
-            .collect();
-        let selected_cols: Vec<ArrayV> = indices
-            .iter()
-            .filter_map(|&i| self.cols.get(i).cloned())
-            .collect();
+        // Compose with existing selection if present
+        let new_selection = match &self.active_col_selection {
+            Some(current) => {
+                let current_set: std::collections::HashSet<usize> =
+                    current.iter().copied().collect();
+                resolved.into_iter().filter(|i| current_set.contains(i)).collect()
+            }
+            None => resolved,
+        };
 
         TableV {
             name: self.name.clone(),
-            fields: selected_fields,
-            cols: selected_cols,
+            fields: self.fields.clone(),
+            cols: self.cols.clone(),
             offset: self.offset,
             len: self.len,
+            active_col_selection: Some(new_selection),
         }
     }
 
     fn col_ix(&self, idx: usize) -> Option<ArrayV> {
-        self.cols.get(idx).cloned()
+        let raw = self.resolve_col_index(idx)?;
+        self.cols.get(raw).cloned()
     }
 
     fn col_vec(&self) -> Vec<ArrayV> {
-        self.cols.clone()
+        self.active_col_indices()
+            .iter()
+            .filter_map(|&i| self.cols.get(i).cloned())
+            .collect()
     }
 
     fn get_cols(&self) -> Vec<Arc<Field>> {
-        self.fields.clone()
+        self.active_col_indices()
+            .iter()
+            .filter_map(|&i| self.fields.get(i).cloned())
+            .collect()
     }
 }
 
@@ -1022,8 +1084,8 @@ mod tests {
         let slice = TableV::from_table(tbl, 0, 5);
 
         // Test ColumnSelection trait methods
-        assert_eq!(slice.col("a").cols.len(), 1); // col returns TableV, check it has 1 column
-        assert_eq!(slice.col("nonexistent").cols.len(), 0); // Not found = 0 columns
+        assert_eq!(slice.col("a").n_cols(), 1);
+        assert_eq!(slice.col("nonexistent").n_cols(), 0);
     }
 
     #[test]
