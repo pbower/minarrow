@@ -101,6 +101,9 @@ where
 {
     let (lhs_mask, lhs_off, len) = lhs;
     let (rhs_mask, rhs_off, _) = rhs;
+    if len == 0 {
+        return Bitmask::new_set_all(0, false);
+    }
     let mut out = Bitmask::new_set_all(len, false);
     let nw = (len + 63) / 64;
     unsafe {
@@ -167,6 +170,9 @@ pub fn bitmask_unop_simd<const LANES: usize>(src: BitmaskVT<'_>, op: UnaryOperat
 where
 {
     let (mask, offset, len) = src;
+    if len == 0 {
+        return Bitmask::new_set_all(0, false);
+    }
     let mut out = Bitmask::new_set_all(len, false);
     let nw = (len + 63) / 64;
     unsafe {
@@ -399,6 +405,9 @@ where
     let (am, ao, len) = a;
     let (bm, bo, blen) = b;
     debug_assert_eq!(len, blen, "BitWindow length mismatch in eq_bits_mask");
+    if len == 0 {
+        return Bitmask::new_set_all(0, true);
+    }
     if ao % 64 != 0 || bo % 64 != 0 {
         panic!(
             "eq_bits_mask: offsets must be 64-bit aligned (got a: {}, b: {})",
@@ -588,6 +597,9 @@ pub fn popcount_mask_simd<const LANES: usize>(m: BitmaskVT<'_>) -> usize
 where
 {
     let (mask, offset, len) = m;
+    if len == 0 {
+        return 0;
+    }
     let n_words = (len + 63) / 64;
     let word_start = offset / 64;
     let mut acc = 0usize;
