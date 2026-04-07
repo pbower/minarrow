@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # **Cube Module** - *3D Type for Advanced Analysis Use Cases*
+//! # **Cube Module** - *3D Type for Advanced Analysis*
 //!
-//! An optional collection type that groups multiple
-//! row-aligned [`Table`]s into a logical 3rd dimension (e.g., **time snapshots**
-//! or a **category** axis). Gated behind the `cube` feature.
+//! An optional collection type that groups multiple [`Table`]s into a logical 3rd dimension 
+//! (e.g., **time snapshots** or a **category** axis). Gated behind the `cube` feature.
 //!
 //! ## Purpose
 //! - Compare tables at the same schema/grain without aggregating away detail.
-//! - Organize sequences of tables for sliding windows, diffs, or rollups.
+//! - Organise sequences of tables for sliding windows, diffs, or rollups.
 //!
 //! ## Behaviour
 //! - All tables must share the **same schema** (names and Arrow dtypes).
 //! - `n_rows` is tracked per table; helpers to add/remove tables/columns.
 //! - Zero-copy windowing via views when `views` feature is enabled.
 //! - Optional parallel iteration with `parallel_proc`.
+//! - Despite the name, rows do not have to be equal between each table
 //!
 //! ## Interop
 //! - Uses the project’s [`Table`], [`FieldArray`], and (optionally) [`TableV`] / `CubeV`.
@@ -77,8 +77,6 @@ static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 pub struct Cube {
     /// Table entries forming the cube (rectangular prism)
     pub tables: Vec<Table>,
-    /// Number of rows in each table
-    pub n_rows: Vec<usize>,
 
     /// Cube name
     pub name: String,
@@ -86,6 +84,9 @@ pub struct Cube {
     // It's a vec, as there are cases where one will
     // want to compound the index using time.
     pub third_dim_index: Option<Vec<String>>,
+    // O(1) lookup from group key to position in the tables vec.
+    // Maintained alongside tables for fast group resolution across batches.
+    pub resolver: HashMap<String, usize>,
 }
 
 impl Cube {
@@ -107,22 +108,34 @@ impl Cube {
         };
 
         let mut tables = Vec::new();
-        let mut n_rows = Vec::new();
+        let mut resolver = HashMap::new();
 
         if let Some(cols) = cols {
             let table = Table::new(name.clone(), Some(cols));
-            n_rows.push(table.n_rows());
+            resolver.insert(table.name.clone(), 0);
             tables.push(table);
         }
 
         let cube = Self {
             tables,
-            n_rows,
             name,
             third_dim_index,
+            resolver,
         };
         cube.validate_third_dim_index();
         cube
+    }
+
+    /// Constructs a Cube from a pre-built tables vec. Builds the resolver
+    /// automatically from table names.
+    ///
+    /// `index_by` specifies which column names form the third-dimension index,
+    pub fn from_tables(tables: Vec<Table>, name: String, index_by: Option<Vec<String>>) -> Self {
+        let mut resolver = HashMap::new();
+        for (i, t) in tables.iter().enumerate() {
+            resolver.insert(t.name.clone(), i);
+        }
+        Self { tables, name, third_dim_index: index_by, resolver }
     }
 
     /// Constructs a new, empty Cube with a globally unique name.
@@ -131,19 +144,15 @@ impl Cube {
         let name = format!("UnnamedCube{}", id);
         Self {
             tables: Vec::new(),
-            n_rows: Vec::new(),
             name,
             third_dim_index: None,
+            resolver: HashMap::new(),
         }
     }
 
-    /// Adds a table to the cube.
+    /// Adds a table to the cube, keyed by the table's name.
     pub fn add_table(&mut self, table: Table) {
-        let table_length = table.n_rows;
-
-        if self.tables.is_empty() {
-            self.n_rows.push(table_length);
-        } else {
+        if !self.tables.is_empty() {
             let existing_fields: HashMap<String, ArrowType> = self.tables[0]
                 .cols()
                 .iter()
@@ -163,10 +172,10 @@ impl Cube {
                     ),
                 }
             }
-
-            self.n_rows.push(table_length);
         }
 
+        let idx = self.tables.len();
+        self.resolver.insert(table.name.clone(), idx);
         self.tables.push(table);
     }
 
@@ -188,9 +197,9 @@ impl Cube {
         self.n_tables()
     }
 
-    /// Returns the number of rows
+    /// Returns the number of rows per table
     pub fn n_rows(&self) -> Vec<usize> {
-        self.n_rows.clone()
+        self.tables.iter().map(|t| t.n_rows()).collect()
     }
 
     /// Returns the number of columns.
@@ -200,7 +209,7 @@ impl Cube {
 
     /// Returns true if the cube is empty (no tables, no columns or no rows).
     pub fn is_empty(&self) -> bool {
-        self.n_tables() == 0 || self.n_cols() == 0 || self.n_rows.iter().sum::<usize>() == 0
+        self.n_tables() == 0 || self.n_cols() == 0 || self.tables.iter().all(|t| t.n_rows() == 0)
     }
 
     /// Returns a reference to a table by index.
@@ -231,8 +240,14 @@ impl Cube {
     /// Removes a table by index.
     pub fn remove_table_at(&mut self, idx: usize) -> bool {
         if idx < self.tables.len() {
-            self.tables.remove(idx);
-            self.n_rows.remove(idx);
+            let removed = self.tables.remove(idx);
+            self.resolver.remove(&removed.name);
+            // Rebuild resolver indices for entries after the removed position
+            for (_, pos) in self.resolver.iter_mut() {
+                if *pos > idx {
+                    *pos -= 1;
+                }
+            }
             true
         } else {
             false
@@ -241,19 +256,24 @@ impl Cube {
 
     /// Removes a table by name.
     pub fn remove_table(&mut self, name: &str) -> bool {
-        if let Some(idx) = self.table_index(name) {
+        if let Some(idx) = self.resolver.remove(name) {
             self.tables.remove(idx);
-            self.n_rows.remove(idx);
+            // Rebuild resolver indices for entries after the removed position
+            for (_, pos) in self.resolver.iter_mut() {
+                if *pos > idx {
+                    *pos -= 1;
+                }
+            }
             true
         } else {
             false
         }
     }
 
-    /// Clears all tables and resets row counts.
+    /// Clears all tables.
     pub fn clear(&mut self) {
         self.tables.clear();
-        self.n_rows.clear();
+        self.resolver.clear();
         self.third_dim_index = None;
     }
 
@@ -344,7 +364,6 @@ impl Cube {
                 all_removed = false;
             }
         }
-        self.recalc_n_rows();
         all_removed
     }
 
@@ -356,13 +375,20 @@ impl Cube {
                 all_removed = false;
             }
         }
-        self.recalc_n_rows();
         all_removed
     }
 
-    /// Recalculates the n_rows vector.
-    fn recalc_n_rows(&mut self) {
-        self.n_rows = self.tables.iter().map(|t| t.n_rows()).collect();
+    /// Resolve a group key to its table position.
+    pub fn resolve(&self, key: &str) -> Option<usize> {
+        self.resolver.get(key).copied()
+    }
+
+    /// Rebuild the resolver from the current tables vec.
+    fn rebuild_resolver(&mut self) {
+        self.resolver.clear();
+        for (i, t) in self.tables.iter().enumerate() {
+            self.resolver.insert(t.name.clone(), i);
+        }
     }
 
     /// Returns an iterator over the specified column across all tables.
@@ -423,9 +449,9 @@ impl Cube {
     #[cfg(feature = "views")]
     pub fn slice_clone(&self, offset: usize, len: usize) -> Self {
         assert!(!self.tables.is_empty(), "No tables to slice");
-        for n in &self.n_rows {
+        for t in &self.tables {
             assert!(
-                offset + len <= *n,
+                offset + len <= t.n_rows(),
                 "slice window out of bounds for one or more tables"
             );
         }
@@ -434,13 +460,16 @@ impl Cube {
             .iter()
             .map(|t| t.slice_clone(offset, len))
             .collect();
-        let n_rows: Vec<usize> = tables.iter().map(|t| t.n_rows()).collect();
+        let mut resolver = HashMap::new();
+        for (i, t) in tables.iter().enumerate() {
+            resolver.insert(t.name.clone(), i);
+        }
         let name = format!("{}[{}, {})", self.name, offset, offset + len);
         Cube {
             tables,
-            n_rows,
             name,
             third_dim_index: self.third_dim_index.clone(),
+            resolver,
         }
     }
 
@@ -448,9 +477,9 @@ impl Cube {
     #[cfg(feature = "views")]
     pub fn slice(&self, offset: usize, len: usize) -> CubeV {
         assert!(!self.tables.is_empty(), "No tables to slice");
-        for &n in &self.n_rows {
+        for t in &self.tables {
             assert!(
-                offset + len <= n,
+                offset + len <= t.n_rows(),
                 "slice window out of bounds for one or more tables"
             );
         }
@@ -600,14 +629,94 @@ impl Concatenate for Cube {
         // Concatenate tables
         let mut result_tables = self.tables;
         result_tables.extend(other.tables);
-        let result_n_rows: Vec<usize> = result_tables.iter().map(|t| t.n_rows()).collect();
+        let mut resolver = HashMap::new();
+        for (i, t) in result_tables.iter().enumerate() {
+            resolver.insert(t.name.clone(), i);
+        }
 
         Ok(Cube {
             tables: result_tables,
-            n_rows: result_n_rows,
             name: format!("{}+{}", self.name, other.name),
             third_dim_index: self.third_dim_index.clone(),
+            resolver,
         })
+    }
+}
+
+// ColumnSelection for Cube - selects columns from each sub-table,
+// always preserving third_dim_index columns since they are structural.
+#[cfg(all(feature = "views", feature = "select"))]
+impl crate::traits::selection::ColumnSelection for Cube {
+    type View = Cube;
+    type DataView = Vec<crate::ArrayV>;
+
+    fn c<S: crate::traits::selection::FieldSelector>(&self, selection: S) -> Cube {
+        if self.tables.is_empty() {
+            return self.clone();
+        }
+
+        let fields = self.schema();
+        let mut indices = selection.resolve_fields(&fields);
+
+        // Always preserve third_dim_index columns - they are structural, not data
+        if let Some(ref keys) = self.third_dim_index {
+            for key_name in keys {
+                if let Some(idx) = self.col_name_index(key_name) {
+                    if !indices.contains(&idx) {
+                        indices.push(idx);
+                    }
+                }
+            }
+        }
+        indices.sort();
+        indices.dedup();
+
+        // Build new Cube with only selected columns from each sub-table
+        let tables: Vec<Table> = self.tables.iter().map(|t| {
+            let cols: Vec<FieldArray> = indices.iter()
+                .filter_map(|&i| t.cols().get(i).cloned())
+                .collect();
+            Table::new(t.name.clone(), Some(cols))
+        }).collect();
+
+        let mut resolver = HashMap::new();
+        for (i, t) in tables.iter().enumerate() {
+            resolver.insert(t.name.clone(), i);
+        }
+        Cube {
+            tables,
+            name: self.name.clone(),
+            third_dim_index: self.third_dim_index.clone(),
+            resolver,
+        }
+    }
+
+    fn col_ix(&self, idx: usize) -> Option<Self::DataView> {
+        if self.tables.is_empty() || idx >= self.n_cols() {
+            return None;
+        }
+        Some(self.tables.iter().filter_map(|t| {
+            let fa = t.cols().get(idx)?;
+            Some(crate::ArrayV::new(fa.array.clone(), 0, fa.len()))
+        }).collect())
+    }
+
+    fn col_vec(&self) -> Vec<Self::DataView> {
+        if self.tables.is_empty() {
+            return Vec::new();
+        }
+        (0..self.n_cols()).filter_map(|i| {
+            // Use ColumnSelection::col_ix, not the inherent method
+            crate::traits::selection::ColumnSelection::col_ix(self, i)
+        }).collect()
+    }
+
+    fn get_cols(&self) -> Vec<Arc<Field>> {
+        if self.tables.is_empty() {
+            Vec::new()
+        } else {
+            self.schema()
+        }
     }
 }
 
@@ -638,7 +747,7 @@ mod tests {
     fn test_new_cube_empty() {
         let c = Cube::new_empty();
         assert_eq!(c.n_tables(), 0);
-        assert_eq!(c.n_rows.len(), 0);
+        assert_eq!(c.n_rows().len(), 0);
         assert!(c.is_empty());
         assert!(c.tables().is_empty());
     }
@@ -653,7 +762,7 @@ mod tests {
         c.add_table(t2.clone());
 
         assert_eq!(c.n_tables(), 2);
-        assert_eq!(c.n_rows, vec![2, 2]);
+        assert_eq!(c.n_rows(), vec![2, 2]);
         assert!(!c.is_empty());
 
         // Table access
@@ -758,7 +867,7 @@ mod tests {
         c.clear();
         assert!(c.is_empty());
         assert_eq!(c.n_tables(), 0);
-        assert_eq!(c.n_rows.len(), 0);
+        assert_eq!(c.n_rows().len(), 0);
     }
 
     #[test]
@@ -838,9 +947,9 @@ mod tests {
         let table = Table::new("single".to_string(), Some(cols.clone()));
         let cube = Cube {
             tables: vec![table],
-            n_rows: vec![1],
             name: "test".to_string(),
             third_dim_index: Some(vec!["timestamp".to_string()]),
+            resolver: HashMap::from([("single".to_string(), 0)]),
         };
         assert_eq!(cube.n_tables(), 1);
         assert_eq!(cube.n_cols(), 2);

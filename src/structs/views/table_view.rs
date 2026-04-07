@@ -958,7 +958,7 @@ impl From<TableV> for Table {
 #[cfg(feature = "select")]
 impl ColumnSelection for TableV {
     type View = TableV;
-    type ColView = ArrayV;
+    type DataView = ArrayV;
 
     fn c<S: FieldSelector>(&self, selection: S) -> TableV {
         // Resolve against the full field set so indices are always raw

@@ -68,13 +68,7 @@ pub fn broadcast_cube_add(
     }
 
     // Create result Cube with same metadata as left cube
-    let result_n_rows: Vec<usize> = result_tables.iter().map(|t| t.n_rows()).collect();
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: result_n_rows,
-        name: lhs.name.clone(),
-        third_dim_index: lhs.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, lhs.name.clone(), lhs.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to Scalar - apply scalar to each table in the cube
@@ -89,12 +83,7 @@ pub fn broadcast_cube_to_scalar(
         let broadcasted = broadcast_table_to_scalar(op, table, scalar)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to Array - apply array to each table in the cube
@@ -109,12 +98,7 @@ pub fn broadcast_cube_to_array(
         let broadcasted = broadcast_table_to_array(op, table, array)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast FieldArray to Cube - apply field array's inner array to each table in the cube
@@ -130,12 +114,7 @@ pub fn broadcast_fieldarray_to_cube(
         let broadcasted = broadcast_array_to_table(op, array, table)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to FieldArray - apply field array's inner array to each table in the cube
@@ -151,12 +130,7 @@ pub fn broadcast_cube_to_fieldarray(
         let broadcasted = broadcast_table_to_array(op, table, array)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Table to Cube - apply table to each table in the cube
@@ -171,12 +145,7 @@ pub fn broadcast_table_to_cube(
         let broadcasted = broadcast_table_with_operator(op, table.clone(), cube_table.clone())?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to Table - apply table to each table in the cube
@@ -191,12 +160,7 @@ pub fn broadcast_cube_to_table(
         let broadcasted = broadcast_table_with_operator(op, cube_table.clone(), table.clone())?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast ArrayView to Cube - apply array view to each table in the cube
@@ -212,12 +176,7 @@ pub fn broadcast_arrayview_to_cube(
         let broadcasted = broadcast_arrayview_to_table(op, array_view, table)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to ArrayView - apply array view to each table in the cube
@@ -233,12 +192,7 @@ pub fn broadcast_cube_to_arrayview(
         let broadcasted = broadcast_table_to_arrayview(op, table, array_view)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast NumericArrayView to Cube - apply numeric array view to each table in the cube
@@ -256,12 +210,7 @@ pub fn broadcast_numericarrayview_to_cube(
         let broadcasted = broadcast_arrayview_to_table(op, &array_view, table)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to NumericArrayView - apply numeric array view to each table in the cube
@@ -279,12 +228,7 @@ pub fn broadcast_cube_to_numericarrayview(
         let broadcasted = broadcast_table_to_arrayview(op, table, &array_view)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast TextArrayView to Cube - apply text array view to each table in the cube
@@ -302,12 +246,7 @@ pub fn broadcast_textarrayview_to_cube(
         let broadcasted = broadcast_arrayview_to_table(op, &array_view, table)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to TextArrayView - apply text array view to each table in the cube
@@ -325,12 +264,7 @@ pub fn broadcast_cube_to_textarrayview(
         let broadcasted = broadcast_table_to_arrayview(op, table, &array_view)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast TemporalArrayView to Cube - apply temporal array view to each table in the cube
@@ -348,12 +282,7 @@ pub fn broadcast_temporalarrayview_to_cube(
         let broadcasted = broadcast_arrayview_to_table(op, &array_view, table)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to TemporalArrayView - apply temporal array view to each table in the cube
@@ -371,12 +300,7 @@ pub fn broadcast_cube_to_temporalarrayview(
         let broadcasted = broadcast_table_to_arrayview(op, table, &array_view)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast TableView to Cube - apply table view to each table in the cube
@@ -392,12 +316,7 @@ pub fn broadcast_tableview_to_cube(
         let broadcasted = broadcast_table_with_operator(op, table.clone(), cube_table.clone())?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Helper: Materialise SuperArray into a single contiguous Array by concatenating chunks
@@ -798,12 +717,7 @@ pub fn broadcast_superarray_to_cube(
         result_tables.push(broadcasted);
     }
 
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to SuperArray - apply super array to each table in the cube
@@ -854,12 +768,7 @@ pub fn broadcast_cube_to_superarray(
         result_tables.push(broadcasted);
     }
 
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast SuperTable to Cube - apply super table to each table in the cube
@@ -880,12 +789,7 @@ pub fn broadcast_supertable_to_cube(
         result_tables.push(broadcasted);
     }
 
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to SuperTable - apply super table to each table in the cube
@@ -906,12 +810,7 @@ pub fn broadcast_cube_to_supertable(
         result_tables.push(broadcasted);
     }
 
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast SuperArrayView to Cube - apply super array view to each table in the cube
@@ -963,12 +862,7 @@ pub fn broadcast_superarrayview_to_cube(
         result_tables.push(broadcasted);
     }
 
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to SuperArrayView - apply super array view to each table in the cube
@@ -1018,12 +912,7 @@ pub fn broadcast_cube_to_superarrayview(
         result_tables.push(broadcasted);
     }
 
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast SuperTableView to Cube - apply super table view to each table in the cube
@@ -1044,12 +933,7 @@ pub fn broadcast_supertableview_to_cube(
         result_tables.push(broadcasted);
     }
 
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast Cube to SuperTableView - apply super table view to each table in the cube
@@ -1070,12 +954,7 @@ pub fn broadcast_cube_to_supertableview(
         result_tables.push(broadcasted);
     }
 
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 #[cfg(all(test, feature = "cube"))]
@@ -1106,29 +985,20 @@ mod tests {
         // Create first cube with 2 tables
         let table1_a = create_test_table("table1", 1); // [1,2] and [10,20]
         let table2_a = create_test_table("table2", 3); // [3,4] and [30,40]
-        let cube_a = Cube {
-            tables: vec![table1_a, table2_a],
-            n_rows: vec![2, 2],
-            name: "cubeA".to_string(),
-            third_dim_index: None,
-        };
+        let cube_a = Cube::from_tables(vec![table1_a, table2_a], "cubeA".to_string(), None);
 
         // Create second cube with 2 tables
         let table1_b = create_test_table("table1", 5); // [5,6] and [50,60]
         let table2_b = create_test_table("table2", 7); // [7,8] and [70,80]
-        let cube_b = Cube {
-            tables: vec![table1_b, table2_b],
-            n_rows: vec![2, 2],
-            name: "cubeB".to_string(),
-            third_dim_index: None,
-        };
+        let cube_b = Cube::from_tables(vec![table1_b, table2_b], "cubeB".to_string(), None);
 
         // Perform addition
         let result = broadcast_cube_add(cube_a, cube_b, None).unwrap();
 
         assert_eq!(result.tables.len(), 2);
         assert_eq!(result.name, "cubeA"); // Takes name from left operand
-        assert_eq!(result.n_rows, vec![2, 2]);
+        // Verify each result table has 2 rows
+        assert!(result.tables.iter().all(|t| t.n_rows == 2));
 
         // Check first table: [1,2] + [5,6] = [6,8] and [10,20] + [50,60] = [60,80]
         let first_table = &result.tables[0];
@@ -1160,21 +1030,11 @@ mod tests {
     #[should_panic(expected = "table count mismatch")]
     fn test_mismatched_table_count() {
         let table1_a = create_test_table("table1", 1);
-        let cube_a = Cube {
-            tables: vec![table1_a], // 1 table
-            n_rows: vec![2],
-            name: "cubeA".to_string(),
-            third_dim_index: None,
-        };
+        let cube_a = Cube::from_tables(vec![table1_a], "cubeA".to_string(), None); // 1 table
 
         let table1_b = create_test_table("table1", 5);
         let table2_b = create_test_table("table2", 7);
-        let cube_b = Cube {
-            tables: vec![table1_b, table2_b], // 2 tables
-            n_rows: vec![2, 2],
-            name: "cubeB".to_string(),
-            third_dim_index: None,
-        };
+        let cube_b = Cube::from_tables(vec![table1_b, table2_b], "cubeB".to_string(), None); // 2 tables
 
         let _ = broadcast_cube_add(cube_a, cube_b, None).unwrap();
     }

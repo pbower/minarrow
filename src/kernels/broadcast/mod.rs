@@ -738,12 +738,7 @@ pub fn broadcast_value(
                 let broadcasted = broadcast_table_with_operator(op, cube_table.clone(), table.clone())?;
                 result_tables.push(broadcasted);
             }
-            Ok(Value::Cube(Cube {
-                tables: result_tables,
-                n_rows: cube.n_rows.clone(),
-                name: cube.name.clone(),
-                third_dim_index: cube.third_dim_index.clone(),
-            }.into()))
+            Ok(Value::Cube(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()).into()))
         }
 
 
