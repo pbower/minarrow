@@ -40,6 +40,9 @@ use std::sync::Arc;
 pub trait FieldSelector {
     /// Resolve this selection to field indices for the given fields
     fn resolve_fields(&self, fields: &[Arc<Field>]) -> Vec<usize>;
+
+    /// Produce an owned version of this selector.
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync>;
 }
 
 /// Trait for types that can specify a data selection (index-based dimension)
@@ -61,10 +64,10 @@ pub trait DataSelector {
 
 /// Trait for types that support field/column selection
 pub trait ColumnSelection {
-    /// The view type returned by multi-column selection
+    /// The view type returned by multi-field selection
     type View;
-    /// The view type for a single column
-    type ColView;
+    /// The data view type for a single column, e.g. ArrayV
+    type DataView;
 
     /// Select fields/columns by name, index, or range
     ///
@@ -81,11 +84,11 @@ pub trait ColumnSelection {
         self.c(name)
     }
 
-    /// Get a single column view by index
-    fn col_ix(&self, idx: usize) -> Option<Self::ColView>;
+    /// Get a single column data view by index
+    fn col_ix(&self, idx: usize) -> Option<Self::DataView>;
 
-    /// Get all columns as views
-    fn col_vec(&self) -> Vec<Self::ColView>;
+    /// Get all columns as data views
+    fn col_vec(&self) -> Vec<Self::DataView>;
 
     /// Get the fields for field resolution
     fn get_cols(&self) -> Vec<Arc<Field>>;
@@ -133,6 +136,9 @@ impl FieldSelector for &str {
             .into_iter()
             .collect()
     }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(vec![self.to_string()])
+    }
 }
 
 /// Multiple fields by names
@@ -141,6 +147,9 @@ impl FieldSelector for &[&str] {
         self.iter()
             .filter_map(|name| fields.iter().position(|f| f.name == *name))
             .collect()
+    }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.iter().map(|s| s.to_string()).collect::<Vec<String>>())
     }
 }
 
@@ -151,14 +160,32 @@ impl<const N: usize> FieldSelector for &[&str; N] {
             .filter_map(|name| fields.iter().position(|f| f.name == *name))
             .collect()
     }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.iter().map(|s| s.to_string()).collect::<Vec<String>>())
+    }
 }
 
-/// Multiple fields by names (Vec)
+/// Multiple fields by names (Vec of borrowed str)
 impl FieldSelector for Vec<&str> {
     fn resolve_fields(&self, fields: &[Arc<Field>]) -> Vec<usize> {
         self.iter()
             .filter_map(|name| fields.iter().position(|f| f.name == *name))
             .collect()
+    }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.iter().map(|s| s.to_string()).collect::<Vec<String>>())
+    }
+}
+
+/// Multiple fields by names (Vec of owned String)
+impl FieldSelector for Vec<String> {
+    fn resolve_fields(&self, fields: &[Arc<Field>]) -> Vec<usize> {
+        self.iter()
+            .filter_map(|name| fields.iter().position(|f| f.name.as_str() == name.as_str()))
+            .collect()
+    }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.clone())
     }
 }
 
@@ -171,6 +198,9 @@ impl FieldSelector for usize {
             Vec::new()
         }
     }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(vec![*self])
+    }
 }
 
 /// Multiple fields by indices
@@ -180,6 +210,9 @@ impl FieldSelector for &[usize] {
             .copied()
             .filter(|&idx| idx < fields.len())
             .collect()
+    }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.to_vec())
     }
 }
 
@@ -191,6 +224,9 @@ impl<const N: usize> FieldSelector for &[usize; N] {
             .filter(|&idx| idx < fields.len())
             .collect()
     }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.to_vec())
+    }
 }
 
 /// Multiple fields by indices (Vec)
@@ -201,6 +237,9 @@ impl FieldSelector for Vec<usize> {
             .filter(|&idx| idx < fields.len())
             .collect()
     }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.clone())
+    }
 }
 
 /// Field range selection
@@ -209,12 +248,18 @@ impl FieldSelector for Range<usize> {
         let end = self.end.min(fields.len());
         (self.start..end).collect()
     }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.clone())
+    }
 }
 
 /// Field range from selection
 impl FieldSelector for RangeFrom<usize> {
     fn resolve_fields(&self, fields: &[Arc<Field>]) -> Vec<usize> {
         (self.start..fields.len()).collect()
+    }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.clone())
     }
 }
 
@@ -224,12 +269,18 @@ impl FieldSelector for RangeTo<usize> {
         let end = self.end.min(fields.len());
         (0..end).collect()
     }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.clone())
+    }
 }
 
 /// Field full range selection
 impl FieldSelector for RangeFull {
     fn resolve_fields(&self, fields: &[Arc<Field>]) -> Vec<usize> {
         (0..fields.len()).collect()
+    }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(..)
     }
 }
 
@@ -239,6 +290,19 @@ impl FieldSelector for RangeInclusive<usize> {
         let start = *self.start();
         let end = (*self.end() + 1).min(fields.len());
         (start..end).collect()
+    }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        Box::new(self.clone())
+    }
+}
+
+/// Boxed field selector for owned selection
+impl FieldSelector for Box<dyn FieldSelector + Send + Sync> {
+    fn resolve_fields(&self, fields: &[Arc<Field>]) -> Vec<usize> {
+        (**self).resolve_fields(fields)
+    }
+    fn to_owned(&self) -> Box<dyn FieldSelector + Send + Sync> {
+        (**self).to_owned()
     }
 }
 

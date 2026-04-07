@@ -1008,7 +1008,7 @@ impl Display for Table {
 #[cfg(all(feature = "views", feature = "select"))]
 impl ColumnSelection for Table {
     type View = TableV;
-    type ColView = ArrayV;
+    type DataView = ArrayV;
 
     fn c<S: FieldSelector>(&self, selection: S) -> TableV {
         let all_fields: Vec<Arc<Field>> = self.cols.iter().map(|fa| fa.field.clone()).collect();

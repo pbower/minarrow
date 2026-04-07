@@ -305,12 +305,7 @@ pub fn broadcast_scalar_to_cube(
         let broadcasted = broadcast_scalar_to_table(op, scalar, table)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Broadcast scalar to Tuple2

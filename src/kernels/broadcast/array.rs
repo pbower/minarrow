@@ -263,12 +263,7 @@ pub fn broadcast_array_to_cube(
         let broadcasted = broadcast_array_to_table(op, array, table)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube {
-        tables: result_tables,
-        n_rows: cube.n_rows.clone(),
-        name: cube.name.clone(),
-        third_dim_index: cube.third_dim_index.clone(),
-    })
+    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
 }
 
 /// Helper function for Array-Tuple2 broadcasting - broadcast array to each tuple element
@@ -785,12 +780,7 @@ mod tests {
             "table2".to_string(),
         );
 
-        let cube = Cube {
-            tables: vec![table1, table2],
-            n_rows: vec![3, 3],
-            name: "test_cube".to_string(),
-            third_dim_index: None,
-        };
+        let cube = Cube::from_tables(vec![table1, table2], "test_cube".to_string(), None);
 
         let result = broadcast_array_to_cube(ArithmeticOperator::Subtract, &arr, &cube).unwrap();
 
