@@ -103,7 +103,7 @@ impl NumericArrayV {
     }
 
     /// Creates a new `NumericArrayView` with a precomputed null count.
-    pub fn with_null_count(
+    pub fn new_nc(
         array: NumericArray,
         offset: usize,
         len: usize,
@@ -519,7 +519,7 @@ mod tests {
         arr.push(6);
 
         let numeric = NumericArray::Int32(Arc::new(arr));
-        let view = NumericArrayV::with_null_count(numeric.clone(), 0, 2, 99);
+        let view = NumericArrayV::new_nc(numeric.clone(), 0, 2, 99);
         // Should always report the supplied cached value
         assert_eq!(view.null_count(), 99);
         // Trying to set again should fail since it's already initialised

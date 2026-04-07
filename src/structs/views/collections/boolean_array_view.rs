@@ -67,9 +67,18 @@ use crate::{Array, ArrayV, BitmaskV, BooleanArray, MaskedArray};
 /// - Use [`to_boolean_array`](Self::to_boolean_array) to materialise the data.
 #[derive(Clone, PartialEq)]
 pub struct BooleanArrayV {
+    /// The **outer array** that this view is derived from - we retain a reference to it. 
+    /// Importantly, this is the ***full array*** - not the *view*, and thus should not be 
+    /// accessed as though it were the view subset.
     pub array: Arc<BooleanArray<()>>,
+    /// The index offset from 0 that for where this view starts from the outer array
     pub offset: usize,
+    /// The length of the array view
     len: usize,
+    /// How many nulls are in the BooleanArrayView
+    /// At construction, this is None, unless constructed via new_nc. When one uses '.null_count()',
+    /// the first time it will calculate it (quickly) using Bitmask popcount, and then from that 
+    /// point onwards the null count is a cached value. 
     null_count: OnceLock<usize>,
 }
 
@@ -91,7 +100,7 @@ impl BooleanArrayV {
     }
 
     /// Creates a new `BooleanArrayView` with a precomputed null count.
-    pub fn with_null_count(
+    pub fn new_nc(
         array: Arc<BooleanArray<()>>,
         offset: usize,
         len: usize,
@@ -374,7 +383,7 @@ mod tests {
         arr.push(false);
 
         let arc = Arc::new(arr);
-        let view = BooleanArrayV::with_null_count(arc, 0, 2, 99);
+        let view = BooleanArrayV::new_nc(arc, 0, 2, 99);
         assert_eq!(view.null_count(), 99);
         // Trying to set again should fail since it's already initialised
         assert!(view.set_null_count(101).is_err());

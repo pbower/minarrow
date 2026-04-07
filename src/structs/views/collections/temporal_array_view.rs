@@ -78,9 +78,18 @@ use crate::{Array, ArrayV, BitmaskV, MaskedArray, TemporalArray};
 /// - Use [`to_temporal_array`](Self::to_temporal_array) to materialise the window.
 #[derive(Clone, PartialEq)]
 pub struct TemporalArrayV {
+    /// The **outer array** that this view is derived from - we retain a reference to it. 
+    /// Importantly, this is the ***full array*** - not the *view*, and thus should not be 
+    /// accessed as though it were the view subset.
     pub array: TemporalArray,
+    /// The index offset from 0 that for where this view starts from the outer array
     pub offset: usize,
+    /// The length of the array view
     len: usize,
+    /// How many nulls are in the TemporalArrayView
+    /// At construction, this is None, unless constructed via new_nc. When one uses '.null_count()',
+    /// the first time it will calculate it (quickly) using Bitmask popcount, and then from that 
+    /// point onwards the null count is a cached value. 
     null_count: OnceLock<usize>,
 }
 
@@ -102,7 +111,7 @@ impl TemporalArrayV {
     }
 
     /// Creates a new `TemporalArrayView` with a precomputed null count.
-    pub fn with_null_count(
+    pub fn new_nc(
         array: TemporalArray,
         offset: usize,
         len: usize,
@@ -754,7 +763,7 @@ mod tests {
     fn test_temporal_array_view_with_supplied_null_count() {
         let arr = DatetimeArray::<i64>::from_slice(&[5, 6], None);
         let temporal = TemporalArray::Datetime64(Arc::new(arr));
-        let view = TemporalArrayV::with_null_count(temporal, 0, 2, 99);
+        let view = TemporalArrayV::new_nc(temporal, 0, 2, 99);
         assert_eq!(view.null_count(), 99);
         // Trying to set again should fail since it\'s already initialized
         assert!(view.set_null_count(101).is_err());

@@ -73,9 +73,18 @@ use crate::{Array, ArrayV, BitmaskV, StringArray, TextArray};
 /// - Use [`to_text_array`](Self::to_text_array) to materialise the data.
 #[derive(Clone, PartialEq)]
 pub struct TextArrayV {
+    /// The **outer array** that this view is derived from - we retain a reference to it. 
+    /// Importantly, this is the ***full array*** - not the *view*, and thus should not be 
+    /// accessed as though it were the view subset.
     pub array: TextArray,
+    /// The index offset from 0 that for where this view starts from the outer array
     pub offset: usize,
+    /// The length of the array view
     len: usize,
+    /// How many nulls are in the TextArrayView
+    /// At construction, this is None, unless constructed via new_nc. When one uses '.null_count()',
+    /// the first time it will calculate it (quickly) using Bitmask popcount, and then from that 
+    /// point onwards the null count is a cached value. 
     null_count: OnceLock<usize>,
 }
 
@@ -97,7 +106,7 @@ impl TextArrayV {
     }
 
     /// Creates a new `TextArrayView` with a precomputed null count.
-    pub fn with_null_count(array: TextArray, offset: usize, len: usize, null_count: usize) -> Self {
+    pub fn new_nc(array: TextArray, offset: usize, len: usize, null_count: usize) -> Self {
         assert!(
             offset + len <= array.len(),
             "TextArrayView: window out of bounds (offset + len = {}, array.len = {})",
@@ -412,7 +421,7 @@ mod tests {
     fn test_text_array_view_with_supplied_null_count() {
         let arr = StringArray::<u32>::from_slice(&["g", "h"]);
         let text = TextArray::String32(Arc::new(arr));
-        let view = TextArrayV::with_null_count(text, 0, 2, 99);
+        let view = TextArrayV::new_nc(text, 0, 2, 99);
         assert_eq!(view.null_count(), 99);
         // Trying to set again should fail since it's already initialised
         assert!(view.set_null_count(101).is_err());
