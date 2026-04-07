@@ -171,7 +171,7 @@ impl SuperArray {
     ///
     /// # Panics
     /// Panics if chunks have mismatched types or null_counts length doesn't match chunks length.
-    pub fn from_arrays_with_null_counts(chunks: Vec<Array>, null_counts: Vec<usize>) -> Self {
+    pub fn from_arrays_nc(chunks: Vec<Array>, null_counts: Vec<usize>) -> Self {
         assert_eq!(
             chunks.len(),
             null_counts.len(),

@@ -56,6 +56,9 @@ use crate::{Array, BitmaskV, FieldArray, MaskedArray, TextArray};
 /// # ArrayView
 ///
 /// Logical, windowed view over an `Array`.
+/// 
+/// ArrayView handles indexing offsets automatically so that the View behaves
+/// like a regular array.
 ///
 /// ## Purpose
 /// This is used to return an indexable view over a subset of the array.
@@ -74,9 +77,18 @@ use crate::{Array, BitmaskV, FieldArray, MaskedArray, TextArray};
 /// - Use [`to_array`](Self::to_array) to materialise as an owned array.
 #[derive(Clone, PartialEq)]
 pub struct ArrayV {
+    /// The **outer array** that this view is derived from - we retain a reference to it. 
+    /// Importantly, this is the ***full array*** - not the *view*, and thus should not be 
+    /// accessed as though it were the view subset.
     pub array: Array, // contains Arc<inner>
+    /// The index offset from 0 that for where this view starts from the outer array
     pub offset: usize,
+    /// The length of the array view
     len: usize,
+    /// How many nulls are in the ArrayView
+    /// At construction, this is None, unless constructed via new_nc. When one uses '.null_count()',
+    /// the first time it will calculate it (quickly) using Bitmask popcount, and then from that 
+    /// point onwards the null count is a cached value. 
     null_count: OnceLock<usize>,
 }
 
@@ -100,7 +112,7 @@ impl ArrayV {
 
     /// Construct a windowed view, supplying a precomputed null count.
     #[inline]
-    pub fn with_null_count(array: Array, offset: usize, len: usize, null_count: usize) -> Self {
+    pub fn new_nc(array: Array, offset: usize, len: usize, null_count: usize) -> Self {
         assert!(
             offset + len <= array.len(),
             "ArrayView: window out of bounds (offset + len = {}, array.len = {})",
@@ -945,7 +957,7 @@ mod tests {
         arr.push(6);
 
         let array = Array::NumericArray(NumericArray::Int32(Arc::new(arr)));
-        let view = ArrayV::with_null_count(array, 0, 2, 99);
+        let view = ArrayV::new_nc(array, 0, 2, 99);
         // Should always report the supplied cached value
         assert_eq!(view.null_count(), 99);
         // Trying to set again should fail since it's already initialized

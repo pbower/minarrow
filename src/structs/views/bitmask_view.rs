@@ -79,8 +79,13 @@ use crate::{Bitmask, BitmaskVT};
 /// ```
 #[derive(Clone, PartialEq)]
 pub struct BitmaskV {
+    /// The **outer bitmask** that this view is derived from - we retain a reference to it. 
+    /// Importantly, this is the ***full bitmask*** - not the *view*, and thus should not be 
+    /// accessed as though it were the view subset.
     pub bitmask: Arc<Bitmask>,
+    /// The index offset from 0 that for where this view starts from the outer bitmask
     pub offset: usize,
+    /// The bitmask length
     len: usize,
 }
 
