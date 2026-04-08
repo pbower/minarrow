@@ -18,7 +18,9 @@
 
 use std::sync::Arc;
 
-use minarrow::{Array, ArrowType, Field, FieldArray, NumericArray, Table, TextArray};
+use minarrow::{
+    fa_i32, fa_str32, fa_u32, Array, ArrowType, Field, NumericArray, Table, TextArray,
+};
 #[cfg(feature = "datetime")]
 use minarrow::{TemporalArray, TimeUnit};
 use polars::prelude::*;
@@ -125,10 +127,7 @@ fn test_array_to_polars_with_field_explicit() {
 
 #[test]
 fn test_fieldarray_to_polars() {
-    let arr = Arc::new(minarrow::IntegerArray::<u32>::from_slice(&[5, 6, 7]));
-    let a = Array::NumericArray(NumericArray::UInt32(arr));
-    let f = Field::new("u", ArrowType::UInt32, false, None);
-    let fa = FieldArray::new(f.clone(), a);
+    let fa = fa_u32!("u", 5, 6, 7);
     let s = fa.to_polars();
     assert_eq!(s.name(), "u");
     assert_eq!(s.dtype(), &DataType::UInt32);
@@ -137,18 +136,8 @@ fn test_fieldarray_to_polars() {
 #[test]
 fn test_table_to_polars() {
     // Tiny table: 2 cols
-    let c1 = {
-        let arr = Arc::new(minarrow::IntegerArray::<i32>::from_slice(&[1, 2]));
-        let a = Array::NumericArray(NumericArray::Int32(arr));
-        let f = Field::new("a", ArrowType::Int32, false, None);
-        FieldArray::new(f, a)
-    };
-    let c2 = {
-        let arr = Arc::new(minarrow::StringArray::<u32>::from_slice(&["x", "y"]));
-        let a = Array::TextArray(TextArray::String32(arr));
-        let f = Field::new("b", ArrowType::String, false, None);
-        FieldArray::new(f, a)
-    };
+    let c1 = fa_i32!("a", 1, 2);
+    let c2 = fa_str32!("b", "x", "y");
     let t = Table::new("t".into(), Some(vec![c1, c2]));
     let df = t.to_polars();
     assert_eq!(df.height(), 2);

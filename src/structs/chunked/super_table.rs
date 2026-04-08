@@ -886,13 +886,8 @@ impl From<SuperTableV> for SuperTable {
 mod tests {
     use super::*;
     use crate::ffi::arrow_dtype::ArrowType;
+    use crate::{fa_bool, fa_cat32, fa_f64, fa_i32, fa_i64, fa_str32};
     use crate::{Array, Field, FieldArray, MaskedArray, NumericArray, Table};
-
-    fn fa(name: &str, vals: &[i32]) -> FieldArray {
-        let arr = Array::from_int32(crate::IntegerArray::<i32>::from_slice(vals));
-        let field = Field::new(name.to_string(), ArrowType::Int32, false, None);
-        FieldArray::new(field, arr)
-    }
 
     fn table(cols: Vec<FieldArray>) -> Table {
         let n_rows = cols[0].len();
@@ -913,10 +908,10 @@ mod tests {
 
     #[test]
     fn test_from_batches_basic() {
-        let col1 = fa("a", &[1, 2, 3]);
-        let col2 = fa("b", &[10, 11, 12]);
-        let col3 = fa("a", &[4, 5]);
-        let col4 = fa("b", &[13, 14]);
+        let col1 = fa_i32!("a", 1, 2, 3);
+        let col2 = fa_i32!("b", 10, 11, 12);
+        let col3 = fa_i32!("a", 4, 5);
+        let col4 = fa_i32!("b", 13, 14);
         let batch1 = Arc::new(table(vec![col1.clone(), col2.clone()]));
         let batch2 = Arc::new(table(vec![col3.clone(), col4.clone()]));
         let batches = vec![batch1, batch2].into();
@@ -934,16 +929,16 @@ mod tests {
     #[test]
     #[should_panic(expected = "column-count mismatch")]
     fn test_from_batches_col_count_mismatch() {
-        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
-        let batch2 = Arc::new(table(vec![fa("a", &[3, 4]), fa("b", &[5, 6])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2)]));
+        let batch2 = Arc::new(table(vec![fa_i32!("a", 3, 4), fa_i32!("b", 5, 6)]));
         SuperTable::from_batches(vec![batch1, batch2].into(), None);
     }
 
     #[test]
     #[should_panic(expected = "schema mismatch")]
     fn test_from_batches_schema_mismatch() {
-        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
-        let mut wrong = fa("z", &[3, 4]);
+        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2)]));
+        let mut wrong = fa_i32!("z", 3, 4);
         let mut mismatched_field = (*wrong.field).clone();
         mismatched_field.dtype = ArrowType::Int32;
         wrong.field = Arc::new(mismatched_field);
@@ -954,8 +949,8 @@ mod tests {
     #[test]
     fn test_push_and_consolidate() {
         let mut t = SuperTable::default();
-        t.push(Arc::new(table(vec![fa("x", &[1, 2]), fa("y", &[3, 4])])));
-        t.push(Arc::new(table(vec![fa("x", &[5]), fa("y", &[6])])));
+        t.push(Arc::new(table(vec![fa_i32!("x", 1, 2), fa_i32!("y", 3, 4)])));
+        t.push(Arc::new(table(vec![fa_i32!("x", 5), fa_i32!("y", 6)])));
         assert_eq!(t.n_cols(), 2);
         assert_eq!(t.n_batches(), 2);
         assert_eq!(t.len(), 3);
@@ -971,15 +966,15 @@ mod tests {
     #[should_panic(expected = "column-count mismatch")]
     fn test_push_col_count_mismatch() {
         let mut t = SuperTable::default();
-        t.push(Arc::new(table(vec![fa("a", &[1, 2])])));
-        t.push(Arc::new(table(vec![fa("a", &[3, 4]), fa("b", &[5, 6])])));
+        t.push(Arc::new(table(vec![fa_i32!("a", 1, 2)])));
+        t.push(Arc::new(table(vec![fa_i32!("a", 3, 4), fa_i32!("b", 5, 6)])));
     }
 
     #[cfg(feature = "views")]
     #[test]
     fn test_slice_and_owned_table() {
-        let batch1 = Arc::new(table(vec![fa("q", &[1, 2, 3]), fa("w", &[4, 5, 6])]));
-        let batch2 = Arc::new(table(vec![fa("q", &[7, 8]), fa("w", &[9, 10])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("q", 1, 2, 3), fa_i32!("w", 4, 5, 6)]));
+        let batch2 = Arc::new(table(vec![fa_i32!("q", 7, 8), fa_i32!("w", 9, 10)]));
         let t = SuperTable::from_batches(vec![batch1, batch2].into(), None);
 
         // Slice rows 2..5 (3 rows), crossing the batch boundary
@@ -1010,7 +1005,7 @@ mod tests {
 
     #[test]
     fn test_schema_and_batch_access() {
-        let t = SuperTable::from_batches(vec![Arc::new(table(vec![fa("alpha", &[1, 2])]))], None);
+        let t = SuperTable::from_batches(vec![Arc::new(table(vec![fa_i32!("alpha", 1, 2)]))], None);
         assert_eq!(t.n_cols(), 1);
         assert_eq!(t.schema()[0].name, "alpha");
         assert!(t.batch(0).is_some());
@@ -1021,8 +1016,8 @@ mod tests {
     #[cfg(feature = "views")]
     #[test]
     fn test_from_slices() {
-        let batch1 = Arc::new(table(vec![fa("x", &[1, 2]), fa("y", &[3, 4])]));
-        let batch2 = Arc::new(table(vec![fa("x", &[5, 6]), fa("y", &[7, 8])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("x", 1, 2), fa_i32!("y", 3, 4)]));
+        let batch2 = Arc::new(table(vec![fa_i32!("x", 5, 6), fa_i32!("y", 7, 8)]));
         let t = SuperTable::from_batches(vec![batch1.clone(), batch2.clone()], None);
 
         // Break into 4 slices of 1 row each
@@ -1065,11 +1060,11 @@ mod tests {
 
     #[test]
     fn test_insert_rows_into_first_batch() {
-        let batch1 = Arc::new(table(vec![fa("a", &[1, 2, 3]), fa("b", &[10, 20, 30])]));
-        let batch2 = Arc::new(table(vec![fa("a", &[4, 5]), fa("b", &[40, 50])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2, 3), fa_i32!("b", 10, 20, 30)]));
+        let batch2 = Arc::new(table(vec![fa_i32!("a", 4, 5), fa_i32!("b", 40, 50)]));
         let mut st = SuperTable::from_batches(vec![batch1, batch2], None);
 
-        let insert_batch = Arc::new(table(vec![fa("a", &[99]), fa("b", &[88])]));
+        let insert_batch = Arc::new(table(vec![fa_i32!("a", 99), fa_i32!("b", 88)]));
         let insert_st = SuperTable::from_batches(vec![insert_batch], None);
 
         st.insert_rows(1, insert_st).unwrap();
@@ -1088,11 +1083,11 @@ mod tests {
 
     #[test]
     fn test_insert_rows_into_second_batch() {
-        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
-        let batch2 = Arc::new(table(vec![fa("a", &[3, 4, 5])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2)]));
+        let batch2 = Arc::new(table(vec![fa_i32!("a", 3, 4, 5)]));
         let mut st = SuperTable::from_batches(vec![batch1, batch2], None);
 
-        let insert_batch = Arc::new(table(vec![fa("a", &[99, 88])]));
+        let insert_batch = Arc::new(table(vec![fa_i32!("a", 99, 88)]));
         let insert_st = SuperTable::from_batches(vec![insert_batch], None);
 
         st.insert_rows(3, insert_st).unwrap();
@@ -1110,10 +1105,10 @@ mod tests {
 
     #[test]
     fn test_insert_rows_prepend() {
-        let batch1 = Arc::new(table(vec![fa("a", &[1, 2, 3])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2, 3)]));
         let mut st = SuperTable::from_batches(vec![batch1], None);
 
-        let insert_batch = Arc::new(table(vec![fa("a", &[99])]));
+        let insert_batch = Arc::new(table(vec![fa_i32!("a", 99)]));
         let insert_st = SuperTable::from_batches(vec![insert_batch], None);
 
         st.insert_rows(0, insert_st).unwrap();
@@ -1131,11 +1126,11 @@ mod tests {
 
     #[test]
     fn test_insert_rows_append() {
-        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
-        let batch2 = Arc::new(table(vec![fa("a", &[3, 4])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2)]));
+        let batch2 = Arc::new(table(vec![fa_i32!("a", 3, 4)]));
         let mut st = SuperTable::from_batches(vec![batch1, batch2], None);
 
-        let insert_batch = Arc::new(table(vec![fa("a", &[99])]));
+        let insert_batch = Arc::new(table(vec![fa_i32!("a", 99)]));
         let insert_st = SuperTable::from_batches(vec![insert_batch], None);
 
         st.insert_rows(4, insert_st).unwrap();
@@ -1153,10 +1148,10 @@ mod tests {
 
     #[test]
     fn test_insert_rows_schema_mismatch() {
-        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2)]));
         let mut st = SuperTable::from_batches(vec![batch1], None);
 
-        let wrong_batch = Arc::new(table(vec![fa("b", &[99])]));
+        let wrong_batch = Arc::new(table(vec![fa_i32!("b", 99)]));
         let wrong_st = SuperTable::from_batches(vec![wrong_batch], None);
 
         let result = st.insert_rows(0, wrong_st);
@@ -1165,10 +1160,10 @@ mod tests {
 
     #[test]
     fn test_insert_rows_out_of_bounds() {
-        let batch1 = Arc::new(table(vec![fa("a", &[1, 2])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2)]));
         let mut st = SuperTable::from_batches(vec![batch1], None);
 
-        let insert_batch = Arc::new(table(vec![fa("a", &[99])]));
+        let insert_batch = Arc::new(table(vec![fa_i32!("a", 99)]));
         let insert_st = SuperTable::from_batches(vec![insert_batch], None);
 
         let result = st.insert_rows(10, insert_st);
@@ -1178,12 +1173,12 @@ mod tests {
     #[test]
     fn test_rechunk_uniform() {
         // Create a SuperTable with 3 batches of varying sizes
-        let batch1 = Arc::new(table(vec![fa("x", &[1, 2, 3]), fa("y", &[10, 20, 30])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("x", 1, 2, 3), fa_i32!("y", 10, 20, 30)]));
         let batch2 = Arc::new(table(vec![
-            fa("x", &[4, 5, 6, 7]),
-            fa("y", &[40, 50, 60, 70]),
+            fa_i32!("x", 4, 5, 6, 7),
+            fa_i32!("y", 40, 50, 60, 70),
         ]));
-        let batch3 = Arc::new(table(vec![fa("x", &[8, 9]), fa("y", &[80, 90])]));
+        let batch3 = Arc::new(table(vec![fa_i32!("x", 8, 9), fa_i32!("y", 80, 90)]));
         let mut st = SuperTable::from_batches(vec![batch1, batch2, batch3], None);
 
         // Total rows: 3 + 4 + 2 = 9 rows
@@ -1207,7 +1202,9 @@ mod tests {
         let mut batches = Vec::new();
         for i in 0..100 {
             let vals: Vec<i32> = vec![i * 10, i * 10 + 1];
-            batches.push(Arc::new(table(vec![fa("col", &vals)])));
+            let arr = Array::from_int32(crate::IntegerArray::<i32>::from_slice(&vals));
+            let field = Field::new("col", ArrowType::Int32, false, None);
+            batches.push(Arc::new(table(vec![FieldArray::new(field, arr)])));
         }
         let mut st = SuperTable::from_batches(batches.into(), None);
 
@@ -1228,10 +1225,10 @@ mod tests {
     #[cfg(feature = "size")]
     fn test_rechunk_by_memory() {
         // Create a SuperTable with i32 data
-        let batch1 = Arc::new(table(vec![fa("a", &[1, 2, 3, 4]), fa("b", &[5, 6, 7, 8])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2, 3, 4), fa_i32!("b", 5, 6, 7, 8)]));
         let batch2 = Arc::new(table(vec![
-            fa("a", &[9, 10, 11, 12]),
-            fa("b", &[13, 14, 15, 16]),
+            fa_i32!("a", 9, 10, 11, 12),
+            fa_i32!("b", 13, 14, 15, 16),
         ]));
         let mut st = SuperTable::from_batches(vec![batch1, batch2], None);
 
@@ -1253,7 +1250,7 @@ mod tests {
 
     #[test]
     fn test_rechunk_uniform_zero_error() {
-        let batch1 = Arc::new(table(vec![fa("x", &[1, 2, 3])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("x", 1, 2, 3)]));
         let mut st = SuperTable::from_batches(vec![batch1], None);
 
         let result = st.rechunk(RechunkStrategy::Count(0));
@@ -1283,9 +1280,9 @@ mod tests {
     #[test]
     fn test_rechunk_preserves_data_order() {
         // Create batches with sequential data
-        let batch1 = Arc::new(table(vec![fa("num", &[1, 2, 3])]));
-        let batch2 = Arc::new(table(vec![fa("num", &[4, 5, 6, 7])]));
-        let batch3 = Arc::new(table(vec![fa("num", &[8, 9])]));
+        let batch1 = Arc::new(table(vec![fa_i32!("num", 1, 2, 3)]));
+        let batch2 = Arc::new(table(vec![fa_i32!("num", 4, 5, 6, 7)]));
+        let batch3 = Arc::new(table(vec![fa_i32!("num", 8, 9)]));
         let mut st = SuperTable::from_batches(vec![batch1, batch2, batch3], None);
 
         assert_eq!(st.n_rows(), 9);
@@ -1307,30 +1304,13 @@ mod tests {
 
     #[test]
     fn test_consolidate_arena_integer_and_float() {
-        use crate::{FloatArray, IntegerArray};
-
-        let fa_i32 = |name: &str, vals: &[i32]| -> FieldArray {
-            let arr = Array::from_int32(IntegerArray::<i32>::from_slice(vals));
-            FieldArray::new(
-                Field::new(name.to_string(), ArrowType::Int32, false, None),
-                arr,
-            )
-        };
-        let fa_f64 = |name: &str, vals: &[f64]| -> FieldArray {
-            let arr = Array::from_float64(FloatArray::<f64>::from_slice(vals));
-            FieldArray::new(
-                Field::new(name.to_string(), ArrowType::Float64, false, None),
-                arr,
-            )
-        };
-
         let b1 = Arc::new(table(vec![
-            fa_i32("id", &[1, 2, 3]),
-            fa_f64("val", &[1.5, 2.5, 3.5]),
+            fa_i32!("id", 1, 2, 3),
+            fa_f64!("val", 1.5, 2.5, 3.5),
         ]));
         let b2 = Arc::new(table(vec![
-            fa_i32("id", &[4, 5]),
-            fa_f64("val", &[4.5, 5.5]),
+            fa_i32!("id", 4, 5),
+            fa_f64!("val", 4.5, 5.5),
         ]));
         let st = SuperTable::from_batches(vec![b1, b2], None);
         let result = st.consolidate();
@@ -1352,18 +1332,8 @@ mod tests {
 
     #[test]
     fn test_consolidate_arena_string_columns() {
-        use crate::StringArray;
-
-        let fa_str = |name: &str, vals: &[&str]| -> FieldArray {
-            let arr = Array::from_string32(StringArray::<u32>::from_vec(vals.to_vec(), None));
-            FieldArray::new(
-                Field::new(name.to_string(), ArrowType::String, false, None),
-                arr,
-            )
-        };
-
-        let b1 = Arc::new(table(vec![fa_str("name", &["hello", "world"])]));
-        let b2 = Arc::new(table(vec![fa_str("name", &["foo", "bar", "baz"])]));
+        let b1 = Arc::new(table(vec![fa_str32!("name", "hello", "world")]));
+        let b2 = Arc::new(table(vec![fa_str32!("name", "foo", "bar", "baz")]));
         let st = SuperTable::from_batches(vec![b1, b2], None);
         let result = st.consolidate();
 
@@ -1428,18 +1398,8 @@ mod tests {
 
     #[test]
     fn test_consolidate_arena_boolean_columns() {
-        use crate::BooleanArray;
-
-        let fa_bool = |name: &str, vals: &[bool]| -> FieldArray {
-            let arr = Array::from_bool(BooleanArray::from_slice(vals));
-            FieldArray::new(
-                Field::new(name.to_string(), ArrowType::Boolean, false, None),
-                arr,
-            )
-        };
-
-        let b1 = Arc::new(table(vec![fa_bool("flag", &[true, false, true])]));
-        let b2 = Arc::new(table(vec![fa_bool("flag", &[false, true])]));
+        let b1 = Arc::new(table(vec![fa_bool!("flag", true, false, true)]));
+        let b2 = Arc::new(table(vec![fa_bool!("flag", false, true)]));
         let st = SuperTable::from_batches(vec![b1, b2], None);
         let result = st.consolidate();
 
@@ -1458,56 +1418,18 @@ mod tests {
 
     #[test]
     fn test_consolidate_arena_mixed_types() {
-        use crate::{BooleanArray, FloatArray, IntegerArray, StringArray};
-
-        let b1 = Arc::new(Table {
-            cols: vec![
-                FieldArray::new(
-                    Field::new("id", ArrowType::Int64, false, None),
-                    Array::from_int64(IntegerArray::<i64>::from_slice(&[1, 2])),
-                ),
-                FieldArray::new(
-                    Field::new("score", ArrowType::Float64, false, None),
-                    Array::from_float64(FloatArray::<f64>::from_slice(&[9.5, 8.0])),
-                ),
-                FieldArray::new(
-                    Field::new("name", ArrowType::String, false, None),
-                    Array::from_string32(StringArray::<u32>::from_vec(vec!["alice", "bob"], None)),
-                ),
-                FieldArray::new(
-                    Field::new("active", ArrowType::Boolean, false, None),
-                    Array::from_bool(BooleanArray::from_slice(&[true, false])),
-                ),
-            ],
-            n_rows: 2,
-            name: "batch".into(),
-            #[cfg(feature = "table_metadata")]
-            metadata: std::collections::BTreeMap::new(),
-        });
-        let b2 = Arc::new(Table {
-            cols: vec![
-                FieldArray::new(
-                    Field::new("id", ArrowType::Int64, false, None),
-                    Array::from_int64(IntegerArray::<i64>::from_slice(&[3])),
-                ),
-                FieldArray::new(
-                    Field::new("score", ArrowType::Float64, false, None),
-                    Array::from_float64(FloatArray::<f64>::from_slice(&[7.0])),
-                ),
-                FieldArray::new(
-                    Field::new("name", ArrowType::String, false, None),
-                    Array::from_string32(StringArray::<u32>::from_vec(vec!["charlie"], None)),
-                ),
-                FieldArray::new(
-                    Field::new("active", ArrowType::Boolean, false, None),
-                    Array::from_bool(BooleanArray::from_slice(&[true])),
-                ),
-            ],
-            n_rows: 1,
-            name: "batch".into(),
-            #[cfg(feature = "table_metadata")]
-            metadata: std::collections::BTreeMap::new(),
-        });
+        let b1 = Arc::new(table(vec![
+            fa_i64!("id", 1, 2),
+            fa_f64!("score", 9.5, 8.0),
+            fa_str32!("name", "alice", "bob"),
+            fa_bool!("active", true, false),
+        ]));
+        let b2 = Arc::new(table(vec![
+            fa_i64!("id", 3),
+            fa_f64!("score", 7.0),
+            fa_str32!("name", "charlie"),
+            fa_bool!("active", true),
+        ]));
         let st = SuperTable::from_batches(vec![b1, b2], None);
         let result = st.consolidate();
 
@@ -1551,8 +1473,8 @@ mod tests {
     #[test]
     #[cfg(feature = "arena")]
     fn test_consolidate_arena_shared_buffers() {
-        let b1 = Arc::new(table(vec![fa("x", &[1, 2, 3])]));
-        let b2 = Arc::new(table(vec![fa("x", &[4, 5])]));
+        let b1 = Arc::new(table(vec![fa_i32!("x", 1, 2, 3)]));
+        let b2 = Arc::new(table(vec![fa_i32!("x", 4, 5)]));
         let st = SuperTable::from_batches(vec![b1, b2], None);
         let result = st.consolidate();
 
@@ -1567,7 +1489,7 @@ mod tests {
 
     #[test]
     fn test_consolidate_arena_single_batch() {
-        let batch = Arc::new(table(vec![fa("x", &[10, 20, 30])]));
+        let batch = Arc::new(table(vec![fa_i32!("x", 10, 20, 30)]));
         let st = SuperTable::from_batches(vec![batch], None);
         let result = st.consolidate();
 
@@ -1585,54 +1507,18 @@ mod tests {
     /// identical results for integer, float, and string columns.
     #[cfg(feature = "arena")]
     fn test_consolidate_arena_equivalence_with_consolidate() {
-        use crate::{FloatArray, IntegerArray, StringArray};
-
         // Build identical SuperTables for both paths
         let make_st = || {
-            let fa_i32 = |name: &str, vals: &[i32]| -> FieldArray {
-                let arr = Array::from_int32(IntegerArray::<i32>::from_slice(vals));
-                FieldArray::new(
-                    Field::new(name.to_string(), ArrowType::Int32, false, None),
-                    arr,
-                )
-            };
-            let fa_f64 = |name: &str, vals: &[f64]| -> FieldArray {
-                let arr = Array::from_float64(FloatArray::<f64>::from_slice(vals));
-                FieldArray::new(
-                    Field::new(name.to_string(), ArrowType::Float64, false, None),
-                    arr,
-                )
-            };
-            let fa_str = |name: &str, vals: &[&str]| -> FieldArray {
-                let arr = Array::from_string32(StringArray::<u32>::from_vec(vals.to_vec(), None));
-                FieldArray::new(
-                    Field::new(name.to_string(), ArrowType::String, false, None),
-                    arr,
-                )
-            };
-
-            let b1 = Arc::new(Table {
-                cols: vec![
-                    fa_i32("id", &[1, 2, 3]),
-                    fa_f64("val", &[1.5, 2.5, 3.5]),
-                    fa_str("label", &["a", "bb", "ccc"]),
-                ],
-                n_rows: 3,
-                name: "batch".into(),
-                #[cfg(feature = "table_metadata")]
-                metadata: std::collections::BTreeMap::new(),
-            });
-            let b2 = Arc::new(Table {
-                cols: vec![
-                    fa_i32("id", &[4, 5]),
-                    fa_f64("val", &[4.5, 5.5]),
-                    fa_str("label", &["dddd", "e"]),
-                ],
-                n_rows: 2,
-                name: "batch".into(),
-                #[cfg(feature = "table_metadata")]
-                metadata: std::collections::BTreeMap::new(),
-            });
+            let b1 = Arc::new(table(vec![
+                fa_i32!("id", 1, 2, 3),
+                fa_f64!("val", 1.5, 2.5, 3.5),
+                fa_str32!("label", "a", "bb", "ccc"),
+            ]));
+            let b2 = Arc::new(table(vec![
+                fa_i32!("id", 4, 5),
+                fa_f64!("val", 4.5, 5.5),
+                fa_str32!("label", "dddd", "e"),
+            ]));
             SuperTable::from_batches(vec![b1, b2], None)
         };
 
@@ -1679,24 +1565,8 @@ mod tests {
     #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
     #[test]
     fn test_consolidate_arena_categorical() {
-        use crate::CategoricalArray;
-
-        let fa_cat = |name: &str, vals: &[&str]| -> FieldArray {
-            let arr =
-                Array::from_categorical32(CategoricalArray::<u32>::from_vec(vals.to_vec(), None));
-            FieldArray::new(
-                Field::new(
-                    name.to_string(),
-                    ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt32),
-                    false,
-                    None,
-                ),
-                arr,
-            )
-        };
-
-        let b1 = Arc::new(table(vec![fa_cat("cat", &["a", "b", "a"])]));
-        let b2 = Arc::new(table(vec![fa_cat("cat", &["a", "b"])]));
+        let b1 = Arc::new(table(vec![fa_cat32!("cat", "a", "b", "a")]));
+        let b2 = Arc::new(table(vec![fa_cat32!("cat", "a", "b")]));
         let st = SuperTable::from_batches(vec![b1, b2], None);
         let result = st.consolidate();
 
@@ -1757,9 +1627,9 @@ mod tests {
 
     #[test]
     fn test_consolidate_arena_three_batches() {
-        let b1 = Arc::new(table(vec![fa("x", &[1, 2])]));
-        let b2 = Arc::new(table(vec![fa("x", &[3])]));
-        let b3 = Arc::new(table(vec![fa("x", &[4, 5, 6])]));
+        let b1 = Arc::new(table(vec![fa_i32!("x", 1, 2)]));
+        let b2 = Arc::new(table(vec![fa_i32!("x", 3)]));
+        let b3 = Arc::new(table(vec![fa_i32!("x", 4, 5, 6)]));
         let st = SuperTable::from_batches(vec![b1, b2, b3], None);
         let result = st.consolidate();
 
@@ -1774,8 +1644,8 @@ mod tests {
 
     #[test]
     fn test_consolidate_arena_preserves_name() {
-        let b1 = Arc::new(table(vec![fa("x", &[1, 2])]));
-        let b2 = Arc::new(table(vec![fa("x", &[3])]));
+        let b1 = Arc::new(table(vec![fa_i32!("x", 1, 2)]));
+        let b2 = Arc::new(table(vec![fa_i32!("x", 3)]));
         let mut st = SuperTable::from_batches(vec![b1, b2], None);
         st.name = "my_table".to_string();
         let result = st.consolidate();

@@ -83,10 +83,10 @@ use crate::SuperTable;
 ///
 /// # Example
 /// ```rust
-/// use minarrow::{arr_i32, arr_str32, FieldArray, Print, vec64, aliases::RecordBatch};
+/// use minarrow::{fa_i32, fa_str32, Print, aliases::RecordBatch};
 ///
-/// let col1 = FieldArray::from_arr("numbers", arr_i32![1, 2, 3]);
-/// let col2 = FieldArray::from_arr("letters", arr_str32!["x", "y", "z"]);
+/// let col1 = fa_i32!("numbers", 1, 2, 3);
+/// let col2 = fa_str32!("letters", "x", "y", "z");
 ///
 /// let mut tbl = RecordBatch::new("Demo".into(), vec![col1, col2].into());
 /// tbl.print();

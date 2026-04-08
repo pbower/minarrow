@@ -36,13 +36,13 @@
 //!
 //! ## Example
 //! ```rust
-//! use minarrow::{Table, TableV, Array, IntegerArray, FieldArray};
+//! use minarrow::{Table, TableV, fa_i32};
 //! use minarrow::ColumnSelection;  // Re-exported at crate root
 //! use std::sync::Arc;
 //!
 //! // Build a simple 2-column table
-//! let a = FieldArray::from_arr("a", Array::from_int32(IntegerArray::<i32>::from_slice(&[1,2,3,4,5])));
-//! let b = FieldArray::from_arr("b", Array::from_int32(IntegerArray::<i32>::from_slice(&[10,20,30,40,50])));
+//! let a = fa_i32!("a", 1, 2, 3, 4, 5);
+//! let b = fa_i32!("b", 10, 20, 30, 40, 50);
 //! let mut tbl = Table::new("T".to_string(), vec![a,b].into());
 //!
 //! // View rows 1..4 (3 rows total)
@@ -1032,23 +1032,15 @@ impl RowSelection for TableV {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ffi::arrow_dtype::ArrowType;
-    use crate::structs::field::Field;
-    use crate::structs::field_array::FieldArray;
+    use crate::fa_i32;
     use crate::structs::table::Table;
     #[cfg(feature = "select")]
     use crate::traits::selection::ColumnSelection;
-    use crate::{Array, IntegerArray};
 
     #[test]
     fn test_table_slice_from_table_and_access() {
-        let field_a = Field::new("a", ArrowType::Int32, false, None);
-        let arr_a = Array::from_int32(IntegerArray::from_slice(&[1, 2, 3, 4, 5]));
-        let fa_a = FieldArray::new(field_a, arr_a);
-
-        let field_b = Field::new("b", ArrowType::Int32, false, None);
-        let arr_b = Array::from_int32(IntegerArray::from_slice(&[10, 20, 30, 40, 50]));
-        let fa_b = FieldArray::new(field_b, arr_b);
+        let fa_a = fa_i32!("a", 1, 2, 3, 4, 5);
+        let fa_b = fa_i32!("b", 10, 20, 30, 40, 50);
 
         let mut tbl = Table::new_empty();
         tbl.add_col(fa_a);
@@ -1074,9 +1066,7 @@ mod tests {
     #[cfg(feature = "select")]
     #[test]
     fn test_table_view_selection_trait() {
-        let field_a = Field::new("a", ArrowType::Int32, false, None);
-        let arr_a = Array::from_int32(IntegerArray::from_slice(&[1, 2, 3, 4, 5]));
-        let fa_a = FieldArray::new(field_a, arr_a);
+        let fa_a = fa_i32!("a", 1, 2, 3, 4, 5);
 
         let mut tbl = Table::new_empty();
         tbl.add_col(fa_a);
@@ -1102,15 +1092,8 @@ mod tests {
     fn test_tablev_row_selection_to_table_column_lengths() {
         use crate::{NumericArray, traits::selection::RowSelection};
 
-        let field_a = Field::new("a", ArrowType::Int32, false, None);
-        let arr_a = Array::from_int32(IntegerArray::from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
-        let fa_a = FieldArray::new(field_a, arr_a);
-
-        let field_b = Field::new("b", ArrowType::Int32, false, None);
-        let arr_b = Array::from_int32(IntegerArray::from_slice(&[
-            10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
-        ]));
-        let fa_b = FieldArray::new(field_b, arr_b);
+        let fa_a = fa_i32!("a", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+        let fa_b = fa_i32!("b", 10, 20, 30, 40, 50, 60, 70, 80, 90, 100);
 
         let mut tbl = Table::new_empty();
         tbl.add_col(fa_a);

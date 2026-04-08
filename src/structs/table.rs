@@ -89,10 +89,10 @@ static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 ///
 /// # Example
 /// ```rust
-/// use minarrow::{FieldArray, Print, Table, arr_i32, arr_str32, vec64};
+/// use minarrow::{fa_i32, fa_str32, Print, Table};
 ///
-/// let col1 = FieldArray::from_arr("numbers", arr_i32![1, 2, 3]);
-/// let col2 = FieldArray::from_arr("letters", arr_str32!["x", "y", "z"]);
+/// let col1 = fa_i32!("numbers", 1, 2, 3);
+/// let col2 = fa_str32!("letters", "x", "y", "z");
 ///
 /// let mut tbl = Table::new("Demo".into(), vec![col1, col2].into());
 /// tbl.print();
@@ -1083,6 +1083,7 @@ mod tests {
     use super::*;
     use crate::structs::field_array::field_array;
     use crate::traits::masked_array::MaskedArray;
+    use crate::{fa_bool, fa_i32, fa_i64, fa_u32};
     #[cfg(all(feature = "views", feature = "select"))]
     use crate::traits::selection::ColumnSelection;
     use crate::{Array, BooleanArray, IntegerArray, NumericArray};
@@ -1098,15 +1099,8 @@ mod tests {
     #[test]
     fn test_add_and_get_columns() {
         let mut t = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        let mut col2 = BooleanArray::default();
-        col2.push(true);
-        col2.push(false);
-
-        t.add_col(field_array("ints", Array::from_int32(col1)));
-        t.add_col(field_array("bools", Array::from_bool(col2)));
+        t.add_col(fa_i32!("ints", 1, 2));
+        t.add_col(fa_bool!("bools", true, false));
 
         assert_eq!(t.n_cols(), 2);
         assert_eq!(t.n_rows(), 2);
@@ -1131,15 +1125,8 @@ mod tests {
     #[test]
     fn test_column_selection_trait() {
         let mut t = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        let mut col2 = BooleanArray::default();
-        col2.push(true);
-        col2.push(false);
-
-        t.add_col(field_array("ints", Array::from_int32(col1)));
-        t.add_col(field_array("bools", Array::from_bool(col2)));
+        t.add_col(fa_i32!("ints", 1, 2));
+        t.add_col(fa_bool!("bools", true, false));
 
         // Test ColumnSelection trait methods
         assert!(t.col_ix(0).is_some());
@@ -1161,21 +1148,15 @@ mod tests {
     #[should_panic(expected = "Column length mismatch")]
     fn test_column_length_mismatch_panics() {
         let mut t = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        let mut col2 = BooleanArray::default();
-        col2.push(true);
-        col2.push(false);
-        t.add_col(field_array("ints", Array::from_int32(col1)));
+        t.add_col(fa_i32!("ints", 1, 2, 3));
         // This should panic due to mismatched row count
-        t.add_col(field_array("bools", Array::from_bool(col2)));
+        t.add_col(fa_bool!("bools", true, false));
     }
 
     #[test]
     fn test_column_index_and_has_column() {
         let mut t = Table::new_empty();
-        let col = IntegerArray::<i64>::default();
-        t.add_col(field_array("foo", Array::from_int64(col)));
+        t.add_col(fa_i64!("foo"));
         assert_eq!(t.col_name_index("foo"), Some(0));
         assert_eq!(t.col_name_index("bar"), None);
         assert!(t.has_col("foo"));
@@ -1185,13 +1166,8 @@ mod tests {
     #[test]
     fn test_remove_column_by_name_and_index() {
         let mut t = Table::new_empty();
-        let mut col1 = IntegerArray::<u32>::default();
-        col1.push(10);
-        let mut col2 = BooleanArray::default();
-        col2.push(true);
-
-        t.add_col(field_array("a", Array::from_uint32(col1)));
-        t.add_col(field_array("b", Array::from_bool(col2)));
+        t.add_col(fa_u32!("a", 10, 20));
+        t.add_col(fa_bool!("b", true, false));
 
         assert!(t.remove_col("a"));
         assert!(!t.has_col("a"));
@@ -1209,9 +1185,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut t = Table::new_empty();
-        let mut col = IntegerArray::<i32>::default();
-        col.push(42); // Ensure at least one row
-        t.add_col(field_array("x", Array::from_int32(col)));
+        t.add_col(fa_i32!("x", 42));
         assert!(!t.is_empty());
         t.clear();
         assert!(t.is_empty());
@@ -1222,9 +1196,7 @@ mod tests {
     #[test]
     fn test_columns() {
         let mut t = Table::new_empty();
-        let mut col = IntegerArray::<i32>::default();
-        col.push(7);
-        t.add_col(field_array("c", Array::from_int32(col)));
+        t.add_col(fa_i32!("c", 7));
         {
             let cols = t.cols();
             assert_eq!(cols.len(), 1);
@@ -1234,12 +1206,8 @@ mod tests {
     #[test]
     fn test_table_iter() {
         let mut t = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        t.add_col(field_array("a", Array::from_int32(col1)));
-        let mut col2 = BooleanArray::default();
-        col2.push(true);
-        t.add_col(field_array("b", Array::from_bool(col2)));
+        t.add_col(fa_i32!("a", 1));
+        t.add_col(fa_bool!("b", true));
 
         let names: Vec<_> = t.iter().map(|fa| fa.field.name.as_str()).collect();
         assert_eq!(names, ["a", "b"]);
@@ -1251,21 +1219,9 @@ mod tests {
     #[cfg(feature = "views")]
     #[test]
     fn test_table_slice_and_slice() {
-        use crate::structs::field_array::field_array;
-        use crate::{Array, BooleanArray, IntegerArray};
-
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        col1.push(3);
-        let mut col2 = BooleanArray::default();
-        col2.push(true);
-        col2.push(false);
-        col2.push(true);
-
         let mut t = Table::new("foo".into(), None);
-        t.add_col(field_array("ints", Array::from_int32(col1)));
-        t.add_col(field_array("bools", Array::from_bool(col2)));
+        t.add_col(fa_i32!("ints", 1, 2, 3));
+        t.add_col(fa_bool!("bools", true, false, true));
 
         let sliced = t.slice_clone(1, 2);
         assert_eq!(sliced.n_rows(), 2);
@@ -1290,15 +1246,8 @@ mod tests {
     #[test]
     fn test_map_cols_by_name() {
         let mut t = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        let mut col2 = IntegerArray::<i32>::default();
-        col2.push(3);
-        col2.push(4);
-
-        t.add_col(field_array("a", Array::from_int32(col1)));
-        t.add_col(field_array("b", Array::from_int32(col2)));
+        t.add_col(fa_i32!("a", 1, 2));
+        t.add_col(fa_i32!("b", 3, 4));
 
         // Test with all valid names
         let results = t.map_cols_by_name(&["a", "b"], |fa| fa.field.name.clone());
@@ -1312,15 +1261,8 @@ mod tests {
     #[test]
     fn test_map_cols_by_index() {
         let mut t = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        let mut col2 = IntegerArray::<i32>::default();
-        col2.push(3);
-        col2.push(4);
-
-        t.add_col(field_array("a", Array::from_int32(col1)));
-        t.add_col(field_array("b", Array::from_int32(col2)));
+        t.add_col(fa_i32!("a", 1, 2));
+        t.add_col(fa_i32!("b", 3, 4));
 
         // Test with all valid indices
         let results = t.map_cols_by_index(&[0, 1], |fa| fa.field.name.clone());
@@ -1334,22 +1276,12 @@ mod tests {
     #[test]
     fn test_table_insert_rows_prepend() {
         let mut t1 = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        let mut col2 = IntegerArray::<i32>::default();
-        col2.push(10);
-        col2.push(20);
-        t1.add_col(field_array("a", Array::from_int32(col1)));
-        t1.add_col(field_array("b", Array::from_int32(col2)));
+        t1.add_col(fa_i32!("a", 1, 2));
+        t1.add_col(fa_i32!("b", 10, 20));
 
         let mut t2 = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(99);
-        let mut col2 = IntegerArray::<i32>::default();
-        col2.push(88);
-        t2.add_col(field_array("a", Array::from_int32(col1)));
-        t2.add_col(field_array("b", Array::from_int32(col2)));
+        t2.add_col(fa_i32!("a", 99));
+        t2.add_col(fa_i32!("b", 88));
 
         t1.insert_rows(0, &t2).unwrap();
 
@@ -1371,26 +1303,12 @@ mod tests {
     #[test]
     fn test_table_insert_rows_middle() {
         let mut t1 = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        col1.push(3);
-        let mut col2 = IntegerArray::<i32>::default();
-        col2.push(10);
-        col2.push(20);
-        col2.push(30);
-        t1.add_col(field_array("a", Array::from_int32(col1)));
-        t1.add_col(field_array("b", Array::from_int32(col2)));
+        t1.add_col(fa_i32!("a", 1, 2, 3));
+        t1.add_col(fa_i32!("b", 10, 20, 30));
 
         let mut t2 = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(99);
-        col1.push(88);
-        let mut col2 = IntegerArray::<i32>::default();
-        col2.push(77);
-        col2.push(66);
-        t2.add_col(field_array("a", Array::from_int32(col1)));
-        t2.add_col(field_array("b", Array::from_int32(col2)));
+        t2.add_col(fa_i32!("a", 99, 88));
+        t2.add_col(fa_i32!("b", 77, 66));
 
         t1.insert_rows(1, &t2).unwrap();
 
@@ -1412,16 +1330,10 @@ mod tests {
     #[test]
     fn test_table_insert_rows_append() {
         let mut t1 = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        t1.add_col(field_array("a", Array::from_int32(col1)));
+        t1.add_col(fa_i32!("a", 1, 2));
 
         let mut t2 = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(3);
-        col1.push(4);
-        t2.add_col(field_array("a", Array::from_int32(col1)));
+        t2.add_col(fa_i32!("a", 3, 4));
 
         t1.insert_rows(2, &t2).unwrap();
 
@@ -1437,12 +1349,10 @@ mod tests {
     #[test]
     fn test_table_insert_rows_schema_mismatch() {
         let mut t1 = Table::new_empty();
-        let col1 = IntegerArray::<i32>::default();
-        t1.add_col(field_array("a", Array::from_int32(col1)));
+        t1.add_col(fa_i32!("a"));
 
         let mut t2 = Table::new_empty();
-        let col1 = IntegerArray::<i32>::default();
-        t2.add_col(field_array("b", Array::from_int32(col1)));
+        t2.add_col(fa_i32!("b"));
 
         let result = t1.insert_rows(0, &t2);
         assert!(result.is_err());
@@ -1451,9 +1361,7 @@ mod tests {
     #[test]
     fn test_table_insert_rows_out_of_bounds() {
         let mut t1 = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        t1.add_col(field_array("a", Array::from_int32(col1)));
+        t1.add_col(fa_i32!("a", 1));
 
         let t2 = Table::new_empty();
         let result = t1.insert_rows(10, &t2);
@@ -1464,18 +1372,8 @@ mod tests {
     #[test]
     fn test_table_split_basic() {
         let mut t = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        col1.push(3);
-        col1.push(4);
-        let mut col2 = IntegerArray::<i32>::default();
-        col2.push(10);
-        col2.push(20);
-        col2.push(30);
-        col2.push(40);
-        t.add_col(field_array("a", Array::from_int32(col1)));
-        t.add_col(field_array("b", Array::from_int32(col2)));
+        t.add_col(fa_i32!("a", 1, 2, 3, 4));
+        t.add_col(fa_i32!("b", 10, 20, 30, 40));
 
         let super_table = t.split(2).unwrap();
 
@@ -1502,18 +1400,15 @@ mod tests {
     #[test]
     fn test_table_split_invalid_index() {
         let mut t1 = Table::new_empty();
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        col1.push(2);
-        t1.add_col(field_array("a", Array::from_int32(col1.clone())));
+        t1.add_col(fa_i32!("a", 1, 2));
         assert!(t1.split(0).is_err());
 
         let mut t2 = Table::new_empty();
-        t2.add_col(field_array("a", Array::from_int32(col1.clone())));
+        t2.add_col(fa_i32!("a", 1, 2));
         assert!(t2.split(2).is_err());
 
         let mut t3 = Table::new_empty();
-        t3.add_col(field_array("a", Array::from_int32(col1)));
+        t3.add_col(fa_i32!("a", 1, 2));
         assert!(t3.split(10).is_err());
     }
 
@@ -1824,20 +1719,13 @@ mod parallel_column_tests {
     use rayon::prelude::*;
 
     use super::*;
-    use crate::structs::field_array::field_array;
-    use crate::{Array, BooleanArray, IntegerArray, MaskedArray};
+    use crate::{fa_bool, fa_i32};
 
     #[test]
     fn test_table_par_iter_column_names() {
         let mut table = Table::new_empty();
-
-        let mut col1 = IntegerArray::<i32>::default();
-        col1.push(1);
-        let mut col2 = BooleanArray::default();
-        col2.push(true);
-
-        table.add_col(field_array("id", Array::from_int32(col1)));
-        table.add_col(field_array("flag", Array::from_bool(col2)));
+        table.add_col(fa_i32!("id", 1));
+        table.add_col(fa_bool!("flag", true));
 
         let mut names: Vec<&str> = table.par_iter().map(|fa| fa.field.name.as_str()).collect();
         names.sort_unstable(); // Ensure deterministic order for assert
