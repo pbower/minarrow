@@ -1008,11 +1008,24 @@ impl Display for Table {
 #[cfg(all(feature = "views", feature = "select"))]
 impl ColumnSelection for Table {
     type View = TableV;
-    type DataView = ArrayV;
+    type ColumnView = ArrayV;
+    type ColumnOwned = FieldArray;
 
     fn c<S: FieldSelector>(&self, selection: S) -> TableV {
         let all_fields: Vec<Arc<Field>> = self.cols.iter().map(|fa| fa.field.clone()).collect();
         let col_indices = selection.resolve_fields(&all_fields);
+
+        // If selecting all columns, create a full view without filtering
+        if col_indices.len() == all_fields.len() {
+            return TableV {
+                name: self.name.clone(),
+                fields: all_fields,
+                cols: self.cols.iter().map(|fa| ArrayV::from(fa.clone())).collect(),
+                offset: 0,
+                len: self.n_rows,
+                active_col_selection: None,
+            };
+        }
 
         // Create a view with only the selected columns
         let selected_fields: Vec<Arc<Field>> = col_indices
@@ -1032,6 +1045,10 @@ impl ColumnSelection for Table {
             len: self.n_rows,
             active_col_selection: None,
         }
+    }
+
+    fn get(&self, field: &str) -> Option<FieldArray> {
+        self.col_name_index(field).map(|idx| self.cols[idx].clone())
     }
 
     fn col_ix(&self, idx: usize) -> Option<ArrayV> {

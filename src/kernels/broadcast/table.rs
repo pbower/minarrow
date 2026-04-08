@@ -30,10 +30,11 @@ use crate::{SuperArray, SuperArrayV, SuperTable, SuperTableV};
 /// General table broadcasting function that supports all arithmetic operators
 pub fn broadcast_table_with_operator(
     op: ArithmeticOperator,
-    table_l: Table,
-    table_r: Table,
+    table_l: impl Into<TableV>,
+    table_r: impl Into<TableV>,
 ) -> Result<Table, MinarrowError> {
-    use {FieldArray, Table};
+    let table_l: TableV = table_l.into();
+    let table_r: TableV = table_r.into();
 
     // Ensure tables have same number of columns
     if table_l.cols.len() != table_r.cols.len() {
@@ -48,29 +49,17 @@ pub fn broadcast_table_with_operator(
 
     let mut result_field_arrays = Vec::new();
 
-    for (field_array_l, field_array_r) in table_l.cols.iter().zip(table_r.cols.iter()) {
-        // Create ArrayViews from the FieldArrays
-        let array_l = ArrayV::new(field_array_l.array.clone(), 0, field_array_l.len());
-        let array_r = ArrayV::new(field_array_r.array.clone(), 0, field_array_r.len());
-
+    for (i, (col_l, col_r)) in table_l.cols.iter().zip(table_r.cols.iter()).enumerate() {
         // Route through array broadcasting
-        let result_array = resolve_binary_arithmetic(op, array_l, array_r, None)?;
+        let result_array = resolve_binary_arithmetic(op, col_l.clone(), col_r.clone(), None)?;
 
-        // Create new FieldArray with result
+        // Create new FieldArray with the field schema from the left table
         let result_field_array =
-            FieldArray::new(field_array_l.field.as_ref().clone(), result_array);
+            FieldArray::new(table_l.fields[i].as_ref().clone(), result_array);
         result_field_arrays.push(result_field_array);
     }
 
-    let table = Table::new(table_l.name.clone(), Some(result_field_arrays));
-    #[cfg(feature = "table_metadata")]
-    {
-        let mut t = table;
-        t.metadata = table_l.metadata.clone();
-        return Ok(t);
-    }
-    #[cfg(not(feature = "table_metadata"))]
-    Ok(table)
+    Ok(Table::new(table_l.name.clone(), Some(result_field_arrays)))
 }
 
 /// Broadcasts addition over table columns element-wise

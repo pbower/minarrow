@@ -76,7 +76,7 @@ static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
 #[derive(Default, PartialEq, Clone, Debug)]
 pub struct Cube {
     /// Table entries forming the cube (rectangular prism)
-    pub tables: Vec<Table>,
+    pub tables: Vec<Arc<Table>>,
 
     /// Cube name
     pub name: String,
@@ -113,7 +113,7 @@ impl Cube {
         if let Some(cols) = cols {
             let table = Table::new(name.clone(), Some(cols));
             resolver.insert(table.name.clone(), 0);
-            tables.push(table);
+            tables.push(Arc::new(table));
         }
 
         let cube = Self {
@@ -131,11 +131,12 @@ impl Cube {
     ///
     /// `index_by` specifies which column names form the third-dimension index,
     pub fn from_tables(tables: Vec<Table>, name: String, index_by: Option<Vec<String>>) -> Self {
+        let arc_tables: Vec<Arc<Table>> = tables.into_iter().map(Arc::new).collect();
         let mut resolver = HashMap::new();
-        for (i, t) in tables.iter().enumerate() {
+        for (i, t) in arc_tables.iter().enumerate() {
             resolver.insert(t.name.clone(), i);
         }
-        Self { tables, name, third_dim_index: index_by, resolver }
+        Self { tables: arc_tables, name, third_dim_index: index_by, resolver }
     }
 
     /// Constructs a new, empty Cube with a globally unique name.
@@ -176,7 +177,7 @@ impl Cube {
 
         let idx = self.tables.len();
         self.resolver.insert(table.name.clone(), idx);
-        self.tables.push(table);
+        self.tables.push(Arc::new(table));
     }
 
     /// Gets the schemea from the first table as representative
@@ -213,13 +214,13 @@ impl Cube {
     }
 
     /// Returns a reference to a table by index.
-    pub fn table(&self, idx: usize) -> Option<&Table> {
+    pub fn table(&self, idx: usize) -> Option<&Arc<Table>> {
         self.tables.get(idx)
     }
 
-    /// Returns a mutable reference to a table by index.
+    /// Returns a mutable reference to a table by index (copy-on-write via Arc::make_mut).
     pub fn table_mut(&mut self, idx: usize) -> Option<&mut Table> {
-        self.tables.get_mut(idx)
+        self.tables.get_mut(idx).map(|arc| Arc::make_mut(arc))
     }
 
     /// Returns the names of all tables in the cube.
@@ -278,22 +279,22 @@ impl Cube {
     }
 
     /// Returns an immutable reference to all tables.
-    pub fn tables(&self) -> &[Table] {
+    pub fn tables(&self) -> &[Arc<Table>] {
         &self.tables
     }
 
-    /// Returns a mutable reference to all tables.
-    pub fn tables_mut(&mut self) -> &mut [Table] {
+    /// Returns a mutable reference to the tables vec.
+    pub fn tables_mut(&mut self) -> &mut Vec<Arc<Table>> {
         &mut self.tables
     }
 
     /// Returns an iterator over all tables.
     #[inline]
-    pub fn iter_tables(&self) -> std::slice::Iter<'_, Table> {
+    pub fn iter_tables(&self) -> std::slice::Iter<'_, Arc<Table>> {
         self.tables.iter()
     }
     #[inline]
-    pub fn iter_tables_mut(&mut self) -> std::slice::IterMut<'_, Table> {
+    pub fn iter_tables_mut(&mut self) -> std::slice::IterMut<'_, Arc<Table>> {
         self.tables.iter_mut()
     }
 
@@ -360,7 +361,7 @@ impl Cube {
     pub fn remove_col(&mut self, name: &str) -> bool {
         let mut all_removed = true;
         for t in &mut self.tables {
-            if !t.remove_col(name) {
+            if !Arc::make_mut(t).remove_col(name) {
                 all_removed = false;
             }
         }
@@ -371,7 +372,7 @@ impl Cube {
     pub fn remove_col_at(&mut self, idx: usize) -> bool {
         let mut all_removed = true;
         for t in &mut self.tables {
-            if !t.remove_col_at(idx) {
+            if !Arc::make_mut(t).remove_col_at(idx) {
                 all_removed = false;
             }
         }
@@ -384,7 +385,7 @@ impl Cube {
     }
 
     /// Rebuild the resolver from the current tables vec.
-    fn rebuild_resolver(&mut self) {
+    pub fn rebuild_resolver(&mut self) {
         self.resolver.clear();
         for (i, t) in self.tables.iter().enumerate() {
             self.resolver.insert(t.name.clone(), i);
@@ -455,10 +456,10 @@ impl Cube {
                 "slice window out of bounds for one or more tables"
             );
         }
-        let tables: Vec<Table> = self
+        let tables: Vec<Arc<Table>> = self
             .tables
             .iter()
-            .map(|t| t.slice_clone(offset, len))
+            .map(|t| Arc::new(t.slice_clone(offset, len)))
             .collect();
         let mut resolver = HashMap::new();
         for (i, t) in tables.iter().enumerate() {
@@ -485,28 +486,28 @@ impl Cube {
         }
         self.tables
             .iter()
-            .map(|t| TableV::from_table(t.clone(), offset, len))
+            .map(|t| TableV::from_table((**t).clone(), offset, len))
             .collect()
     }
 
     /// Returns a parallel iterator over all tables.
     #[cfg(feature = "parallel_proc")]
     #[inline]
-    pub fn par_iter_tables(&self) -> rayon::slice::Iter<'_, Table> {
+    pub fn par_iter_tables(&self) -> rayon::slice::Iter<'_, Arc<Table>> {
         self.tables.par_iter()
     }
 
     /// Returns a parallel mutable iterator over all tables.
     #[cfg(feature = "parallel_proc")]
     #[inline]
-    pub fn par_iter_tables_mut(&mut self) -> rayon::slice::IterMut<'_, Table> {
+    pub fn par_iter_tables_mut(&mut self) -> rayon::slice::IterMut<'_, Arc<Table>> {
         self.tables.par_iter_mut()
     }
 }
 
 impl<'a> IntoIterator for &'a Cube {
-    type Item = &'a Table;
-    type IntoIter = std::slice::Iter<'a, Table>;
+    type Item = &'a Arc<Table>;
+    type IntoIter = std::slice::Iter<'a, Arc<Table>>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -515,8 +516,8 @@ impl<'a> IntoIterator for &'a Cube {
 }
 
 impl<'a> IntoIterator for &'a mut Cube {
-    type Item = &'a mut Table;
-    type IntoIter = std::slice::IterMut<'a, Table>;
+    type Item = &'a mut Arc<Table>;
+    type IntoIter = std::slice::IterMut<'a, Arc<Table>>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -525,8 +526,8 @@ impl<'a> IntoIterator for &'a mut Cube {
 }
 
 impl IntoIterator for Cube {
-    type Item = Table;
-    type IntoIter = <Vec<Table> as IntoIterator>::IntoIter;
+    type Item = Arc<Table>;
+    type IntoIter = <Vec<Arc<Table>> as IntoIterator>::IntoIter;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -648,7 +649,8 @@ impl Concatenate for Cube {
 #[cfg(all(feature = "views", feature = "select"))]
 impl crate::traits::selection::ColumnSelection for Cube {
     type View = Cube;
-    type DataView = Vec<crate::ArrayV>;
+    type ColumnView = Vec<crate::ArrayV>;
+    type ColumnOwned = Arc<Table>;
 
     fn c<S: crate::traits::selection::FieldSelector>(&self, selection: S) -> Cube {
         if self.tables.is_empty() {
@@ -671,12 +673,17 @@ impl crate::traits::selection::ColumnSelection for Cube {
         indices.sort();
         indices.dedup();
 
+        // If selecting all columns, return a clone without rebuilding
+        if indices.len() == fields.len() {
+            return self.clone();
+        }
+
         // Build new Cube with only selected columns from each sub-table
-        let tables: Vec<Table> = self.tables.iter().map(|t| {
+        let tables: Vec<Arc<Table>> = self.tables.iter().map(|t| {
             let cols: Vec<FieldArray> = indices.iter()
                 .filter_map(|&i| t.cols().get(i).cloned())
                 .collect();
-            Table::new(t.name.clone(), Some(cols))
+            Arc::new(Table::new(t.name.clone(), Some(cols)))
         }).collect();
 
         let mut resolver = HashMap::new();
@@ -691,7 +698,12 @@ impl crate::traits::selection::ColumnSelection for Cube {
         }
     }
 
-    fn col_ix(&self, idx: usize) -> Option<Self::DataView> {
+    fn get(&self, field: &str) -> Option<Arc<Table>> {
+        let idx = self.resolver.get(field)?;
+        self.tables.get(*idx).cloned()
+    }
+
+    fn col_ix(&self, idx: usize) -> Option<Self::ColumnView> {
         if self.tables.is_empty() || idx >= self.n_cols() {
             return None;
         }
@@ -701,7 +713,7 @@ impl crate::traits::selection::ColumnSelection for Cube {
         }).collect())
     }
 
-    fn col_vec(&self) -> Vec<Self::DataView> {
+    fn col_vec(&self) -> Vec<Self::ColumnView> {
         if self.tables.is_empty() {
             return Vec::new();
         }
@@ -946,7 +958,7 @@ mod tests {
         ];
         let table = Table::new("single".to_string(), Some(cols.clone()));
         let cube = Cube {
-            tables: vec![table],
+            tables: vec![Arc::new(table)],
             name: "test".to_string(),
             third_dim_index: Some(vec!["timestamp".to_string()]),
             resolver: HashMap::from([("single".to_string(), 0)]),
