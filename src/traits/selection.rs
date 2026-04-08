@@ -63,11 +63,18 @@ pub trait DataSelector {
 // These are "what the structure can do" for selection operations.
 
 /// Trait for types that support field/column selection
+///
+/// Associated types determine what each access pattern returns:
+/// - `View`: multi-field selection result, e.g. TableV for Table, Cube for Cube
+/// - `DataView`: single column by index, e.g. ArrayV
+/// - `Field`: single field by name via `.get()`, e.g. FieldArray for Table, Arc<Table> for Cube
 pub trait ColumnSelection {
-    /// The view type returned by multi-field selection
+    /// The view type returned by multi-field selection e.g. TableV
     type View;
-    /// The data view type for a single column, e.g. ArrayV
-    type DataView;
+    /// A single column view by index e.g. ArrayV
+    type ColumnView;
+    /// An owned single field by name via `.get()` e.g. FieldArray for Table, Arc<Table> for Cube
+    type ColumnOwned;
 
     /// Select fields/columns by name, index, or range
     ///
@@ -84,11 +91,14 @@ pub trait ColumnSelection {
         self.c(name)
     }
 
-    /// Get a single column data view by index
-    fn col_ix(&self, idx: usize) -> Option<Self::DataView>;
+    /// Get a single field by name, returning an owned value.
+    fn get(&self, field: &str) -> Option<Self::ColumnOwned>;
 
-    /// Get all columns as data views
-    fn col_vec(&self) -> Vec<Self::DataView>;
+    /// Get a single column view by index
+    fn col_ix(&self, idx: usize) -> Option<Self::ColumnView>;
+
+    /// Get all columns as views
+    fn col_vec(&self) -> Vec<Self::ColumnView>;
 
     /// Get the fields for field resolution
     fn get_cols(&self) -> Vec<Arc<Field>>;

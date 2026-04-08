@@ -946,6 +946,25 @@ impl From<Table> for TableV {
     }
 }
 
+/// Arc<Table> -> TableV conversion. Creates a zero-copy view over the Arc'd table.
+impl From<Arc<Table>> for TableV {
+    fn from(table: Arc<Table>) -> Self {
+        let fields: Vec<Arc<Field>> = table.cols.iter().map(|fa| fa.field.clone()).collect();
+        let cols: Vec<ArrayV> = table.cols.iter().map(|fa| ArrayV::from(fa)).collect();
+        let len = table.n_rows;
+
+        TableV {
+            name: table.name.clone(),
+            fields,
+            cols,
+            offset: 0,
+            len,
+            #[cfg(feature = "select")]
+            active_col_selection: None,
+        }
+    }
+}
+
 /// TableV -> Table conversion. Respects active column selection.
 impl From<TableV> for Table {
     fn from(view: TableV) -> Self {
@@ -958,7 +977,8 @@ impl From<TableV> for Table {
 #[cfg(feature = "select")]
 impl ColumnSelection for TableV {
     type View = TableV;
-    type DataView = ArrayV;
+    type ColumnView = ArrayV;
+    type ColumnOwned = FieldArray;
 
     fn c<S: FieldSelector>(&self, selection: S) -> TableV {
         // Resolve against the full field set so indices are always raw
@@ -981,6 +1001,20 @@ impl ColumnSelection for TableV {
             offset: self.offset,
             len: self.len,
             active_col_selection: Some(new_selection),
+        }
+    }
+
+    fn get(&self, field: &str) -> Option<FieldArray> {
+        let idx = self.fields.iter().position(|f| f.name == field)?;
+        let raw = self.resolve_col_index(idx)?;
+        let col = self.cols.get(raw)?;
+        let field_ref = self.fields.get(idx)?;
+        // If the view covers the full array, use it without copying
+        if col.offset == 0 && col.len() == col.array.len() {
+            Some(FieldArray::new_arc(field_ref.clone(), col.array.clone()))
+        } else {
+            // Is a subview - we need to materialise
+            Some(FieldArray::new_arc(field_ref.clone(), col.to_array()))
         }
     }
 
