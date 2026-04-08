@@ -1142,8 +1142,9 @@ mod tests {
     #[cfg(feature = "views")]
     use crate::NumericArray;
     use crate::ffi::arrow_dtype::ArrowType;
-    use crate::{Array, Field, FieldArray, Vec64};
+    use crate::{Array, Field, Vec64, fa_i32};
 
+    #[allow(dead_code)]
     fn field(name: &str, dtype: ArrowType, nullable: bool) -> Field {
         Field {
             name: name.to_string(),
@@ -1158,14 +1159,6 @@ mod tests {
             data: Vec64::from_slice(data).into(),
             null_mask: None,
         })
-    }
-
-    fn fa(name: &str, data: &[i32], null_count: usize) -> FieldArray {
-        FieldArray {
-            field: field(name, ArrowType::Int32, false).into(),
-            array: int_array(data),
-            null_count: null_count,
-        }
     }
 
     #[test]
@@ -1184,11 +1177,11 @@ mod tests {
     fn test_new_and_push_field_array() {
         let mut ca = SuperArray::new();
         assert_eq!(ca.n_chunks(), 0);
-        ca.push_field_array(fa("a", &[1, 2, 3], 0));
+        ca.push_field_array(fa_i32!("a", 1, 2, 3));
         assert_eq!(ca.n_chunks(), 1);
         assert_eq!(ca.len(), 3);
         assert!(ca.field().is_some());
-        ca.push_field_array(fa("a", &[4, 5], 0));
+        ca.push_field_array(fa_i32!("a", 4, 5));
         assert_eq!(ca.n_chunks(), 2);
         assert_eq!(ca.len(), 5);
     }
@@ -1209,14 +1202,14 @@ mod tests {
     #[should_panic(expected = "Chunk field name mismatch")]
     fn test_name_mismatch() {
         let mut ca = SuperArray::new();
-        ca.push_field_array(fa("a", &[1, 2, 3], 0));
-        ca.push_field_array(fa("b", &[4, 5], 0)); // wrong name
+        ca.push_field_array(fa_i32!("a", 1, 2, 3));
+        ca.push_field_array(fa_i32!("b", 4, 5)); // wrong name
     }
 
     #[test]
     fn test_from_field_array_chunks() {
-        let c1 = fa("a", &[1, 2, 3], 0);
-        let c2 = fa("a", &[4], 0);
+        let c1 = fa_i32!("a", 1, 2, 3);
+        let c2 = fa_i32!("a", 4);
         let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()]);
         assert_eq!(ca.n_chunks(), 2);
         assert_eq!(ca.len(), 4);
@@ -1244,8 +1237,8 @@ mod tests {
     fn test_slice_and_materialise() {
         use crate::NumericArray;
 
-        let c1 = fa("a", &[10, 20, 30], 0);
-        let c2 = fa("a", &[40, 50], 0);
+        let c1 = fa_i32!("a", 10, 20, 30);
+        let c2 = fa_i32!("a", 40, 50);
         let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()]);
         let sl = ca.slice(2, 3);
         assert_eq!(sl.len, 3);
@@ -1260,8 +1253,8 @@ mod tests {
     #[cfg(feature = "views")]
     #[test]
     fn test_from_slices() {
-        let c1 = fa("a", &[10, 20, 30], 0);
-        let c2 = fa("a", &[40, 50], 0);
+        let c1 = fa_i32!("a", 10, 20, 30);
+        let c2 = fa_i32!("a", 40, 50);
         let ca = SuperArray::from_field_array_chunks(vec![c1.clone(), c2.clone()]);
 
         let sl = ca.slice(1, 4);
@@ -1276,13 +1269,13 @@ mod tests {
     fn test_is_empty_and_default() {
         let ca = SuperArray::default();
         assert!(ca.is_empty());
-        let ca2 = SuperArray::from_chunks(vec![fa("a", &[1], 0)]);
+        let ca2 = SuperArray::from_chunks(vec![fa_i32!("a", 1)]);
         assert!(!ca2.is_empty());
     }
 
     #[test]
     fn test_metadata_accessors() {
-        let ca = SuperArray::from_chunks(vec![fa("z", &[1, 2, 3, 4], 0)]);
+        let ca = SuperArray::from_chunks(vec![fa_i32!("z", 1, 2, 3, 4)]);
         assert_eq!(ca.arrow_type(), ArrowType::Int32);
         assert!(!ca.is_nullable());
         assert_eq!(ca.field().unwrap().name, "z");
@@ -1292,7 +1285,7 @@ mod tests {
     #[cfg(feature = "views")]
     #[test]
     fn test_insert_rows_into_first_chunk() {
-        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0), fa("a", &[4, 5], 0)]);
+        let mut ca = SuperArray::from_chunks(vec![fa_i32!("a", 1, 2, 3), fa_i32!("a", 4, 5)]);
 
         let other = SuperArray::from_arrays(vec![int_array(&[99, 88])]);
 
@@ -1312,7 +1305,7 @@ mod tests {
     #[cfg(feature = "views")]
     #[test]
     fn test_insert_rows_into_second_chunk() {
-        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2], 0), fa("a", &[3, 4, 5], 0)]);
+        let mut ca = SuperArray::from_chunks(vec![fa_i32!("a", 1, 2), fa_i32!("a", 3, 4, 5)]);
 
         let other = SuperArray::from_arrays(vec![int_array(&[99])]);
 
@@ -1332,7 +1325,7 @@ mod tests {
     #[cfg(feature = "views")]
     #[test]
     fn test_insert_rows_prepend() {
-        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
+        let mut ca = SuperArray::from_chunks(vec![fa_i32!("a", 1, 2, 3)]);
 
         let other = SuperArray::from_arrays(vec![int_array(&[99])]);
 
@@ -1351,7 +1344,7 @@ mod tests {
     #[cfg(feature = "views")]
     #[test]
     fn test_insert_rows_append() {
-        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
+        let mut ca = SuperArray::from_chunks(vec![fa_i32!("a", 1, 2, 3)]);
 
         let other = SuperArray::from_arrays(vec![int_array(&[99])]);
 
@@ -1393,9 +1386,9 @@ mod tests {
     #[test]
     fn test_rechunk_uniform() {
         let mut ca = SuperArray::from_chunks(vec![
-            fa("a", &[1, 2, 3], 0),
-            fa("a", &[4, 5], 0),
-            fa("a", &[6, 7, 8, 9], 0),
+            fa_i32!("a", 1, 2, 3),
+            fa_i32!("a", 4, 5),
+            fa_i32!("a", 6, 7, 8, 9),
         ]);
 
         ca.rechunk(RechunkStrategy::Count(3)).unwrap();
@@ -1416,7 +1409,7 @@ mod tests {
 
     #[test]
     fn test_rechunk_auto() {
-        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0), fa("a", &[4, 5], 0)]);
+        let mut ca = SuperArray::from_chunks(vec![fa_i32!("a", 1, 2, 3), fa_i32!("a", 4, 5)]);
 
         ca.rechunk(RechunkStrategy::Auto).unwrap();
 
@@ -1428,8 +1421,8 @@ mod tests {
     #[cfg(feature = "size")]
     fn test_rechunk_by_memory() {
         let mut ca = SuperArray::from_chunks(vec![
-            fa("a", &[1, 2, 3, 4, 5, 6, 7, 8], 0),
-            fa("a", &[9, 10, 11, 12], 0),
+            fa_i32!("a", 1, 2, 3, 4, 5, 6, 7, 8),
+            fa_i32!("a", 9, 10, 11, 12),
         ]);
 
         // i32 is 4 bytes, so 16 bytes = 4 elements
@@ -1448,7 +1441,7 @@ mod tests {
 
     #[test]
     fn test_rechunk_uniform_zero_error() {
-        let mut ca = SuperArray::from_chunks(vec![fa("a", &[1, 2, 3], 0)]);
+        let mut ca = SuperArray::from_chunks(vec![fa_i32!("a", 1, 2, 3)]);
 
         let result = ca.rechunk(RechunkStrategy::Count(0));
         assert!(result.is_err());
@@ -1464,9 +1457,9 @@ mod tests {
     #[test]
     fn test_rechunk_preserves_data_order() {
         let mut ca = SuperArray::from_chunks(vec![
-            fa("a", &[10, 20], 0),
-            fa("a", &[30], 0),
-            fa("a", &[40, 50, 60], 0),
+            fa_i32!("a", 10, 20),
+            fa_i32!("a", 30),
+            fa_i32!("a", 40, 50, 60),
         ]);
 
         ca.rechunk(RechunkStrategy::Count(2)).unwrap();

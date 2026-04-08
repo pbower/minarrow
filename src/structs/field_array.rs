@@ -59,10 +59,9 @@ use crate::{TemporalArray, TimeUnit};
 /// over FFI to `Apache Arrow`. In such cases, it's worth ensuring the correct logical `Datetime` Arrow type
 /// is built when constructing the `Field`, as this determines the `Arrow` type on the receiving side.
 ///
-/// ##  
+/// ## Examples
 /// ```rust
 /// use minarrow::{Array, Field, FieldArray, MaskedArray};
-/// use minarrow::structs::field_array::{field_array};
 /// use minarrow::ffi::arrow_dtype::ArrowType;
 /// use minarrow::structs::variants::integer::IntegerArray;
 ///
@@ -72,20 +71,7 @@ use crate::{TemporalArray, TimeUnit};
 /// ints.push(2);
 /// let arr = Array::from_int32(ints);
 ///
-/// // Fast constructor - infers type/nullability
-/// let fa = field_array("id", arr.clone());
-///
-/// assert_eq!(fa.field.name, "id");
-/// assert_eq!(fa.arrow_type(), ArrowType::Int32);
-/// assert_eq!(fa.len(), 2);
-///
-/// // Take an owned slice [offset..offset+len)
-/// let sub = fa.slice_clone(0, 1);
-/// assert_eq!(sub.len(), 1);
-///
-/// // Standard constructor
-///
-/// // Describe it with a Field and wrap as FieldArray
+/// // Construct with a Field and Array
 /// let field = Field::new("id", ArrowType::Int32, false, None);
 /// let fa = FieldArray::new(field, arr);
 ///
@@ -96,6 +82,29 @@ use crate::{TemporalArray, TimeUnit};
 /// // Take an owned slice [offset..offset+len)
 /// let sub = fa.slice_clone(0, 1);
 /// assert_eq!(sub.len(), 1);
+/// ```
+///
+/// The `fa_*` macros are a concise construction shorthand:
+/// ```rust
+/// use minarrow::{fa_i32, fa_i32_opt, fa_str32};
+/// use minarrow::ffi::arrow_dtype::ArrowType;
+///
+/// // From literal values - type and nullability inferred
+/// let fa = fa_i32!("id", 1, 2);
+/// assert_eq!(fa.field.name, "id");
+/// assert_eq!(fa.arrow_type(), ArrowType::Int32);
+/// assert_eq!(fa.len(), 2);
+///
+/// // Nullable variant with Option values
+/// let fa = fa_i32_opt!("score", Some(10i32), None::<i32>, Some(30));
+/// assert_eq!(fa.len(), 3);
+/// assert!(fa.field.nullable);
+/// assert_eq!(fa.null_count(), 1);
+///
+/// // String columns
+/// let names = fa_str32!("name", "alice", "bob");
+/// assert_eq!(names.field.name, "name");
+/// assert_eq!(names.len(), 2);
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldArray {
@@ -575,12 +584,13 @@ impl RowSelection for FieldArray {
 #[cfg(feature = "extended_numeric_types")]
 #[macro_export]
 macro_rules! fa_i8 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i8!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i8!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i8!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_i8!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i8!())
@@ -590,12 +600,13 @@ macro_rules! fa_i8 {
 #[cfg(feature = "extended_numeric_types")]
 #[macro_export]
 macro_rules! fa_i16 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i16!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i16!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i16!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_i16!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i16!())
@@ -604,12 +615,13 @@ macro_rules! fa_i16 {
 
 #[macro_export]
 macro_rules! fa_i32 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i32!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i32!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i32!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_i32!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i32!())
@@ -618,12 +630,13 @@ macro_rules! fa_i32 {
 
 #[macro_export]
 macro_rules! fa_i64 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i64!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i64!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i64!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_i64!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i64!())
@@ -633,12 +646,13 @@ macro_rules! fa_i64 {
 #[cfg(feature = "extended_numeric_types")]
 #[macro_export]
 macro_rules! fa_u8 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u8!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u8!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u8!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_u8!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u8!())
@@ -648,12 +662,13 @@ macro_rules! fa_u8 {
 #[cfg(feature = "extended_numeric_types")]
 #[macro_export]
 macro_rules! fa_u16 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u16!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u16!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u16!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_u16!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u16!())
@@ -662,12 +677,13 @@ macro_rules! fa_u16 {
 
 #[macro_export]
 macro_rules! fa_u32 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u32!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u32!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u32!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_u32!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u32!())
@@ -676,12 +692,13 @@ macro_rules! fa_u32 {
 
 #[macro_export]
 macro_rules! fa_u64 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u64!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u64!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u64!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_u64!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u64!())
@@ -692,12 +709,13 @@ macro_rules! fa_u64 {
 
 #[macro_export]
 macro_rules! fa_f32 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_f32!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_f32!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_f32!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_f32!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_f32!())
@@ -706,12 +724,13 @@ macro_rules! fa_f32 {
 
 #[macro_export]
 macro_rules! fa_f64 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_f64!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_f64!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_f64!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_f64!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_f64!())
@@ -722,12 +741,13 @@ macro_rules! fa_f64 {
 
 #[macro_export]
 macro_rules! fa_bool {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_bool!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_bool!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_bool!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_bool!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_bool!())
@@ -738,12 +758,13 @@ macro_rules! fa_bool {
 
 #[macro_export]
 macro_rules! fa_str32 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_str32!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_str32!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_str32!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_str32!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_str32!())
@@ -753,12 +774,13 @@ macro_rules! fa_str32 {
 #[cfg(feature = "large_string")]
 #[macro_export]
 macro_rules! fa_str64 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_str64!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_str64!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_str64!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_str64!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_str64!())
@@ -770,12 +792,13 @@ macro_rules! fa_str64 {
 #[cfg(feature = "default_categorical_8")]
 #[macro_export]
 macro_rules! fa_cat8 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat8!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat8!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat8!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_cat8!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat8!())
@@ -785,12 +808,13 @@ macro_rules! fa_cat8 {
 #[cfg(feature = "extended_categorical")]
 #[macro_export]
 macro_rules! fa_cat16 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat16!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat16!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat16!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_cat16!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat16!())
@@ -800,12 +824,13 @@ macro_rules! fa_cat16 {
 #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
 #[macro_export]
 macro_rules! fa_cat32 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat32!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat32!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat32!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_cat32!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat32!())
@@ -815,12 +840,13 @@ macro_rules! fa_cat32 {
 #[cfg(feature = "extended_categorical")]
 #[macro_export]
 macro_rules! fa_cat64 {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat64!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat64!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat64!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_cat64!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat64!())
@@ -834,12 +860,13 @@ macro_rules! fa_cat64 {
 #[cfg(feature = "extended_numeric_types")]
 #[macro_export]
 macro_rules! fa_i8_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i8_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i8_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i8_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_i8_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i8_opt!())
@@ -849,12 +876,13 @@ macro_rules! fa_i8_opt {
 #[cfg(feature = "extended_numeric_types")]
 #[macro_export]
 macro_rules! fa_i16_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i16_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i16_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i16_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_i16_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i16_opt!())
@@ -863,12 +891,13 @@ macro_rules! fa_i16_opt {
 
 #[macro_export]
 macro_rules! fa_i32_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i32_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i32_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i32_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_i32_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i32_opt!())
@@ -877,12 +906,13 @@ macro_rules! fa_i32_opt {
 
 #[macro_export]
 macro_rules! fa_i64_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i64_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i64_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_i64_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_i64_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i64_opt!())
@@ -894,12 +924,13 @@ macro_rules! fa_i64_opt {
 #[cfg(feature = "extended_numeric_types")]
 #[macro_export]
 macro_rules! fa_u8_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u8_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u8_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u8_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_u8_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u8_opt!())
@@ -909,12 +940,13 @@ macro_rules! fa_u8_opt {
 #[cfg(feature = "extended_numeric_types")]
 #[macro_export]
 macro_rules! fa_u16_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u16_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u16_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u16_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_u16_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u16_opt!())
@@ -923,12 +955,13 @@ macro_rules! fa_u16_opt {
 
 #[macro_export]
 macro_rules! fa_u32_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u32_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u32_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u32_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_u32_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u32_opt!())
@@ -937,12 +970,13 @@ macro_rules! fa_u32_opt {
 
 #[macro_export]
 macro_rules! fa_u64_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u64_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u64_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_u64_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_u64_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u64_opt!())
@@ -953,12 +987,13 @@ macro_rules! fa_u64_opt {
 
 #[macro_export]
 macro_rules! fa_f32_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_f32_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_f32_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_f32_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_f32_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_f32_opt!())
@@ -967,12 +1002,13 @@ macro_rules! fa_f32_opt {
 
 #[macro_export]
 macro_rules! fa_f64_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_f64_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_f64_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_f64_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_f64_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_f64_opt!())
@@ -983,12 +1019,13 @@ macro_rules! fa_f64_opt {
 
 #[macro_export]
 macro_rules! fa_bool_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_bool_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_bool_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_bool_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_bool_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_bool_opt!())
@@ -999,12 +1036,13 @@ macro_rules! fa_bool_opt {
 
 #[macro_export]
 macro_rules! fa_str32_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_str32_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_str32_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_str32_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_str32_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_str32_opt!())
@@ -1014,12 +1052,13 @@ macro_rules! fa_str32_opt {
 #[cfg(feature = "large_string")]
 #[macro_export]
 macro_rules! fa_str64_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_str64_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_str64_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_str64_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_str64_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_str64_opt!())
@@ -1031,12 +1070,13 @@ macro_rules! fa_str64_opt {
 #[cfg(feature = "default_categorical_8")]
 #[macro_export]
 macro_rules! fa_cat8_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat8_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat8_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat8_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_cat8_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat8_opt!())
@@ -1046,12 +1086,13 @@ macro_rules! fa_cat8_opt {
 #[cfg(feature = "extended_categorical")]
 #[macro_export]
 macro_rules! fa_cat16_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat16_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat16_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat16_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_cat16_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat16_opt!())
@@ -1061,12 +1102,13 @@ macro_rules! fa_cat16_opt {
 #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
 #[macro_export]
 macro_rules! fa_cat32_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat32_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat32_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat32_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_cat32_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat32_opt!())
@@ -1076,12 +1118,13 @@ macro_rules! fa_cat32_opt {
 #[cfg(feature = "extended_categorical")]
 #[macro_export]
 macro_rules! fa_cat64_opt {
-    ($name:expr, $v:expr) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat64_opt!($v))
+    ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat64_opt!($first, $($rest),+))
     };
-    ($name:expr, $($x:expr),+ $(,)?) => {
-        $crate::FieldArray::from_arr($name, $crate::arr_cat64_opt!($($x),+))
-    };
+    ($name:expr, $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_cat64_opt!(vec64![$v]))
+    }};
     ($name:expr) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat64_opt!())
@@ -1488,10 +1531,15 @@ mod fa_macro_tests {
     }
 
     #[test]
-    fn test_fa_i32_from_vec64() {
-        use vec64::vec64;
-        let v = vec64![5i32, 6, 7];
-        let fa = fa_i32!("data", v);
+    fn test_fa_i32_single_value() {
+        let fa = fa_i32!("data", 42);
+        assert_eq!(fa.field.name, "data");
+        assert_eq!(fa.len(), 1);
+    }
+
+    #[test]
+    fn test_fa_i32_trailing_comma() {
+        let fa = fa_i32!("data", 5, 6, 7,);
         assert_eq!(fa.field.name, "data");
         assert_eq!(fa.len(), 3);
     }

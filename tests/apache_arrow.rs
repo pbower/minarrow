@@ -25,7 +25,9 @@ use arrow::array::{
 use arrow::datatypes::{DataType as ADataType, TimeUnit as ATimeUnit};
 use arrow::record_batch::RecordBatch;
 
-use minarrow::{Array as MArray, ArrowType, Field, FieldArray, NumericArray, Table, TextArray};
+use minarrow::{
+    fa_i32, fa_str32, fa_u32, Array as MArray, ArrowType, Field, NumericArray, Table, TextArray,
+};
 
 #[cfg(feature = "datetime")]
 use minarrow::{TemporalArray, TimeUnit};
@@ -169,10 +171,7 @@ fn test_array_to_arrow_with_field_explicit() {
 
 #[test]
 fn test_fieldarray_to_arrow() {
-    let arr = Arc::new(minarrow::IntegerArray::<u32>::from_slice(&[5, 6, 7]));
-    let a = MArray::NumericArray(NumericArray::UInt32(arr));
-    let f = Field::new("u", ArrowType::UInt32, false, None);
-    let fa = FieldArray::new(f.clone(), a);
+    let fa = fa_u32!("u", 5, 6, 7);
 
     let ar = fa.to_apache_arrow();
     assert_eq!(ar.data_type(), &ADataType::UInt32);
@@ -187,18 +186,8 @@ fn test_fieldarray_to_arrow() {
 #[test]
 fn test_table_to_arrow_record_batch() {
     // 2 columns
-    let c1 = {
-        let arr = Arc::new(minarrow::IntegerArray::<i32>::from_slice(&[1, 2]));
-        let a = MArray::NumericArray(NumericArray::Int32(arr));
-        let f = Field::new("a", ArrowType::Int32, false, None);
-        FieldArray::new(f, a)
-    };
-    let c2 = {
-        let arr = Arc::new(minarrow::StringArray::<u32>::from_slice(&["x", "y"]));
-        let a = MArray::TextArray(TextArray::String32(arr));
-        let f = Field::new("b", ArrowType::String, false, None);
-        FieldArray::new(f, a)
-    };
+    let c1 = fa_i32!("a", 1, 2);
+    let c2 = fa_str32!("b", "x", "y");
     let t = Table::new("t".into(), Some(vec![c1, c2]));
 
     let rb: RecordBatch = t.to_apache_arrow();
