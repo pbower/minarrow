@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Integration Test Runner
+//! # Atomic Integration Test Runner
 //!
 //! Runs all roundtrip tests for MinArrow <-> PyArrow conversions.
 //! Tests arrays, tables, nullability, and edge cases such as empty arrays.
@@ -35,7 +35,7 @@
 //!   PYTHONHOME=/usr \
 //!   PYTHONPATH=$(pwd)/.venv/lib/python3.12/site-packages \
 //!   LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu \
-//!   cargo run --example atomic_tests \
+//!   cargo test --test atomic_tests \
 //!     --no-default-features \
 //!     --features "datetime,extended_numeric_types,extended_categorical"
 //! ```

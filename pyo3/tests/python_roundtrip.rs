@@ -24,7 +24,7 @@
 //!   PYTHONHOME=/usr \
 //!   PYTHONPATH=$(pwd)/.venv/lib/python3.12/site-packages \
 //!   LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu \
-//!   cargo run --example python_roundtrip \
+//!   cargo test --test python_roundtrip \
 //!     --no-default-features \
 //!     --features "datetime,extended_numeric_types,extended_categorical"
 //! ```

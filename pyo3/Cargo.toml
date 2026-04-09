@@ -29,7 +29,7 @@ pyo3 = { version = "0.23" }
 thiserror = "2"
 
 [features]
-default = ["datetime", "extended_numeric_types", "extended_categorical"]
+default = ["datetime", "extended_numeric_types"]
 extension-module = ["pyo3/extension-module"]
 datetime = ["minarrow/datetime"]
 extended_numeric_types = ["minarrow/extended_numeric_types"]
@@ -42,3 +42,11 @@ pyo3-build-config = "0.23"
 [[example]]
 name = "pycapsule_exchange"
 path = "examples/pycapsule_exchange.rs"
+
+[[test]]
+name = "atomic_tests"
+harness = false
+
+[[test]]
+name = "python_roundtrip"
+harness = false
