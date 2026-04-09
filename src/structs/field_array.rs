@@ -587,6 +587,9 @@ macro_rules! fa_i8 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_i8!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i8!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i8!(vec64![$v]))
@@ -603,6 +606,9 @@ macro_rules! fa_i16 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_i16!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i16!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i16!(vec64![$v]))
@@ -618,6 +624,9 @@ macro_rules! fa_i32 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_i32!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i32!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i32!(vec64![$v]))
@@ -632,6 +641,9 @@ macro_rules! fa_i32 {
 macro_rules! fa_i64 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_i64!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i64!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -649,6 +661,9 @@ macro_rules! fa_u8 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_u8!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u8!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u8!(vec64![$v]))
@@ -665,6 +680,9 @@ macro_rules! fa_u16 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_u16!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u16!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u16!(vec64![$v]))
@@ -680,6 +698,9 @@ macro_rules! fa_u32 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_u32!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u32!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u32!(vec64![$v]))
@@ -694,6 +715,9 @@ macro_rules! fa_u32 {
 macro_rules! fa_u64 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_u64!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u64!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -712,6 +736,9 @@ macro_rules! fa_f32 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_f32!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_f32!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_f32!(vec64![$v]))
@@ -726,6 +753,9 @@ macro_rules! fa_f32 {
 macro_rules! fa_f64 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_f64!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_f64!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -744,6 +774,9 @@ macro_rules! fa_bool {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_bool!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_bool!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_bool!(vec64![$v]))
@@ -761,6 +794,9 @@ macro_rules! fa_str32 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_str32!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_str32!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_str32!(vec64![$v]))
@@ -776,6 +812,9 @@ macro_rules! fa_str32 {
 macro_rules! fa_str64 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_str64!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_str64!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -795,6 +834,9 @@ macro_rules! fa_cat8 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_cat8!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat8!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat8!(vec64![$v]))
@@ -810,6 +852,9 @@ macro_rules! fa_cat8 {
 macro_rules! fa_cat16 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_cat16!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat16!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -827,6 +872,9 @@ macro_rules! fa_cat32 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_cat32!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat32!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat32!(vec64![$v]))
@@ -842,6 +890,9 @@ macro_rules! fa_cat32 {
 macro_rules! fa_cat64 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_cat64!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat64!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -863,6 +914,9 @@ macro_rules! fa_i8_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_i8_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i8_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i8_opt!(vec64![$v]))
@@ -879,6 +933,9 @@ macro_rules! fa_i16_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_i16_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i16_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i16_opt!(vec64![$v]))
@@ -894,6 +951,9 @@ macro_rules! fa_i32_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_i32_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i32_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i32_opt!(vec64![$v]))
@@ -908,6 +968,9 @@ macro_rules! fa_i32_opt {
 macro_rules! fa_i64_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_i64_opt!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_i64_opt!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -927,6 +990,9 @@ macro_rules! fa_u8_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_u8_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u8_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u8_opt!(vec64![$v]))
@@ -943,6 +1009,9 @@ macro_rules! fa_u16_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_u16_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u16_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u16_opt!(vec64![$v]))
@@ -958,6 +1027,9 @@ macro_rules! fa_u32_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_u32_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u32_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_u32_opt!(vec64![$v]))
@@ -972,6 +1044,9 @@ macro_rules! fa_u32_opt {
 macro_rules! fa_u64_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_u64_opt!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_u64_opt!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -990,6 +1065,9 @@ macro_rules! fa_f32_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_f32_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_f32_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_f32_opt!(vec64![$v]))
@@ -1004,6 +1082,9 @@ macro_rules! fa_f32_opt {
 macro_rules! fa_f64_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_f64_opt!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_f64_opt!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -1022,6 +1103,9 @@ macro_rules! fa_bool_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_bool_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_bool_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_bool_opt!(vec64![$v]))
@@ -1039,6 +1123,9 @@ macro_rules! fa_str32_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_str32_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_str32_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_str32_opt!(vec64![$v]))
@@ -1054,6 +1141,9 @@ macro_rules! fa_str32_opt {
 macro_rules! fa_str64_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_str64_opt!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_str64_opt!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -1073,6 +1163,9 @@ macro_rules! fa_cat8_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_cat8_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat8_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat8_opt!(vec64![$v]))
@@ -1088,6 +1181,9 @@ macro_rules! fa_cat8_opt {
 macro_rules! fa_cat16_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_cat16_opt!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat16_opt!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
@@ -1105,6 +1201,9 @@ macro_rules! fa_cat32_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_cat32_opt!($first, $($rest),+))
     };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat32_opt!($v))
+    };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_cat32_opt!(vec64![$v]))
@@ -1120,6 +1219,9 @@ macro_rules! fa_cat32_opt {
 macro_rules! fa_cat64_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
         $crate::FieldArray::from_arr($name, $crate::arr_cat64_opt!($first, $($rest),+))
+    };
+    ($name:expr, @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_cat64_opt!($v))
     };
     ($name:expr, $v:expr $(,)?) => {{
         use $crate::vec64;
