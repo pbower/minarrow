@@ -261,9 +261,15 @@ impl ArrayV {
         }
     }
 
-    /// Materialise a deep copy as an owned `Array` for the window.
+    /// Materialise the view window as an owned `Array`.
+    ///
+    /// If the view covers the entire backing array, returns a cheap clone
+    /// with no data copy. Otherwise deep-copies the window via slice_clone.
     #[inline]
     pub fn to_array(&self) -> Array {
+        if self.offset == 0 && self.len == self.array.len() {
+            return self.array.clone();
+        }
         self.array.slice_clone(self.offset, self.len)
     }
 
