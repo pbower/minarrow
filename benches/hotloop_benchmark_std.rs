@@ -113,7 +113,7 @@ mod benchmarks_std {
             null_mask: None,
         })));
         let mut acc = 0i64;
-        let int_arr = array.num().i64().unwrap();
+        let int_arr = array.try_i64_ref().unwrap();
         let slice = int_arr.data.as_slice();
         for &v in slice {
             acc += v;
@@ -212,7 +212,7 @@ mod benchmarks_std {
             null_mask: None,
         })));
         let mut acc = 0.0f64;
-        let float_arr = array.num().f64().unwrap();
+        let float_arr = array.try_f64_ref().unwrap();
         let slice = float_arr.data.as_slice();
         for &v in slice {
             acc += v;
