@@ -33,7 +33,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     Bitmask, BooleanArray, CategoricalArray, Integer, IntegerArray, MaskedArray, StringArray,
-    Vec64,
+    TextArrayV, Vec64,
     aliases::{CategoricalAVT, StringAVT},
 };
 #[cfg(feature = "regex")]
@@ -2016,6 +2016,115 @@ pub fn regex_replace_dict<T: Integer>(
         unique_values: new_unique,
         null_mask: mask_opt,
     })
+}
+
+// Cross-tabulation
+
+/// Cross-tabulate two text array views into a contingency table.
+///
+/// Iterates both views in lockstep, discovering categories on first appearance and
+/// incrementing the corresponding cell for each jointly non-null pair. Null positions
+/// in either array cause the row to be skipped.
+///
+/// Returns the count matrix, row labels from `x`, column labels from `y`,
+/// and total number of valid pairs counted.
+pub fn cross_tabulate(
+    x: &TextArrayV,
+    y: &TextArrayV,
+) -> Result<(Vec64<Vec64<u64>>, Vec64<String>, Vec64<String>, usize), KernelError> {
+    let n = x.len().min(y.len());
+
+    if x.len() != y.len() {
+        return Err(KernelError::LengthMismatch(format!(
+            "cross_tabulate: x has length {} but y has length {}",
+            x.len(),
+            y.len()
+        )));
+    }
+
+    #[cfg(feature = "fast_hash")]
+    let mut row_map: AHashMap<String, usize> = AHashMap::with_capacity(n.min(256));
+    #[cfg(not(feature = "fast_hash"))]
+    let mut row_map: HashMap<String, usize> = HashMap::with_capacity(n.min(256));
+
+    #[cfg(feature = "fast_hash")]
+    let mut col_map: AHashMap<String, usize> = AHashMap::with_capacity(n.min(256));
+    #[cfg(not(feature = "fast_hash"))]
+    let mut col_map: HashMap<String, usize> = HashMap::with_capacity(n.min(256));
+
+    let mut row_labels = Vec64::<String>::with_capacity(32);
+    let mut col_labels = Vec64::<String>::with_capacity(32);
+
+    // Single pass: discover categories and count co-occurrences.
+    // We build a flat count vec keyed by (ri * max_cols + ci) and resize as
+    // new categories are discovered. For typical cardinalities this stays small.
+    let mut counts = Vec64::<u64>::new();
+    let mut n_cols_seen = 0_usize;
+    let mut total = 0_usize;
+
+    for i in 0..n {
+        let (Some(xv), Some(yv)) = (x.get_str(i), y.get_str(i)) else {
+            continue;
+        };
+
+        let row_len = row_labels.len();
+        let ri = *row_map.entry(xv.to_string()).or_insert_with(|| {
+            row_labels.push(xv.to_string());
+            row_len
+        });
+
+        let col_len = col_labels.len();
+        let ci = *col_map.entry(yv.to_string()).or_insert_with(|| {
+            col_labels.push(yv.to_string());
+            col_len
+        });
+
+        // If new columns were added, widen every existing row in the flat buffer
+        if col_labels.len() > n_cols_seen {
+            let old_cols = n_cols_seen;
+            n_cols_seen = col_labels.len();
+            let nrows = row_labels.len();
+            // Rebuild flat buffer with wider stride
+            let mut new_counts = Vec64::<u64>::with_capacity(nrows * n_cols_seen);
+            new_counts.resize(nrows * n_cols_seen, 0);
+            for r in 0..nrows.min(ri + 1) {
+                for c in 0..old_cols {
+                    if r * old_cols + c < counts.len() {
+                        new_counts[r * n_cols_seen + c] = counts[r * old_cols + c];
+                    }
+                }
+            }
+            counts = new_counts;
+        }
+
+        // New row may need the buffer extended
+        let needed = (ri + 1) * n_cols_seen;
+        if needed > counts.len() {
+            counts.resize(needed, 0);
+        }
+
+        counts[ri * n_cols_seen + ci] += 1;
+        total += 1;
+    }
+
+    if total == 0 {
+        return Err(KernelError::InvalidArguments(
+            "cross_tabulate: no valid non-null pairs found".to_string(),
+        ));
+    }
+
+    // Convert flat counts to Vec64<Vec64<u64>> matrix
+    let nrows = row_labels.len();
+    let ncols = col_labels.len();
+    let mut matrix = Vec64::<Vec64<u64>>::with_capacity(nrows);
+    for r in 0..nrows {
+        let start = r * ncols;
+        let end = start + ncols;
+        let row = Vec64::from_slice(&counts[start..end]);
+        matrix.push(row);
+    }
+
+    Ok((matrix, row_labels, col_labels, total))
 }
 
 #[cfg(test)]
