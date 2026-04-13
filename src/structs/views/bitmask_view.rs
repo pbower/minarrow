@@ -48,7 +48,7 @@ use crate::enums::shape_dim::ShapeDim;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::{Bitmask, BitmaskVT};
+use crate::{Array, ArrayV, Bitmask, BitmaskVT, BooleanArray};
 
 /// # BitmaskView
 ///
@@ -300,6 +300,53 @@ impl Concatenate for BitmaskV {
         // Wrap the result in a new view
         let len = concatenated.len();
         Ok(BitmaskV::new(concatenated, 0, len))
+    }
+}
+
+/// View over the full bitmask with zero offset.
+impl From<Bitmask> for BitmaskV {
+    #[inline]
+    fn from(bitmask: Bitmask) -> Self {
+        let len = bitmask.len();
+        Self::new(bitmask, 0, len)
+    }
+}
+
+/// View over a BooleanArray's data bitmask with zero offset.
+impl<T> From<BooleanArray<T>> for BitmaskV {
+    #[inline]
+    fn from(arr: BooleanArray<T>) -> Self {
+        let len = arr.data.len();
+        Self::new(arr.data, 0, len)
+    }
+}
+
+/// Extract the boolean data from an Array. Panics if not a BooleanArray variant.
+impl From<Array> for BitmaskV {
+    #[inline]
+    fn from(arr: Array) -> Self {
+        let Array::BooleanArray(arc) = arr else {
+            panic!("BitmaskV: expected BooleanArray");
+        };
+        match Arc::try_unwrap(arc) {
+            Ok(ba) => BitmaskV::from(ba),
+            Err(arc) => {
+                let len = arc.data.len();
+                Self::new(arc.data.clone(), 0, len)
+            }
+        }
+    }
+}
+
+/// Extract the boolean data from an ArrayV, preserving the view's offset and length.
+/// Panics if the underlying array is not a BooleanArray variant.
+impl From<ArrayV> for BitmaskV {
+    #[inline]
+    fn from(av: ArrayV) -> Self {
+        let Array::BooleanArray(ref arc) = av.array else {
+            panic!("BitmaskV: expected BooleanArray");
+        };
+        Self::new(arc.data.clone(), av.offset, av.len())
     }
 }
 

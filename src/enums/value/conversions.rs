@@ -32,7 +32,7 @@ use std::sync::Arc;
 use crate::{SuperArray, SuperTable};
 
 #[cfg(feature = "views")]
-use crate::{ArrayV, NumericArrayV, TableV, TextArrayV};
+use crate::{ArrayV, BitmaskV, NumericArrayV, TableV, TextArrayV};
 
 #[cfg(all(feature = "views", feature = "datetime"))]
 use crate::TemporalArrayV;
@@ -959,6 +959,47 @@ impl TryFrom<Value> for TemporalArrayV {
             _ => Err(MinarrowError::TypeError {
                 from: "Value",
                 to: "TemporalArrayV",
+                message: Some("Value type mismatch".to_owned()),
+            }),
+        }
+    }
+}
+
+impl TryFrom<Value> for BitmaskV {
+    type Error = MinarrowError;
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::ArrayView(inner) => {
+                let view = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                let (array, offset, len) = view.as_tuple();
+                match array {
+                    Array::BooleanArray(bool_arr) => {
+                        Ok(BitmaskV::new(bool_arr.data.clone(), offset, len))
+                    }
+                    _ => Err(MinarrowError::TypeError {
+                        from: "Value",
+                        to: "BitmaskV",
+                        message: Some("ArrayV is not a BooleanArray".to_owned()),
+                    }),
+                }
+            }
+            Value::Array(inner) => {
+                let array = Arc::try_unwrap(inner).unwrap_or_else(|arc| (*arc).clone());
+                match array {
+                    Array::BooleanArray(bool_arr) => {
+                        let len = bool_arr.data.len();
+                        Ok(BitmaskV::new(bool_arr.data.clone(), 0, len))
+                    }
+                    _ => Err(MinarrowError::TypeError {
+                        from: "Value",
+                        to: "BitmaskV",
+                        message: Some("Array is not a BooleanArray".to_owned()),
+                    }),
+                }
+            }
+            _ => Err(MinarrowError::TypeError {
+                from: "Value",
+                to: "BitmaskV",
                 message: Some("Value type mismatch".to_owned()),
             }),
         }
