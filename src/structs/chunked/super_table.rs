@@ -886,8 +886,8 @@ impl From<SuperTableV> for SuperTable {
 mod tests {
     use super::*;
     use crate::ffi::arrow_dtype::ArrowType;
-    use crate::{fa_bool, fa_cat32, fa_f64, fa_i32, fa_i64, fa_str32};
     use crate::{Array, Field, FieldArray, MaskedArray, NumericArray, Table};
+    use crate::{fa_bool, fa_cat32, fa_f64, fa_i32, fa_i64, fa_str32};
 
     fn table(cols: Vec<FieldArray>) -> Table {
         let n_rows = cols[0].len();
@@ -949,7 +949,10 @@ mod tests {
     #[test]
     fn test_push_and_consolidate() {
         let mut t = SuperTable::default();
-        t.push(Arc::new(table(vec![fa_i32!("x", 1, 2), fa_i32!("y", 3, 4)])));
+        t.push(Arc::new(table(vec![
+            fa_i32!("x", 1, 2),
+            fa_i32!("y", 3, 4),
+        ])));
         t.push(Arc::new(table(vec![fa_i32!("x", 5), fa_i32!("y", 6)])));
         assert_eq!(t.n_cols(), 2);
         assert_eq!(t.n_batches(), 2);
@@ -967,7 +970,10 @@ mod tests {
     fn test_push_col_count_mismatch() {
         let mut t = SuperTable::default();
         t.push(Arc::new(table(vec![fa_i32!("a", 1, 2)])));
-        t.push(Arc::new(table(vec![fa_i32!("a", 3, 4), fa_i32!("b", 5, 6)])));
+        t.push(Arc::new(table(vec![
+            fa_i32!("a", 3, 4),
+            fa_i32!("b", 5, 6),
+        ])));
     }
 
     #[cfg(feature = "views")]
@@ -1225,7 +1231,10 @@ mod tests {
     #[cfg(feature = "size")]
     fn test_rechunk_by_memory() {
         // Create a SuperTable with i32 data
-        let batch1 = Arc::new(table(vec![fa_i32!("a", 1, 2, 3, 4), fa_i32!("b", 5, 6, 7, 8)]));
+        let batch1 = Arc::new(table(vec![
+            fa_i32!("a", 1, 2, 3, 4),
+            fa_i32!("b", 5, 6, 7, 8),
+        ]));
         let batch2 = Arc::new(table(vec![
             fa_i32!("a", 9, 10, 11, 12),
             fa_i32!("b", 13, 14, 15, 16),
@@ -1308,10 +1317,7 @@ mod tests {
             fa_i32!("id", 1, 2, 3),
             fa_f64!("val", 1.5, 2.5, 3.5),
         ]));
-        let b2 = Arc::new(table(vec![
-            fa_i32!("id", 4, 5),
-            fa_f64!("val", 4.5, 5.5),
-        ]));
+        let b2 = Arc::new(table(vec![fa_i32!("id", 4, 5), fa_f64!("val", 4.5, 5.5)]));
         let st = SuperTable::from_batches(vec![b1, b2], None);
         let result = st.consolidate();
 
@@ -1562,7 +1568,10 @@ mod tests {
         }
     }
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     #[test]
     fn test_consolidate_arena_categorical() {
         let b1 = Arc::new(table(vec![fa_cat32!("cat", "a", "b", "a")]));

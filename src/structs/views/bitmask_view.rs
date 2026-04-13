@@ -43,12 +43,14 @@ use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::Index;
 use std::sync::Arc;
 
+#[cfg(feature = "views")]
+use crate::ArrayV;
 use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::{Array, ArrayV, Bitmask, BitmaskVT, BooleanArray};
+use crate::{Array, Bitmask, BitmaskVT, BooleanArray};
 
 /// # BitmaskView
 ///
@@ -79,8 +81,8 @@ use crate::{Array, ArrayV, Bitmask, BitmaskVT, BooleanArray};
 /// ```
 #[derive(Clone, PartialEq)]
 pub struct BitmaskV {
-    /// The **outer bitmask** that this view is derived from - we retain a reference to it. 
-    /// Importantly, this is the ***full bitmask*** - not the *view*, and thus should not be 
+    /// The **outer bitmask** that this view is derived from - we retain a reference to it.
+    /// Importantly, this is the ***full bitmask*** - not the *view*, and thus should not be
     /// accessed as though it were the view subset.
     pub bitmask: Arc<Bitmask>,
     /// The index offset from 0 that for where this view starts from the outer bitmask
@@ -340,6 +342,7 @@ impl From<Array> for BitmaskV {
 
 /// Extract the boolean data from an ArrayV, preserving the view's offset and length.
 /// Panics if the underlying array is not a BooleanArray variant.
+#[cfg(feature = "views")]
 impl From<ArrayV> for BitmaskV {
     #[inline]
     fn from(av: ArrayV) -> Self {

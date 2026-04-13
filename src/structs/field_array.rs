@@ -280,7 +280,12 @@ impl FieldArray {
 
     /// Appends rows `[offset..offset+len)` from another FieldArray into self.
     /// Extends data directly from the source's backing buffer.
-    pub fn concat_range(&mut self, other: &FieldArray, offset: usize, len: usize) -> Result<(), MinarrowError> {
+    pub fn concat_range(
+        &mut self,
+        other: &FieldArray,
+        offset: usize,
+        len: usize,
+    ) -> Result<(), MinarrowError> {
         self.array.concat_array_range(&other.array, offset, len)?;
         self.refresh_null_count();
         Ok(())
@@ -356,7 +361,10 @@ pub fn create_field_for_array(
             TextArray::Categorical8(_) => ArrowType::Dictionary(CategoricalIndexType::UInt8),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical16(_) => ArrowType::Dictionary(CategoricalIndexType::UInt16),
-            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+            #[cfg(any(
+                not(feature = "default_categorical_8"),
+                feature = "extended_categorical"
+            ))]
             TextArray::Categorical32(_) => ArrowType::Dictionary(CategoricalIndexType::UInt32),
             #[cfg(feature = "extended_categorical")]
             TextArray::Categorical64(_) => ArrowType::Dictionary(CategoricalIndexType::UInt64),
@@ -866,7 +874,10 @@ macro_rules! fa_cat16 {
     }};
 }
 
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 #[macro_export]
 macro_rules! fa_cat32 {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
@@ -1195,7 +1206,10 @@ macro_rules! fa_cat16_opt {
     }};
 }
 
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 #[macro_export]
 macro_rules! fa_cat32_opt {
     ($name:expr, $first:expr, $($rest:expr),+ $(,)?) => {
@@ -1580,7 +1594,10 @@ mod fa_macro_tests {
         use crate::ffi::arrow_dtype::CategoricalIndexType;
         let fa = fa_cat32!("colour", "red", "green", "blue");
         assert_eq!(fa.field.name, "colour");
-        assert_eq!(fa.field.dtype, ArrowType::Dictionary(CategoricalIndexType::UInt32));
+        assert_eq!(
+            fa.field.dtype,
+            ArrowType::Dictionary(CategoricalIndexType::UInt32)
+        );
         assert_eq!(fa.len(), 3);
     }
 

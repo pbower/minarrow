@@ -14,6 +14,8 @@
 
 #[cfg(feature = "cube")]
 use crate::Cube;
+#[cfg(all(feature = "scalar_type", feature = "datetime"))]
+use crate::DatetimeArray;
 #[cfg(feature = "chunked")]
 use crate::SuperTable;
 #[cfg(all(feature = "chunked", feature = "views"))]
@@ -26,7 +28,7 @@ use crate::kernels::routing::arithmetic::resolve_binary_arithmetic;
 use crate::structs::field_array::create_field_for_array;
 use crate::{Array, ArrayV, Bitmask, FieldArray, Table, Value};
 #[cfg(feature = "scalar_type")]
-use crate::{BooleanArray, DatetimeArray, FloatArray, IntegerArray, Scalar, StringArray};
+use crate::{BooleanArray, FloatArray, IntegerArray, Scalar, StringArray};
 use std::sync::Arc;
 
 /// Broadcast addition: `lhs + rhs` with automatic scalar expansion.
@@ -263,7 +265,11 @@ pub fn broadcast_array_to_cube(
         let broadcasted = broadcast_array_to_table(op, array, table)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
+    Ok(Cube::from_tables(
+        result_tables,
+        cube.name.clone(),
+        cube.third_dim_index.clone(),
+    ))
 }
 
 /// Helper function for Array-Tuple2 broadcasting - broadcast array to each tuple element

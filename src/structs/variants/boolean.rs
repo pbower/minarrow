@@ -624,16 +624,27 @@ impl MaskedArray for BooleanArray<()> {
         }
     }
 
-    fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), MinarrowError> {
-        if len == 0 { return Ok(()); }
+    fn append_range(
+        &mut self,
+        other: &Self,
+        offset: usize,
+        len: usize,
+    ) -> Result<(), MinarrowError> {
+        if len == 0 {
+            return Ok(());
+        }
         if offset + len > other.len() {
-            return Err(MinarrowError::IndexError(
-                format!("append_range: offset {} + len {} exceeds source length {}", offset, len, other.len())
-            ));
+            return Err(MinarrowError::IndexError(format!(
+                "append_range: offset {} + len {} exceeds source length {}",
+                offset,
+                len,
+                other.len()
+            )));
         }
         let orig_len = self.len();
 
-        self.data.extend_from_bitmask_range(&other.data, offset, len);
+        self.data
+            .extend_from_bitmask_range(&other.data, offset, len);
         self.len += len;
 
         match (self.null_mask_mut(), other.null_mask()) {

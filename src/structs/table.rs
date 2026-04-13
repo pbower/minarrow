@@ -45,8 +45,6 @@ use crate::ArrayV;
 use crate::Field;
 #[cfg(feature = "chunked")]
 use crate::SuperTable;
-#[cfg(feature = "views")]
-use crate::{BitmaskV, NumericArrayV, TableV, TextArrayV};
 use crate::enums::{error::MinarrowError, shape_dim::ShapeDim};
 #[cfg(feature = "chunked")]
 use crate::traits::consolidate::Consolidate;
@@ -57,6 +55,8 @@ use crate::traits::{
     print::{MAX_PREVIEW, print_ellipsis_row, print_header_row, print_rule, value_to_string},
     shape::Shape,
 };
+#[cfg(feature = "views")]
+use crate::{BitmaskV, NumericArrayV, TableV, TextArrayV};
 
 // Global counter for unnamed table instances
 static UNNAMED_COUNTER: AtomicUsize = AtomicUsize::new(1);
@@ -114,6 +114,37 @@ pub struct Table {
 }
 
 impl Table {
+    #[inline]
+    fn normalise_name(name: String) -> String {
+        if name.trim().is_empty() {
+            let id = UNNAMED_COUNTER.fetch_add(1, Ordering::Relaxed);
+            format!("UnnamedTable{}", id)
+        } else {
+            name
+        }
+    }
+
+    #[inline]
+    fn validate_column_lengths(cols: &[FieldArray]) -> Result<usize, MinarrowError> {
+        let Some(first) = cols.first() else {
+            return Ok(0);
+        };
+
+        let expected = first.len();
+        for (col, field_array) in cols.iter().enumerate().skip(1) {
+            let found = field_array.len();
+            if found != expected {
+                return Err(MinarrowError::ColumnLengthMismatch {
+                    col,
+                    expected,
+                    found,
+                });
+            }
+        }
+
+        Ok(expected)
+    }
+
     /// Internal constructor handling the conditional metadata field.
     /// All code paths that build a `Table` from parts should go through here
     /// so the `#[cfg]` lives in one place.
@@ -131,17 +162,37 @@ impl Table {
     /// Constructs a new Table with a specified name and optional columns.
     /// If `cols` is provided, the number of rows will be inferred from the first column.
     pub fn new(name: String, cols: Option<Vec<FieldArray>>) -> Self {
+        Self::try_new(name, cols).unwrap_or_else(|err| panic!("{}", err))
+    }
+
+    /// Constructs a new Table with a specified name and optional columns.
+    ///
+    /// Returns an error if the provided columns do not all have the same
+    /// length. Use [`Table::new`] when panic-on-invalid construction is desired.
+    pub fn try_new(name: String, cols: Option<Vec<FieldArray>>) -> Result<Self, MinarrowError> {
         let cols = cols.unwrap_or_else(Vec::new);
-        let n_rows = cols.first().map(|col| col.len()).unwrap_or(0);
+        let n_rows = Self::validate_column_lengths(&cols)?;
+        let name = Self::normalise_name(name);
 
-        let name = if name.trim().is_empty() {
-            let id = UNNAMED_COUNTER.fetch_add(1, Ordering::Relaxed);
-            format!("UnnamedTable{}", id)
-        } else {
-            name
-        };
+        Ok(Self::build(cols, n_rows, name))
+    }
 
-        Self::build(cols, n_rows, name)
+    /// Validates this table's cached row count against its columns.
+    ///
+    /// This is mainly useful after direct field mutation or internal unchecked
+    /// construction via `build`.
+    pub fn validate(&self) -> Result<(), MinarrowError> {
+        let expected = Self::validate_column_lengths(&self.cols)?;
+        if self.n_rows != expected {
+            return Err(MinarrowError::ShapeError {
+                message: format!(
+                    "Table '{}' cached row count mismatch: expected {}, found {}",
+                    self.name, expected, self.n_rows
+                ),
+            });
+        }
+
+        Ok(())
     }
 
     /// Constructs a new Table with schema-level metadata.
@@ -167,8 +218,7 @@ impl Table {
 
     /// Constructs a new, empty Table with a globally unique name.
     pub fn new_empty() -> Self {
-        let id = UNNAMED_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let name = format!("UnnamedTable{}", id);
+        let name = Self::normalise_name(String::new());
         Self::build(Vec::new(), 0, name)
     }
 
@@ -252,10 +302,7 @@ impl Table {
     ///
     /// Returns an error if any old name is not found.
     /// This is metadata-only - array data is not touched.
-    pub fn rename_columns(
-        &mut self,
-        mapping: &[(&str, &str)],
-    ) -> Result<(), MinarrowError> {
+    pub fn rename_columns(&mut self, mapping: &[(&str, &str)]) -> Result<(), MinarrowError> {
         for &(old, _) in mapping {
             if !self.cols.iter().any(|fa| fa.field.name == old) {
                 return Err(MinarrowError::IndexError(format!(
@@ -293,7 +340,8 @@ impl Table {
     /// Resolve a named column to a `NumericArrayV`.
     #[cfg(feature = "views")]
     pub fn col_numeric(&self, name: &str) -> Result<NumericArrayV, MinarrowError> {
-        let idx = self.col_name_index(name)
+        let idx = self
+            .col_name_index(name)
             .ok_or_else(|| MinarrowError::IndexError(format!("column '{}' not found", name)))?;
         let num = self.cols[idx].array.num_ref()?;
         Ok(NumericArrayV::from(num.clone()))
@@ -302,7 +350,8 @@ impl Table {
     /// Resolve a named column to a `TextArrayV`.
     #[cfg(feature = "views")]
     pub fn col_text(&self, name: &str) -> Result<TextArrayV, MinarrowError> {
-        let idx = self.col_name_index(name)
+        let idx = self
+            .col_name_index(name)
             .ok_or_else(|| MinarrowError::IndexError(format!("column '{}' not found", name)))?;
         let ta = self.cols[idx].array.str_ref()?;
         Ok(TextArrayV::from(ta.clone()))
@@ -311,7 +360,8 @@ impl Table {
     /// Resolve a named column to a `BitmaskV`.
     #[cfg(feature = "views")]
     pub fn col_bitmask(&self, name: &str) -> Result<BitmaskV, MinarrowError> {
-        let idx = self.col_name_index(name)
+        let idx = self
+            .col_name_index(name)
             .ok_or_else(|| MinarrowError::IndexError(format!("column '{}' not found", name)))?;
         let ba = self.cols[idx].array.bool_ref()?;
         Ok(BitmaskV::new(ba.data.clone(), 0, ba.len))
@@ -1020,7 +1070,11 @@ impl ColumnSelection for Table {
             return TableV {
                 name: self.name.clone(),
                 fields: all_fields,
-                cols: self.cols.iter().map(|fa| ArrayV::from(fa.clone())).collect(),
+                cols: self
+                    .cols
+                    .iter()
+                    .map(|fa| ArrayV::from(fa.clone()))
+                    .collect(),
                 offset: 0,
                 len: self.n_rows,
                 active_col_selection: None,
@@ -1100,10 +1154,10 @@ mod tests {
     use super::*;
     use crate::structs::field_array::field_array;
     use crate::traits::masked_array::MaskedArray;
-    use crate::{fa_bool, fa_i32, fa_i64, fa_u32};
     #[cfg(all(feature = "views", feature = "select"))]
     use crate::traits::selection::ColumnSelection;
     use crate::{Array, BooleanArray, IntegerArray, NumericArray};
+    use crate::{fa_bool, fa_i32, fa_i64, fa_u32};
 
     #[test]
     fn test_new_table() {
@@ -1168,6 +1222,54 @@ mod tests {
         t.add_col(fa_i32!("ints", 1, 2, 3));
         // This should panic due to mismatched row count
         t.add_col(fa_bool!("bools", true, false));
+    }
+
+    #[test]
+    #[should_panic(expected = "Column length mismatch")]
+    fn test_new_with_mismatched_column_lengths_panics() {
+        let _ = Table::new(
+            "bad".into(),
+            Some(vec![
+                fa_i32!("ints", 1, 2, 3),
+                fa_bool!("bools", true, false),
+            ]),
+        );
+    }
+
+    #[test]
+    fn test_try_new_with_mismatched_column_lengths_returns_error() {
+        let err = Table::try_new(
+            "bad".into(),
+            Some(vec![
+                fa_i32!("ints", 1, 2, 3),
+                fa_bool!("bools", true, false),
+            ]),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            MinarrowError::ColumnLengthMismatch {
+                col: 1,
+                expected: 3,
+                found: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn test_table_validate_checks_cached_row_count() {
+        let mut t = Table::new(
+            "valid".into(),
+            Some(vec![fa_i32!("ints", 1, 2), fa_bool!("bools", true, false)]),
+        );
+        assert!(t.validate().is_ok());
+
+        t.n_rows = 3;
+        assert!(matches!(
+            t.validate(),
+            Err(MinarrowError::ShapeError { .. })
+        ));
     }
 
     #[test]
@@ -1620,7 +1722,10 @@ mod tests {
             }
         }
 
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         #[test]
         fn test_from_arena_boolean_and_categorical() {
             use crate::ffi::arrow_dtype::CategoricalIndexType;

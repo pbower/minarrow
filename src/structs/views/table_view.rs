@@ -218,9 +218,13 @@ impl TableV {
     #[inline]
     pub fn has_col_selection(&self) -> bool {
         #[cfg(feature = "select")]
-        { self.active_col_selection.is_some() }
+        {
+            self.active_col_selection.is_some()
+        }
         #[cfg(not(feature = "select"))]
-        { false }
+        {
+            false
+        }
     }
 
     /// Resolve an active column index to the raw index into fields/cols.
@@ -231,7 +235,11 @@ impl TableV {
         if let Some(indices) = &self.active_col_selection {
             return indices.get(idx).copied();
         }
-        if idx < self.fields.len() { Some(idx) } else { None }
+        if idx < self.fields.len() {
+            Some(idx)
+        } else {
+            None
+        }
     }
 
     /// Returns true if the window contains no rows.
@@ -293,13 +301,13 @@ impl TableV {
     /// Returns an error if any old name is not found among active columns.
     /// This is metadata-only - array data is not touched.
     #[cfg(feature = "select")]
-    pub fn rename_columns(
-        &mut self,
-        mapping: &[(&str, &str)],
-    ) -> Result<(), MinarrowError> {
+    pub fn rename_columns(&mut self, mapping: &[(&str, &str)]) -> Result<(), MinarrowError> {
         let active = self.active_col_indices();
         for &(old, _) in mapping {
-            if !active.iter().any(|&i| self.fields.get(i).is_some_and(|f| f.name == old)) {
+            if !active
+                .iter()
+                .any(|&i| self.fields.get(i).is_some_and(|f| f.name == old))
+            {
                 return Err(MinarrowError::IndexError(format!(
                     "rename_columns: column '{}' not found",
                     old
@@ -572,7 +580,10 @@ impl TableV {
                     }
                     Array::from_string64(new_arr)
                 }
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(_) => {
                     use crate::{Bitmask, Vec64};
                     use std::collections::HashMap;
@@ -989,7 +1000,10 @@ impl ColumnSelection for TableV {
             Some(current) => {
                 let current_set: std::collections::HashSet<usize> =
                     current.iter().copied().collect();
-                resolved.into_iter().filter(|i| current_set.contains(i)).collect()
+                resolved
+                    .into_iter()
+                    .filter(|i| current_set.contains(i))
+                    .collect()
             }
             None => resolved,
         };

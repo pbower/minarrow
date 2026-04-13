@@ -221,7 +221,7 @@ impl<T: Integer> StringArray<T> {
     }
 
     /// Take ownership of **offsets**, **values**, and an optional null bitmap.
-    /// The usual Arrow invariaLnts must hold (`offsets[0]==0`, last offset ==
+    /// The usual Arrow invariants must hold (`offsets[0]==0`, last offset ==
     /// `data.len()`, monotonically non-decreasing).
     #[inline]
     pub fn from_parts(offsets: Vec64<T>, data: Vec64<u8>, null_mask: Option<Bitmask>) -> Self {
@@ -990,11 +990,15 @@ impl<T: Integer> MaskedArray for StringArray<T> {
     fn append_array(&mut self, other: &Self) {
         let orig_len = self.len();
         let other_len = other.len();
-        if other_len == 0 { return; }
+        if other_len == 0 {
+            return;
+        }
 
         self.data.extend_from_slice(&other.data);
 
-        let prev_last_offset = *self.offsets.last()
+        let prev_last_offset = *self
+            .offsets
+            .last()
             .expect("StringArray must have at least one offset");
         for off in other.offsets.iter().skip(1) {
             let new_offset = prev_last_offset + (*off - other.offsets[0]);
@@ -1017,22 +1021,35 @@ impl<T: Integer> MaskedArray for StringArray<T> {
         }
     }
 
-    fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), MinarrowError> {
-        if len == 0 { return Ok(()); }
+    fn append_range(
+        &mut self,
+        other: &Self,
+        offset: usize,
+        len: usize,
+    ) -> Result<(), MinarrowError> {
+        if len == 0 {
+            return Ok(());
+        }
         if offset + len > other.len() {
-            return Err(MinarrowError::IndexError(
-                format!("append_range: offset {} + len {} exceeds source length {}", offset, len, other.len())
-            ));
+            return Err(MinarrowError::IndexError(format!(
+                "append_range: offset {} + len {} exceeds source length {}",
+                offset,
+                len,
+                other.len()
+            )));
         }
         let orig_len = self.len();
 
         // Byte range in other's data buffer for rows [offset..offset+len)
         let src_byte_start = other.offsets[offset].to_usize();
         let src_byte_end = other.offsets[offset + len].to_usize();
-        self.data.extend_from_slice(&other.data[src_byte_start..src_byte_end]);
+        self.data
+            .extend_from_slice(&other.data[src_byte_start..src_byte_end]);
 
         // Rebase offsets relative to self's current end
-        let prev_last_offset = *self.offsets.last()
+        let prev_last_offset = *self
+            .offsets
+            .last()
             .expect("StringArray must have at least one offset");
         let base = other.offsets[offset];
         for i in 1..=len {

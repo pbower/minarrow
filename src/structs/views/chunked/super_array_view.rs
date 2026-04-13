@@ -288,7 +288,10 @@ fn consolidate_text_slices(slices: &[ArrayV], first_text: &TextArray) -> Array {
         TextArray::String32(_) => consolidate_string_variant!(slices, String32, u32),
         #[cfg(feature = "large_string")]
         TextArray::String64(_) => consolidate_string_variant!(slices, String64, u64),
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         TextArray::Categorical32(_) => consolidate_categorical_slices::<u32>(slices),
         #[cfg(feature = "default_categorical_8")]
         TextArray::Categorical8(_) => consolidate_categorical_slices::<u8>(slices),
@@ -309,7 +312,10 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
 
     // Extract the dictionary from the first slice
     let first_dict = match &slices[0].array {
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         Array::TextArray(TextArray::Categorical32(arr)) => &arr.unique_values,
         #[cfg(feature = "default_categorical_8")]
         Array::TextArray(TextArray::Categorical8(arr)) => &arr.unique_values,
@@ -323,7 +329,10 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
     // Verify all slices share the same dictionary (via pointer comparison)
     let all_same_dict = slices.iter().all(|s| {
         let dict = match &s.array {
-            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+            #[cfg(any(
+                not(feature = "default_categorical_8"),
+                feature = "extended_categorical"
+            ))]
             Array::TextArray(TextArray::Categorical32(arr)) => &arr.unique_values,
             #[cfg(feature = "default_categorical_8")]
             Array::TextArray(TextArray::Categorical8(arr)) => &arr.unique_values,
@@ -354,7 +363,10 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
     let total_len: usize = slices.iter().map(|s| s.len()).sum();
 
     let has_nulls = slices.iter().any(|s| match &s.array {
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         Array::TextArray(TextArray::Categorical32(arr)) => arr.null_mask().is_some(),
         #[cfg(feature = "default_categorical_8")]
         Array::TextArray(TextArray::Categorical8(arr)) => arr.null_mask().is_some(),
@@ -375,7 +387,10 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
 
     for slice in slices {
         let (data, null_mask) = match &slice.array {
-            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+            #[cfg(any(
+                not(feature = "default_categorical_8"),
+                feature = "extended_categorical"
+            ))]
             Array::TextArray(TextArray::Categorical32(arr)) => {
                 // Type-punning since we know T matches
                 let data_slice: &[T] = unsafe {
@@ -447,13 +462,19 @@ fn consolidate_categorical_slices<T: Integer + Default + Clone>(slices: &[ArrayV
 
     // Wrap in appropriate variant
     if std::mem::size_of::<T>() == 4 {
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         {
             Array::TextArray(TextArray::Categorical32(Arc::new(unsafe {
                 std::mem::transmute::<CategoricalArray<T>, CategoricalArray<u32>>(result)
             })))
         }
-        #[cfg(all(feature = "default_categorical_8", not(feature = "extended_categorical")))]
+        #[cfg(all(
+            feature = "default_categorical_8",
+            not(feature = "extended_categorical")
+        ))]
         panic!("Categorical32 not enabled")
     } else if std::mem::size_of::<T>() == 8 {
         #[cfg(feature = "extended_categorical")]
@@ -1138,7 +1159,10 @@ mod tests {
 
     // Categorical Array Consolidation Tests
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     fn fa_categorical(name: &str, vals: &[&str]) -> FieldArray {
         use crate::ffi::arrow_dtype::CategoricalIndexType;
         let string_arr = crate::StringArray::<u32>::from_slice(vals);
@@ -1153,7 +1177,10 @@ mod tests {
         FieldArray::new(field, arr)
     }
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     #[test]
     fn test_consolidate_categorical_single_chunk() {
         let fa1 = fa_categorical("cat", &["a", "b", "a", "c"]);
@@ -1174,7 +1201,10 @@ mod tests {
         }
     }
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     #[test]
     fn test_consolidate_categorical_with_offset() {
         let fa1 = fa_categorical("cat", &["x", "y", "z", "w", "v"]);
@@ -1193,7 +1223,10 @@ mod tests {
         }
     }
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     #[test]
     fn test_consolidate_categorical_same_dict_multiple_chunks() {
         use crate::ffi::arrow_dtype::CategoricalIndexType;

@@ -11,8 +11,65 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  features:
-    name: features • required (nightly)
+  lint:
+    name: lint - rustfmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        run: rustup toolchain install nightly --profile minimal --component rustfmt
+
+      - name: Check formatting
+        run: cargo +nightly fmt --check
+
+  feature-checks:
+    name: check • ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            command: cargo +nightly check --target-dir /tmp/target
+          - name: no-default
+            command: cargo +nightly check --no-default-features --target-dir /tmp/target
+          - name: views
+            command: cargo +nightly check --no-default-features --features views --target-dir /tmp/target
+          - name: chunked
+            command: cargo +nightly check --no-default-features --features chunked --target-dir /tmp/target
+          - name: datetime
+            command: cargo +nightly check --features datetime --target-dir /tmp/target
+          - name: datetime-ops
+            command: cargo +nightly check --features datetime_ops --target-dir /tmp/target
+          - name: broadcast-value-scalar
+            command: cargo +nightly check --features broadcast,value_type,scalar_type --target-dir /tmp/target
+          - name: cast-arrow
+            command: cargo +nightly check --features cast_arrow --target-dir /tmp/target
+          - name: arena-chunked
+            command: cargo +nightly check --features arena,chunked --target-dir /tmp/target
+          - name: all-features
+            command: cargo +nightly check --all-features --target-dir /tmp/target
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (nightly)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: clippy,rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          target-dir: /tmp/target
+
+      - run: ${{ matrix.command }}
+
+  tests:
+    name: tests • required (nightly)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

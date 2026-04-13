@@ -58,8 +58,8 @@
 
 use core::simd::Simd;
 
-use crate::{Bitmask, BitmaskVT};
 use crate::kernels::arithmetic::simd::{W8, W16, W32, W64};
+use crate::{Bitmask, BitmaskVT};
 
 use crate::enums::operators::{LogicalOperator, UnaryOperator};
 use crate::kernels::bitmask::{
@@ -605,10 +605,8 @@ where
     let mut acc = 0usize;
 
     unsafe {
-        let words = std::slice::from_raw_parts(
-            mask.bits.as_ptr().cast::<u64>().add(word_start),
-            n_words,
-        );
+        let words =
+            std::slice::from_raw_parts(mask.bits.as_ptr().cast::<u64>().add(word_start), n_words);
 
         #[cfg(feature = "simd")]
         {
@@ -735,14 +733,13 @@ where
     true
 }
 
-
 /// Generates a SIMD equality mask function for a given element type and lane count.
 /// Processes LANES elements per iteration, with a scalar tail for the remainder.
 macro_rules! impl_simd_eq_mask {
     ($fn_name:ident, $t:ty, $lanes:expr) => {
         pub fn $fn_name(data: &[$t], field_mask: $t, target: $t) -> Bitmask {
-            use vec64::Vec64;
             use std::simd::cmp::SimdPartialEq;
+            use vec64::Vec64;
             let n = data.len();
             let n_bytes = (n + 7) / 8;
             let mut bytes = Vec64::<u8>::with_capacity(n_bytes);
@@ -786,7 +783,6 @@ impl_simd_eq_mask!(simd_eq_mask_u8, u8, W8);
 impl_simd_eq_mask!(simd_eq_mask_u16, u16, W16);
 impl_simd_eq_mask!(simd_eq_mask_u32, u32, W32);
 impl_simd_eq_mask!(simd_eq_mask_u64, u64, W64);
-
 
 #[cfg(test)]
 mod tests {

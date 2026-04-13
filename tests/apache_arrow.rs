@@ -26,7 +26,7 @@ use arrow::datatypes::{DataType as ADataType, TimeUnit as ATimeUnit};
 use arrow::record_batch::RecordBatch;
 
 use minarrow::{
-    fa_i32, fa_str32, fa_u32, Array as MArray, ArrowType, Field, NumericArray, Table, TextArray,
+    Array as MArray, ArrowType, Field, NumericArray, Table, TextArray, fa_i32, fa_str32, fa_u32,
 };
 
 #[cfg(feature = "datetime")]

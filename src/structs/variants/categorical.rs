@@ -812,7 +812,9 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
     fn append_array(&mut self, other: &Self) {
         let orig_len = self.len();
         let other_len = other.len();
-        if other_len == 0 { return; }
+        if other_len == 0 {
+            return;
+        }
 
         self.data_mut().extend_from_slice(other.data());
 
@@ -832,16 +834,27 @@ impl<T: Integer> MaskedArray for CategoricalArray<T> {
         }
     }
 
-    fn append_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), MinarrowError> {
-        if len == 0 { return Ok(()); }
+    fn append_range(
+        &mut self,
+        other: &Self,
+        offset: usize,
+        len: usize,
+    ) -> Result<(), MinarrowError> {
+        if len == 0 {
+            return Ok(());
+        }
         if offset + len > other.len() {
-            return Err(MinarrowError::IndexError(
-                format!("append_range: offset {} + len {} exceeds source length {}", offset, len, other.len())
-            ));
+            return Err(MinarrowError::IndexError(format!(
+                "append_range: offset {} + len {} exceeds source length {}",
+                offset,
+                len,
+                other.len()
+            )));
         }
         let orig_len = self.len();
 
-        self.data_mut().extend_from_slice(&other.data()[offset..offset + len]);
+        self.data_mut()
+            .extend_from_slice(&other.data()[offset..offset + len]);
 
         match (self.null_mask_mut(), other.null_mask()) {
             (Some(self_mask), Some(other_mask)) => {

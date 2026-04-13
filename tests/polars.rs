@@ -18,9 +18,7 @@
 
 use std::sync::Arc;
 
-use minarrow::{
-    fa_i32, fa_str32, fa_u32, Array, ArrowType, Field, NumericArray, Table, TextArray,
-};
+use minarrow::{Array, ArrowType, Field, NumericArray, Table, TextArray, fa_i32, fa_str32, fa_u32};
 #[cfg(feature = "datetime")]
 use minarrow::{TemporalArray, TimeUnit};
 use polars::prelude::*;

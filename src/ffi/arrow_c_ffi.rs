@@ -352,7 +352,10 @@ pub fn fmt_c(dtype: ArrowType) -> CString {
             CategoricalIndexType::UInt8 => b"C",
             #[cfg(feature = "extended_categorical")]
             CategoricalIndexType::UInt16 => b"S",
-            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+            #[cfg(any(
+                not(feature = "default_categorical_8"),
+                feature = "extended_categorical"
+            ))]
             CategoricalIndexType::UInt32 => b"I",
             #[cfg(feature = "extended_categorical")]
             CategoricalIndexType::UInt64 => b"L",
@@ -445,7 +448,10 @@ pub fn export_to_c(array: Arc<Array>, schema: Schema) -> (*mut ArrowArray, *mut 
         Array::TextArray(TextArray::String64(s)) => {
             export_string_array_to_c(&array, schema, s.len() as i64)
         }
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         Array::TextArray(TextArray::Categorical32(cat)) => export_categorical_array_to_c(
             &array,
             schema,
@@ -573,7 +579,10 @@ fn export_categorical_array_to_c(
         8 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt8),
         #[cfg(feature = "extended_categorical")]
         16 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt16),
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         32 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt32),
         #[cfg(feature = "extended_categorical")]
         64 => ArrowType::Dictionary(crate::ffi::arrow_dtype::CategoricalIndexType::UInt64),
@@ -724,7 +733,10 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
 
     // When default_categorical_8 is on without extended_categorical and Arrow sends
     // i32 dictionary indices, narrow them to u8 before building CategoricalArray<u8>
-    #[cfg(all(feature = "default_categorical_8", not(feature = "extended_categorical")))]
+    #[cfg(all(
+        feature = "default_categorical_8",
+        not(feature = "extended_categorical")
+    ))]
     if is_dict && matches!(dtype, ArrowType::Int32 | ArrowType::UInt32) {
         return unsafe { import_categorical_narrow_to_u8(arr, sch, None) };
     }
@@ -739,7 +751,10 @@ pub unsafe fn import_from_c(arr_ptr: *const ArrowArray, sch_ptr: *const ArrowSch
             #[cfg(feature = "extended_numeric_types")]
             #[cfg(feature = "extended_categorical")]
             ArrowType::Int16 | ArrowType::UInt16 => CategoricalIndexType::UInt16,
-            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+            #[cfg(any(
+                not(feature = "default_categorical_8"),
+                feature = "extended_categorical"
+            ))]
             ArrowType::Int32 | ArrowType::UInt32 => CategoricalIndexType::UInt32,
             #[cfg(feature = "extended_numeric_types")]
             #[cfg(feature = "extended_categorical")]
@@ -896,7 +911,10 @@ pub unsafe fn import_from_c_owned(
                         #[cfg(not(feature = "extended_categorical"))]
                         panic!("Extended categorical not enabled")
                     }
-                    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                    #[cfg(any(
+                        not(feature = "default_categorical_8"),
+                        feature = "extended_categorical"
+                    ))]
                     ArrowType::Int32 | ArrowType::UInt32 => CategoricalIndexType::UInt32,
                     #[cfg(feature = "extended_numeric_types")]
                     ArrowType::Int64 | ArrowType::UInt64 => {
@@ -996,8 +1014,14 @@ unsafe fn import_array_zero_copy(
         let sch = unsafe { &*sch_ptr };
 
         // Narrow i32 Arrow dictionary indices to u8 when only CategoricalArray<u8> is available
-        #[cfg(all(feature = "default_categorical_8", not(feature = "extended_categorical")))]
-        if matches!(dtype, ArrowType::Int32 | ArrowType::UInt32 | ArrowType::Dictionary(_)) {
+        #[cfg(all(
+            feature = "default_categorical_8",
+            not(feature = "extended_categorical")
+        ))]
+        if matches!(
+            dtype,
+            ArrowType::Int32 | ArrowType::UInt32 | ArrowType::Dictionary(_)
+        ) {
             return unsafe { import_categorical_narrow_to_u8(arr, sch, Some(arr_box)) };
         }
 
@@ -1017,7 +1041,10 @@ unsafe fn import_array_zero_copy(
                         feature = "extended_categorical"
                     ))]
                     ArrowType::Int16 | ArrowType::UInt16 => CategoricalIndexType::UInt16,
-                    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                    #[cfg(any(
+                        not(feature = "default_categorical_8"),
+                        feature = "extended_categorical"
+                    ))]
                     ArrowType::Int32 | ArrowType::UInt32 => CategoricalIndexType::UInt32,
                     #[cfg(all(
                         feature = "extended_numeric_types",
@@ -1553,7 +1580,10 @@ unsafe fn import_categorical(
             let arr = CategoricalArray::<u16>::new(codes_buf, dict_strings, null_mask);
             Arc::new(Array::TextArray(TextArray::Categorical16(Arc::new(arr))))
         }
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         CategoricalIndexType::UInt32 => {
             let codes_buf = unsafe { build_codes::<u32>(codes_ptr, len, ownership) };
             let arr = CategoricalArray::<u32>::new(codes_buf, dict_strings, null_mask);
@@ -1577,7 +1607,10 @@ unsafe fn import_categorical(
 ///
 /// # Safety
 /// Caller must ensure the ArrowArray and ArrowSchema pointers are valid.
-#[cfg(all(feature = "default_categorical_8", not(feature = "extended_categorical")))]
+#[cfg(all(
+    feature = "default_categorical_8",
+    not(feature = "extended_categorical")
+))]
 unsafe fn import_categorical_narrow_to_u8(
     arr: &ArrowArray,
     sch: &ArrowSchema,
@@ -2640,11 +2673,17 @@ unsafe fn field_from_c_schema(schema: &ArrowSchema) -> crate::Field {
             b"c" | b"C" => CategoricalIndexType::UInt8,
             #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
             b"s" | b"S" => CategoricalIndexType::UInt16,
-            #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+            #[cfg(any(
+                not(feature = "default_categorical_8"),
+                feature = "extended_categorical"
+            ))]
             b"i" | b"I" => CategoricalIndexType::UInt32,
             // When default_categorical_8 is on without extended_categorical,
             // record as UInt8 for schema purposes - actual narrowing happens at import time
-            #[cfg(all(feature = "default_categorical_8", not(feature = "extended_categorical")))]
+            #[cfg(all(
+                feature = "default_categorical_8",
+                not(feature = "extended_categorical")
+            ))]
             b"i" | b"I" => CategoricalIndexType::UInt8,
             #[cfg(all(feature = "extended_numeric_types", feature = "extended_categorical"))]
             b"l" | b"L" => CategoricalIndexType::UInt64,

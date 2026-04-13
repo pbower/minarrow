@@ -531,7 +531,10 @@ macro_rules! string_to_cat {
 string_to_cat!(u32, u8);
 #[cfg(feature = "extended_categorical")]
 string_to_cat!(u32, u16);
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 string_to_cat!(u32, u32);
 #[cfg(feature = "extended_categorical")]
 string_to_cat!(u32, u64);
@@ -542,7 +545,10 @@ string_to_cat!(u64, u8);
 #[cfg(feature = "large_string")]
 string_to_cat!(u64, u16);
 #[cfg(feature = "large_string")]
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 string_to_cat!(u64, u32);
 #[cfg(feature = "extended_categorical")]
 #[cfg(feature = "large_string")]
@@ -592,7 +598,10 @@ macro_rules! cat_to_string {
 cat_to_string!(u8, u32);
 #[cfg(feature = "extended_categorical")]
 cat_to_string!(u16, u32);
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 cat_to_string!(u32, u32);
 #[cfg(feature = "extended_categorical")]
 cat_to_string!(u64, u32);
@@ -603,7 +612,10 @@ cat_to_string!(u8, u64);
 #[cfg(feature = "extended_categorical")]
 cat_to_string!(u16, u64);
 #[cfg(feature = "large_string")]
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 cat_to_string!(u32, u64);
 #[cfg(feature = "large_string")]
 #[cfg(feature = "extended_categorical")]
@@ -982,7 +994,10 @@ impl View for Arc<CategoricalArray<u16>> {
     type BufferT = u16;
 }
 
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 impl From<Arc<CategoricalArray<u32>>> for Array {
     fn from(a: Arc<CategoricalArray<u32>>) -> Self {
         Array::TextArray(TextArray::Categorical32(a))
@@ -990,7 +1005,10 @@ impl From<Arc<CategoricalArray<u32>>> for Array {
 }
 
 #[cfg(feature = "views")]
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 impl View for Arc<CategoricalArray<u32>> {
     type BufferT = u32;
 }
@@ -1223,7 +1241,10 @@ impl View for CategoricalArray<u16> {
     type BufferT = u16;
 }
 
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 impl From<CategoricalArray<u32>> for Array {
     fn from(a: CategoricalArray<u32>) -> Self {
         Array::TextArray(TextArray::Categorical32(a.into()))
@@ -1231,7 +1252,10 @@ impl From<CategoricalArray<u32>> for Array {
 }
 
 #[cfg(feature = "views")]
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 impl View for CategoricalArray<u32> {
     type BufferT = u32;
 }

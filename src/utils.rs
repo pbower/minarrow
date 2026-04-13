@@ -256,9 +256,7 @@ pub fn write_simd_mask_bits<T: MaskElement, const N: usize>(
     out_mask: &mut Bitmask,
     offset: usize,
     m: Mask<T, N>,
-)
-where
-{
+) {
     let mbits = m.to_bitmask();
     let word_idx = offset / 64;
     let bit_shift = offset % 64;
@@ -456,8 +454,7 @@ pub fn create_aligned_chunks_from_array(
                     ),
                 });
             }
-            let view = array.view(start, chunk_len);
-            let mut array_chunk = view.array.slice_clone(view.offset, view.len());
+            let mut array_chunk = array.slice_clone(start, chunk_len);
 
             // Apply portion of full_mask to this chunk
             if let Some(ref mask) = full_mask {

@@ -14,19 +14,23 @@
 
 #[cfg(feature = "cube")]
 use crate::Cube;
+#[cfg(all(feature = "scalar_type", feature = "datetime"))]
+use crate::DatetimeArray;
 #[cfg(feature = "chunked")]
 use crate::SuperArrayV;
+#[cfg(all(feature = "views", feature = "datetime"))]
+use crate::TemporalArrayV;
 use crate::enums::error::MinarrowError;
 use crate::enums::operators::ArithmeticOperator;
 use crate::kernels::broadcast::broadcast_value;
 use crate::kernels::routing::arithmetic::resolve_binary_arithmetic;
 use crate::structs::field_array::create_field_for_array;
 use crate::{
-    Array, BooleanArray, CategoricalArray, DatetimeArray, FieldArray, FloatArray, IntegerArray,
-    Scalar, StringArray, Table, TableV, TextArray, Value,
+    Array, BooleanArray, CategoricalArray, FieldArray, FloatArray, IntegerArray, Scalar,
+    StringArray, Table, TableV, TextArray, Value,
 };
 #[cfg(feature = "views")]
-use crate::{NumericArrayV, TemporalArrayV, TextArrayV};
+use crate::{NumericArrayV, TextArrayV};
 #[cfg(feature = "chunked")]
 use crate::{SuperArray, SuperTable, SuperTableV};
 use std::sync::Arc;
@@ -305,7 +309,11 @@ pub fn broadcast_scalar_to_cube(
         let broadcasted = broadcast_scalar_to_table(op, scalar, table)?;
         result_tables.push(broadcasted);
     }
-    Ok(Cube::from_tables(result_tables, cube.name.clone(), cube.third_dim_index.clone()))
+    Ok(Cube::from_tables(
+        result_tables,
+        cube.name.clone(),
+        cube.third_dim_index.clone(),
+    ))
 }
 
 /// Broadcast scalar to Tuple2
@@ -566,7 +574,10 @@ pub fn broadcast_scalar_to_text_arrayview(
         (Scalar::String32(val), TextArray::Categorical16(_)) => {
             Array::from_categorical16(CategoricalArray::<u16>::from_values(vec![val.as_str()]))
         }
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         (Scalar::String32(val), TextArray::Categorical32(_)) => {
             Array::from_categorical32(CategoricalArray::<u32>::from_values(vec![val.as_str()]))
         }
@@ -582,7 +593,13 @@ pub fn broadcast_scalar_to_text_arrayview(
         (Scalar::String64(val), TextArray::Categorical16(_)) => {
             Array::from_categorical16(CategoricalArray::<u16>::from_values(vec![val.as_str()]))
         }
-        #[cfg(all(feature = "large_string", any(not(feature = "default_categorical_8"), feature = "extended_categorical")))]
+        #[cfg(all(
+            feature = "large_string",
+            any(
+                not(feature = "default_categorical_8"),
+                feature = "extended_categorical"
+            )
+        ))]
         (Scalar::String64(val), TextArray::Categorical32(_)) => {
             Array::from_categorical32(CategoricalArray::<u32>::from_values(vec![val.as_str()]))
         }
@@ -665,7 +682,10 @@ pub fn broadcast_text_arrayview_to_scalar(
         (TextArray::Categorical16(_), Scalar::String32(val)) => {
             Array::from_categorical16(CategoricalArray::<u16>::from_values(vec![val.as_str()]))
         }
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         (TextArray::Categorical32(_), Scalar::String32(val)) => {
             Array::from_categorical32(CategoricalArray::<u32>::from_values(vec![val.as_str()]))
         }
@@ -681,7 +701,13 @@ pub fn broadcast_text_arrayview_to_scalar(
         (TextArray::Categorical16(_), Scalar::String64(val)) => {
             Array::from_categorical16(CategoricalArray::<u16>::from_values(vec![val.as_str()]))
         }
-        #[cfg(all(feature = "large_string", any(not(feature = "default_categorical_8"), feature = "extended_categorical")))]
+        #[cfg(all(
+            feature = "large_string",
+            any(
+                not(feature = "default_categorical_8"),
+                feature = "extended_categorical"
+            )
+        ))]
         (TextArray::Categorical32(_), Scalar::String64(val)) => {
             Array::from_categorical32(CategoricalArray::<u32>::from_values(vec![val.as_str()]))
         }
@@ -824,7 +850,7 @@ pub fn broadcast_fieldarray_to_scalar(
 }
 
 /// Broadcast scalar to TemporalArrayView
-#[cfg(all(feature = "scalar_type", feature = "datetime"))]
+#[cfg(all(feature = "scalar_type", feature = "datetime", feature = "views"))]
 pub fn broadcast_scalar_to_temporal_arrayview(
     op: ArithmeticOperator,
     scalar: &Scalar,
@@ -876,7 +902,7 @@ pub fn broadcast_scalar_to_temporal_arrayview(
 }
 
 /// Broadcast TemporalArrayView to scalar
-#[cfg(all(feature = "scalar_type", feature = "datetime"))]
+#[cfg(all(feature = "scalar_type", feature = "datetime", feature = "views"))]
 pub fn broadcast_temporal_arrayview_to_scalar(
     op: ArithmeticOperator,
     temporal_view: &TemporalArrayV,

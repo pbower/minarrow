@@ -79,25 +79,47 @@ impl Matrix {
         let len = stride * n_cols;
         let mut data = Vec64::with_capacity(len);
         data.0.resize(len, 0.0);
-        Matrix { n_rows, n_cols, stride, data, name }
+        Matrix {
+            n_rows,
+            n_cols,
+            stride,
+            data,
+            name,
+        }
     }
 
     /// Constructs a Matrix from a pre-padded Vec64 buffer.
     /// The buffer must already have `stride * n_cols` elements with the correct
     /// stride layout. Use `from_f64_unaligned` if your data is unpadded.
-    pub fn from_f64_aligned(data: Vec64<f64>, n_rows: usize, n_cols: usize, name: Option<String>) -> Self {
+    pub fn from_f64_aligned(
+        data: Vec64<f64>,
+        n_rows: usize,
+        n_cols: usize,
+        name: Option<String>,
+    ) -> Self {
         let stride = aligned_stride(n_rows);
         assert_eq!(
             data.len(),
             stride * n_cols,
             "Matrix: padded buffer length does not match stride * n_cols"
         );
-        Matrix { n_rows, n_cols, stride, data, name }
+        Matrix {
+            n_rows,
+            n_cols,
+            stride,
+            data,
+            name,
+        }
     }
 
     /// Constructs a Matrix from a flat column-major buffer without stride padding.
     /// The data is re-laid out with 64-byte aligned column padding.
-    pub fn from_f64_unaligned(src: &[f64], n_rows: usize, n_cols: usize, name: Option<String>) -> Self {
+    pub fn from_f64_unaligned(
+        src: &[f64],
+        n_rows: usize,
+        n_cols: usize,
+        name: Option<String>,
+    ) -> Self {
         assert_eq!(
             src.len(),
             n_rows * n_cols,
@@ -107,7 +129,13 @@ impl Matrix {
         if stride == n_rows {
             // No padding needed, take ownership directly
             let data = Vec64::from(src);
-            return Matrix { n_rows, n_cols, stride, data, name };
+            return Matrix {
+                n_rows,
+                n_cols,
+                stride,
+                data,
+                name,
+            };
         }
         // Re-layout with padding between columns
         let mut data = Vec64::with_capacity(stride * n_cols);
@@ -118,7 +146,13 @@ impl Matrix {
             data.as_mut_slice()[dst_start..dst_start + n_rows]
                 .copy_from_slice(&src[src_start..src_start + n_rows]);
         }
-        Matrix { n_rows, n_cols, stride, data, name }
+        Matrix {
+            n_rows,
+            n_cols,
+            stride,
+            data,
+            name,
+        }
     }
 
     /// Returns the value at (row, col) (0-based). Panics if out of bounds.
@@ -208,7 +242,9 @@ impl Matrix {
     #[inline]
     pub fn row(&self, row: usize) -> Vec<f64> {
         debug_assert!(row < self.n_rows, "Row out of bounds");
-        (0..self.n_cols).map(|col| self.data[col * self.stride + row]).collect()
+        (0..self.n_cols)
+            .map(|col| self.data[col * self.stride + row])
+            .collect()
     }
 
     /// Sets the matrix name.
@@ -264,7 +300,9 @@ impl Matrix {
             return Err(MinarrowError::ShapeError {
                 message: format!(
                     "to_table: expected {} fields for {} columns, got {}",
-                    self.n_cols, self.n_cols, fields.len()
+                    self.n_cols,
+                    self.n_cols,
+                    fields.len()
                 ),
             });
         }
@@ -295,7 +333,14 @@ impl Matrix {
     pub fn to_table_gen(self) -> Table {
         let n_cols = self.n_cols;
         let fields: Vec<Field> = (0..n_cols)
-            .map(|i| Field::new(format!("col_{}", i), crate::ffi::arrow_dtype::ArrowType::Float64, false, None))
+            .map(|i| {
+                Field::new(
+                    format!("col_{}", i),
+                    crate::ffi::arrow_dtype::ArrowType::Float64,
+                    false,
+                    None,
+                )
+            })
             .collect();
         self.to_table(fields).unwrap()
     }
@@ -336,11 +381,7 @@ impl Concatenate for Matrix {
 
         // Handle empty matrices
         if self.is_empty() && other.is_empty() {
-            return Ok(Matrix::new(
-                0,
-                0,
-                None,
-            ));
+            return Ok(Matrix::new(0, 0, None));
         }
 
         let result_n_rows = self.n_rows + other.n_rows;
@@ -373,8 +414,11 @@ impl fmt::Debug for Matrix {
         write!(
             f,
             "Matrix{}: {} × {} [col-major]",
-            self.name.as_deref().map_or(String::new(), |n| format!(" '{}'", n)),
-            self.n_rows, self.n_cols
+            self.name
+                .as_deref()
+                .map_or(String::new(), |n| format!(" '{}'", n)),
+            self.n_rows,
+            self.n_cols
         )?;
         for row in 0..self.n_rows.min(6) {
             // Print up to 6 rows
@@ -415,7 +459,13 @@ impl From<Vec<FloatArray<f64>>> for Matrix {
                 data.extend_from_slice(&[0.0; ALIGN_ELEMS][..pad]);
             }
         }
-        Matrix { n_rows, n_cols, stride, data, name: None }
+        Matrix {
+            n_rows,
+            n_cols,
+            stride,
+            data,
+            name: None,
+        }
     }
 }
 
@@ -445,7 +495,13 @@ impl From<&[FloatArray<f64>]> for Matrix {
                 data.extend_from_slice(&[0.0; ALIGN_ELEMS][..pad]);
             }
         }
-        Matrix { n_rows, n_cols, stride, data, name: None }
+        Matrix {
+            n_rows,
+            n_cols,
+            stride,
+            data,
+            name: None,
+        }
     }
 }
 
@@ -453,7 +509,11 @@ impl TryFrom<&Table> for Matrix {
     type Error = MinarrowError;
 
     fn try_from(table: &Table) -> Result<Self, Self::Error> {
-        let name = if table.name.is_empty() { None } else { Some(table.name.clone()) };
+        let name = if table.name.is_empty() {
+            None
+        } else {
+            Some(table.name.clone())
+        };
         let n_cols = table.n_cols();
         let n_rows = table.n_rows;
         let stride = aligned_stride(n_rows);
@@ -480,7 +540,13 @@ impl TryFrom<&Table> for Matrix {
             }
         }
 
-        Ok(Matrix { n_rows, n_cols, stride, data, name })
+        Ok(Matrix {
+            n_rows,
+            n_cols,
+            stride,
+            data,
+            name,
+        })
     }
 }
 
@@ -509,7 +575,13 @@ impl From<&[Vec<f64>]> for Matrix {
                 data.extend_from_slice(&[0.0; ALIGN_ELEMS][..pad]);
             }
         }
-        Matrix { n_rows, n_cols, stride, data, name: None }
+        Matrix {
+            n_rows,
+            n_cols,
+            stride,
+            data,
+            name: None,
+        }
     }
 }
 

@@ -192,7 +192,10 @@ impl Array {
     }
 
     /// Creates an Array enum with a Categorical32 array.
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     pub fn from_categorical32(arr: CategoricalArray<u32>) -> Self {
         Array::TextArray(TextArray::Categorical32(Arc::new(arr)))
     }
@@ -490,7 +493,10 @@ impl Array {
     }
 
     /// Returns a reference to the inner `CategoricalArray<u32>`.
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     pub fn try_cat32_ref(&self) -> Result<&CategoricalArray<u32>, MinarrowError> {
         match self {
             Array::TextArray(TextArray::Categorical32(arc)) => Ok(arc.as_ref()),
@@ -737,7 +743,10 @@ impl Array {
                     NumericArray::Int32(Arc::new(IntegerArray::<i32>::from_vec64(out, Some(mask))))
                 }
 
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(cat) => {
                     let mut out = Vec64::with_capacity(cat.len());
                     let mut mask = Bitmask::with_capacity(cat.len());
@@ -1152,7 +1161,10 @@ impl Array {
         match_arm!(TextArray, Categorical8, CategoricalArray<u8>);
         #[cfg(feature = "extended_categorical")]
         match_arm!(TextArray, Categorical16, CategoricalArray<u16>);
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         match_arm!(TextArray, Categorical32, CategoricalArray<u32>);
         #[cfg(feature = "extended_categorical")]
         match_arm!(TextArray, Categorical64, CategoricalArray<u64>);
@@ -1223,7 +1235,10 @@ impl Array {
         match_arm!(TextArray, Categorical8, CategoricalArray<u8>);
         #[cfg(feature = "extended_categorical")]
         match_arm!(TextArray, Categorical16, CategoricalArray<u16>);
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         match_arm!(TextArray, Categorical32, CategoricalArray<u32>);
         #[cfg(feature = "extended_categorical")]
         match_arm!(TextArray, Categorical64, CategoricalArray<u64>);
@@ -1292,7 +1307,10 @@ impl Array {
         match_inner_type!(TextArray, Categorical8, CategoricalArray<u8>);
         #[cfg(feature = "extended_categorical")]
         match_inner_type!(TextArray, Categorical16, CategoricalArray<u16>);
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         match_inner_type!(TextArray, Categorical32, CategoricalArray<u32>);
         #[cfg(feature = "extended_categorical")]
         match_inner_type!(TextArray, Categorical64, CategoricalArray<u64>);
@@ -1356,7 +1374,10 @@ impl Array {
         match_inner_type_mut!(TextArray, Categorical8, CategoricalArray<u8>);
         #[cfg(feature = "extended_categorical")]
         match_inner_type_mut!(TextArray, Categorical16, CategoricalArray<u16>);
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         match_inner_type_mut!(TextArray, Categorical32, CategoricalArray<u32>);
         #[cfg(feature = "extended_categorical")]
         match_inner_type_mut!(TextArray, Categorical64, CategoricalArray<u64>);
@@ -1446,7 +1467,10 @@ impl Array {
                 TextArray::Categorical16(arr) => {
                     cast_slice::<u16, T>(arr.data(), offset, len).expect("cast failed")
                 }
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(arr) => {
                     cast_slice::<u32, T>(arr.data(), offset, len).expect("cast failed")
                 }
@@ -1534,7 +1558,10 @@ impl Array {
                 TextArray::String64(a) if TypeId::of::<T>() == TypeId::of::<u8>() => {
                     cast_slice::<u8, T>(&a.data, offset, len)
                 }
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(a) if TypeId::of::<T>() == TypeId::of::<u32>() => {
                     cast_slice::<u32, T>(&a.data, offset, len)
                 }
@@ -1605,7 +1632,10 @@ impl Array {
                 TextArray::Categorical16(arr) => {
                     TextArray::Categorical16(arr.slice_clone(offset, len))
                 }
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(arr) => {
                     TextArray::Categorical32(arr.slice_clone(offset, len))
                 }
@@ -1658,7 +1688,10 @@ impl Array {
                 TextArray::Categorical8(_) => ArrowType::Dictionary(CategoricalIndexType::UInt8),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(_) => ArrowType::Dictionary(CategoricalIndexType::UInt16),
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(_) => ArrowType::Dictionary(CategoricalIndexType::UInt32),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical64(_) => ArrowType::Dictionary(CategoricalIndexType::UInt64),
@@ -1690,7 +1723,10 @@ impl Array {
     pub fn is_categorical_array(&self) -> bool {
         match self {
             Array::TextArray(text) => match text {
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(_) => true,
                 #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(_) => true,
@@ -1719,7 +1755,10 @@ impl Array {
                 TextArray::String32(_) => true,
                 #[cfg(feature = "large_string")]
                 TextArray::String64(_) => true,
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(_) => false,
                 #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(_) => false,
@@ -1745,7 +1784,10 @@ impl Array {
                 TextArray::String32(_) => true,
                 #[cfg(feature = "large_string")]
                 TextArray::String64(_) => true,
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(_) => true,
                 #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(_) => true,
@@ -1909,7 +1951,10 @@ impl Array {
                 TextArray::Categorical8(arr) => arr.null_mask.as_ref(),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(arr) => arr.null_mask.as_ref(),
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(arr) => arr.null_mask.as_ref(),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical64(arr) => arr.null_mask.as_ref(),
@@ -1971,7 +2016,10 @@ impl Array {
                 TextArray::String32(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(a) => Some(Scalar::String64(a.get_str(idx)?.to_owned())),
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
                 #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(a) => Some(Scalar::String32(a.get_str(idx)?.to_owned())),
@@ -2000,43 +2048,49 @@ impl Array {
         let mask = Bitmask::with_capacity(n_rows);
         match arrow_type {
             ArrowType::Null => Array::Null,
-            ArrowType::Boolean => {
-                Array::BooleanArray(Arc::new(BooleanArray::from_vec(vec![false; n_rows], Some(mask))))
-            }
+            ArrowType::Boolean => Array::BooleanArray(Arc::new(BooleanArray::from_vec(
+                vec![false; n_rows],
+                Some(mask),
+            ))),
             #[cfg(feature = "extended_numeric_types")]
-            ArrowType::Int8 => {
-                Array::from_int8(IntegerArray::new(Vec64::from_slice(&vec![0i8; n_rows]), Some(mask)))
-            }
+            ArrowType::Int8 => Array::from_int8(IntegerArray::new(
+                Vec64::from_slice(&vec![0i8; n_rows]),
+                Some(mask),
+            )),
             #[cfg(feature = "extended_numeric_types")]
-            ArrowType::Int16 => {
-                Array::from_int16(IntegerArray::new(Vec64::from_slice(&vec![0i16; n_rows]), Some(mask)))
-            }
-            ArrowType::Int32 => {
-                Array::from_int32(IntegerArray::new(Vec64::from_slice(&vec![0i32; n_rows]), Some(mask)))
-            }
-            ArrowType::Int64 => {
-                Array::from_int64(IntegerArray::new(Vec64::from_slice(&vec![0i64; n_rows]), Some(mask)))
-            }
+            ArrowType::Int16 => Array::from_int16(IntegerArray::new(
+                Vec64::from_slice(&vec![0i16; n_rows]),
+                Some(mask),
+            )),
+            ArrowType::Int32 => Array::from_int32(IntegerArray::new(
+                Vec64::from_slice(&vec![0i32; n_rows]),
+                Some(mask),
+            )),
+            ArrowType::Int64 => Array::from_int64(IntegerArray::new(
+                Vec64::from_slice(&vec![0i64; n_rows]),
+                Some(mask),
+            )),
             #[cfg(feature = "extended_numeric_types")]
-            ArrowType::UInt8 => {
-                Array::NumericArray(NumericArray::UInt8(Arc::new(IntegerArray::new(Vec64::from_slice(&vec![0u8; n_rows]), Some(mask)))))
-            }
+            ArrowType::UInt8 => Array::NumericArray(NumericArray::UInt8(Arc::new(
+                IntegerArray::new(Vec64::from_slice(&vec![0u8; n_rows]), Some(mask)),
+            ))),
             #[cfg(feature = "extended_numeric_types")]
-            ArrowType::UInt16 => {
-                Array::NumericArray(NumericArray::UInt16(Arc::new(IntegerArray::new(Vec64::from_slice(&vec![0u16; n_rows]), Some(mask)))))
-            }
-            ArrowType::UInt32 => {
-                Array::NumericArray(NumericArray::UInt32(Arc::new(IntegerArray::new(Vec64::from_slice(&vec![0u32; n_rows]), Some(mask)))))
-            }
-            ArrowType::UInt64 => {
-                Array::NumericArray(NumericArray::UInt64(Arc::new(IntegerArray::new(Vec64::from_slice(&vec![0u64; n_rows]), Some(mask)))))
-            }
-            ArrowType::Float32 => {
-                Array::NumericArray(NumericArray::Float32(Arc::new(FloatArray::new(Vec64::from_slice(&vec![0.0f32; n_rows]), Some(mask)))))
-            }
-            ArrowType::Float64 => {
-                Array::from_float64(FloatArray::new(Vec64::from_slice(&vec![0.0f64; n_rows]), Some(mask)))
-            }
+            ArrowType::UInt16 => Array::NumericArray(NumericArray::UInt16(Arc::new(
+                IntegerArray::new(Vec64::from_slice(&vec![0u16; n_rows]), Some(mask)),
+            ))),
+            ArrowType::UInt32 => Array::NumericArray(NumericArray::UInt32(Arc::new(
+                IntegerArray::new(Vec64::from_slice(&vec![0u32; n_rows]), Some(mask)),
+            ))),
+            ArrowType::UInt64 => Array::NumericArray(NumericArray::UInt64(Arc::new(
+                IntegerArray::new(Vec64::from_slice(&vec![0u64; n_rows]), Some(mask)),
+            ))),
+            ArrowType::Float32 => Array::NumericArray(NumericArray::Float32(Arc::new(
+                FloatArray::new(Vec64::from_slice(&vec![0.0f32; n_rows]), Some(mask)),
+            ))),
+            ArrowType::Float64 => Array::from_float64(FloatArray::new(
+                Vec64::from_slice(&vec![0.0f64; n_rows]),
+                Some(mask),
+            )),
             ArrowType::String => {
                 let strs: Vec<&str> = vec![""; n_rows];
                 let mut arr = StringArray::<u32>::from_slice(&strs);
@@ -2059,7 +2113,10 @@ impl Array {
                         arr.null_mask = Some(mask);
                         Array::TextArray(TextArray::Categorical8(Arc::new(arr)))
                     }
-                    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                    #[cfg(any(
+                        not(feature = "default_categorical_8"),
+                        feature = "extended_categorical"
+                    ))]
                     CategoricalIndexType::UInt32 => {
                         let mut arr = CategoricalArray::<u32>::from_vec(strs, None);
                         arr.null_mask = Some(mask);
@@ -2072,18 +2129,24 @@ impl Array {
             #[cfg(feature = "datetime")]
             ArrowType::Date32 | ArrowType::Time32(_) | ArrowType::Duration32(_) => {
                 Array::TemporalArray(crate::TemporalArray::Datetime32(Arc::new(
-                    crate::DatetimeArray::new(Vec64::from_slice(&vec![0i32; n_rows]), Some(mask), None),
+                    crate::DatetimeArray::new(
+                        Vec64::from_slice(&vec![0i32; n_rows]),
+                        Some(mask),
+                        None,
+                    ),
                 )))
             }
             #[cfg(feature = "datetime")]
             ArrowType::Date64
             | ArrowType::Time64(_)
             | ArrowType::Duration64(_)
-            | ArrowType::Timestamp(_, _) => {
-                Array::TemporalArray(crate::TemporalArray::Datetime64(Arc::new(
-                    crate::DatetimeArray::new(Vec64::from_slice(&vec![0i64; n_rows]), Some(mask), None),
-                )))
-            }
+            | ArrowType::Timestamp(_, _) => Array::TemporalArray(crate::TemporalArray::Datetime64(
+                Arc::new(crate::DatetimeArray::new(
+                    Vec64::from_slice(&vec![0i64; n_rows]),
+                    Some(mask),
+                    None,
+                )),
+            )),
             #[cfg(feature = "datetime")]
             ArrowType::Interval(_) => Array::Null,
             ArrowType::Utf8View => {
@@ -2119,12 +2182,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::Float64(v) => data.push(*v),
-                        Scalar::Null => { data.push(0.0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0.0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64()),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::from_float64(FloatArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+                Array::from_float64(FloatArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))
             }
             Scalar::Float32(_) => {
                 let mut data = Vec64::<f32>::with_capacity(scalars.len());
@@ -2132,12 +2201,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::Float32(v) => data.push(*v),
-                        Scalar::Null => { data.push(0.0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0.0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64() as f32),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::NumericArray(NumericArray::Float32(Arc::new(FloatArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))))
+                Array::NumericArray(NumericArray::Float32(Arc::new(FloatArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))))
             }
             Scalar::Int32(_) => {
                 let mut data = Vec64::<i32>::with_capacity(scalars.len());
@@ -2145,12 +2220,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::Int32(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64() as i32),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::from_int32(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+                Array::from_int32(IntegerArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))
             }
             Scalar::Int64(_) => {
                 let mut data = Vec64::<i64>::with_capacity(scalars.len());
@@ -2158,12 +2239,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::Int64(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64() as i64),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::from_int64(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+                Array::from_int64(IntegerArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))
             }
             Scalar::UInt32(_) => {
                 let mut data = Vec64::<u32>::with_capacity(scalars.len());
@@ -2171,12 +2258,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::UInt32(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64() as u32),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::NumericArray(NumericArray::UInt32(Arc::new(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))))
+                Array::NumericArray(NumericArray::UInt32(Arc::new(IntegerArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))))
             }
             Scalar::UInt64(_) => {
                 let mut data = Vec64::<u64>::with_capacity(scalars.len());
@@ -2184,12 +2277,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::UInt64(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64() as u64),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::NumericArray(NumericArray::UInt64(Arc::new(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))))
+                Array::NumericArray(NumericArray::UInt64(Arc::new(IntegerArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))))
             }
             Scalar::Boolean(_) => {
                 let mut data = Vec::with_capacity(scalars.len());
@@ -2197,46 +2296,66 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::Boolean(v) => data.push(*v),
-                        Scalar::Null => { data.push(false); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(false);
+                            mask.set(i, false);
+                        }
                         _ => data.push(false),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::BooleanArray(Arc::new(BooleanArray::from_vec(data, if has_nulls { Some(mask) } else { None })))
+                Array::BooleanArray(Arc::new(BooleanArray::from_vec(
+                    data,
+                    if has_nulls { Some(mask) } else { None },
+                )))
             }
             Scalar::String32(_) => {
-                let strs: Vec<String> = scalars.iter().map(|s| match s {
-                    Scalar::String32(v) => v.clone(),
-                    #[cfg(feature = "large_string")]
-                    Scalar::String64(v) => v.clone(),
-                    Scalar::Null => String::new(),
-                    _ => String::new(),
-                }).collect();
+                let strs: Vec<String> = scalars
+                    .iter()
+                    .map(|s| match s {
+                        Scalar::String32(v) => v.clone(),
+                        #[cfg(feature = "large_string")]
+                        Scalar::String64(v) => v.clone(),
+                        Scalar::Null => String::new(),
+                        _ => String::new(),
+                    })
+                    .collect();
                 let mut mask = Bitmask::new_set_all(scalars.len(), true);
                 for (i, s) in scalars.iter().enumerate() {
-                    if matches!(s, Scalar::Null) { mask.set(i, false); }
+                    if matches!(s, Scalar::Null) {
+                        mask.set(i, false);
+                    }
                 }
                 let refs: Vec<&str> = strs.iter().map(|s| s.as_str()).collect();
                 let mut arr = StringArray::<u32>::from_slice(&refs);
                 let has_nulls = mask.count_zeros() > 0;
-                if has_nulls { arr.null_mask = Some(mask); }
+                if has_nulls {
+                    arr.null_mask = Some(mask);
+                }
                 Array::from_string32(arr)
             }
             #[cfg(feature = "large_string")]
             Scalar::String64(_) => {
-                let strs: Vec<String> = scalars.iter().map(|s| match s {
-                    Scalar::String64(v) | Scalar::String32(v) => v.clone(),
-                    Scalar::Null => String::new(),
-                    _ => String::new(),
-                }).collect();
+                let strs: Vec<String> = scalars
+                    .iter()
+                    .map(|s| match s {
+                        Scalar::String64(v) | Scalar::String32(v) => v.clone(),
+                        Scalar::Null => String::new(),
+                        _ => String::new(),
+                    })
+                    .collect();
                 let mut mask = Bitmask::new_set_all(scalars.len(), true);
                 for (i, s) in scalars.iter().enumerate() {
-                    if matches!(s, Scalar::Null) { mask.set(i, false); }
+                    if matches!(s, Scalar::Null) {
+                        mask.set(i, false);
+                    }
                 }
                 let refs: Vec<&str> = strs.iter().map(|s| s.as_str()).collect();
                 let mut arr = StringArray::<u64>::from_slice(&refs);
                 let has_nulls = mask.count_zeros() > 0;
-                if has_nulls { arr.null_mask = Some(mask); }
+                if has_nulls {
+                    arr.null_mask = Some(mask);
+                }
                 Array::TextArray(TextArray::String64(Arc::new(arr)))
             }
             #[cfg(feature = "datetime")]
@@ -2246,13 +2365,20 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::Datetime32(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(0),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
                 Array::TemporalArray(crate::TemporalArray::Datetime32(Arc::new(
-                    crate::DatetimeArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }, None),
+                    crate::DatetimeArray::new(
+                        crate::Buffer::from_vec64(data),
+                        if has_nulls { Some(mask) } else { None },
+                        None,
+                    ),
                 )))
             }
             #[cfg(feature = "datetime")]
@@ -2262,13 +2388,20 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::Datetime64(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(0),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
                 Array::TemporalArray(crate::TemporalArray::Datetime64(Arc::new(
-                    crate::DatetimeArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }, None),
+                    crate::DatetimeArray::new(
+                        crate::Buffer::from_vec64(data),
+                        if has_nulls { Some(mask) } else { None },
+                        None,
+                    ),
                 )))
             }
             #[cfg(feature = "datetime")]
@@ -2280,12 +2413,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::Int8(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64() as i8),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::from_int8(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+                Array::from_int8(IntegerArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))
             }
             #[cfg(feature = "extended_numeric_types")]
             Scalar::Int16(_) => {
@@ -2294,12 +2433,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::Int16(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64() as i16),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::from_int16(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+                Array::from_int16(IntegerArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))
             }
             #[cfg(feature = "extended_numeric_types")]
             Scalar::UInt8(_) => {
@@ -2308,12 +2453,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::UInt8(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64() as u8),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::from_uint8(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+                Array::from_uint8(IntegerArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))
             }
             #[cfg(feature = "extended_numeric_types")]
             Scalar::UInt16(_) => {
@@ -2322,12 +2473,18 @@ impl Array {
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
                         Scalar::UInt16(v) => data.push(*v),
-                        Scalar::Null => { data.push(0); mask.set(i, false); }
+                        Scalar::Null => {
+                            data.push(0);
+                            mask.set(i, false);
+                        }
                         _ => data.push(s.f64() as u16),
                     }
                 }
                 let has_nulls = mask.count_zeros() > 0;
-                Array::from_uint16(IntegerArray::new(crate::Buffer::from_vec64(data), if has_nulls { Some(mask) } else { None }))
+                Array::from_uint16(IntegerArray::new(
+                    crate::Buffer::from_vec64(data),
+                    if has_nulls { Some(mask) } else { None },
+                ))
             }
             Scalar::Null => Array::Null,
         }
@@ -2374,7 +2531,10 @@ impl Array {
                 TextArray::String32(s) => s.get_str(i).cmp(&s.get_str(j)),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(s) => s.get_str(i).cmp(&s.get_str(j)),
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(c) => c.get_str(i).cmp(&c.get_str(j)),
                 #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(c) => c.get_str(i).cmp(&c.get_str(j)),
@@ -2434,7 +2594,10 @@ impl Array {
                 TextArray::String32(s) => s.get_str(idx).hash(state),
                 #[cfg(feature = "large_string")]
                 TextArray::String64(s) => s.get_str(idx).hash(state),
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(c) => c.get_str(idx).hash(state),
                 #[cfg(feature = "default_categorical_8")]
                 TextArray::Categorical8(c) => c.get_str(idx).hash(state),
@@ -2504,7 +2667,10 @@ impl Array {
                 TextArray::String64(arr) => {
                     Arc::make_mut(arr).set_null_mask(Some(mask));
                 }
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(arr) => {
                     Arc::make_mut(arr).set_null_mask(Some(mask));
                 }
@@ -2619,7 +2785,10 @@ impl Array {
                     a.len(),
                     std::mem::size_of::<u16>(),
                 ),
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(a) => (
                     a.data.as_ptr() as *const u8,
                     a.len(),
@@ -2688,7 +2857,10 @@ impl Array {
                 TextArray::Categorical16(a) => {
                     a.null_mask.as_ref().map(|m| (m.as_ptr(), m.capacity()))
                 }
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(a) => {
                     a.null_mask.as_ref().map(|m| (m.as_ptr(), m.capacity()))
                 }
@@ -2760,7 +2932,10 @@ impl Array {
                 TextArray::Categorical8(a) => a.null_count(),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical16(a) => a.null_count(),
-                #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                #[cfg(any(
+                    not(feature = "default_categorical_8"),
+                    feature = "extended_categorical"
+                ))]
                 TextArray::Categorical32(a) => a.null_count(),
                 #[cfg(feature = "extended_categorical")]
                 TextArray::Categorical64(a) => a.null_count(),
@@ -2803,13 +2978,24 @@ impl Array {
 
     /// Appends rows `[offset..offset+len)` from another array into self.
     /// Extends data and null masks directly from the source range.
-    pub fn concat_array_range(&mut self, other: &Self, offset: usize, len: usize) -> Result<(), MinarrowError> {
+    pub fn concat_array_range(
+        &mut self,
+        other: &Self,
+        offset: usize,
+        len: usize,
+    ) -> Result<(), MinarrowError> {
         match (self, other) {
-            (Array::NumericArray(lhs), Array::NumericArray(rhs)) => lhs.append_range(rhs, offset, len),
-            (Array::BooleanArray(a), Array::BooleanArray(b)) => Arc::make_mut(a).append_range(b, offset, len),
+            (Array::NumericArray(lhs), Array::NumericArray(rhs)) => {
+                lhs.append_range(rhs, offset, len)
+            }
+            (Array::BooleanArray(a), Array::BooleanArray(b)) => {
+                Arc::make_mut(a).append_range(b, offset, len)
+            }
             (Array::TextArray(lhs), Array::TextArray(rhs)) => lhs.append_range(rhs, offset, len),
             #[cfg(feature = "datetime")]
-            (Array::TemporalArray(lhs), Array::TemporalArray(rhs)) => lhs.append_range(rhs, offset, len),
+            (Array::TemporalArray(lhs), Array::TemporalArray(rhs)) => {
+                lhs.append_range(rhs, offset, len)
+            }
             (Array::Null, Array::Null) => Ok(()),
             (lhs, rhs) => Err(MinarrowError::TypeError {
                 from: "Array",
@@ -3138,7 +3324,10 @@ impl Array {
                     crate::ffi::arrow_dtype::CategoricalIndexType::UInt16 => {
                         polars_arrow::datatypes::IntegerType::UInt16
                     }
-                    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+                    #[cfg(any(
+                        not(feature = "default_categorical_8"),
+                        feature = "extended_categorical"
+                    ))]
                     crate::ffi::arrow_dtype::CategoricalIndexType::UInt32 => {
                         polars_arrow::datatypes::IntegerType::UInt32
                     }
@@ -3644,7 +3833,10 @@ macro_rules! arr_cat16 {
     };
 }
 
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 #[macro_export]
 macro_rules! arr_cat32 {
     ($v:expr) => {
@@ -3997,7 +4189,10 @@ macro_rules! arr_cat16_opt {
     }};
 }
 
-#[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+#[cfg(any(
+    not(feature = "default_categorical_8"),
+    feature = "extended_categorical"
+))]
 #[macro_export]
 macro_rules! arr_cat32_opt {
     ($v:expr) => {{
@@ -4086,7 +4281,10 @@ mod tests {
             ArrowType::Boolean
         );
 
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         {
             let dict32 = Array::from_categorical32(CategoricalArray::<u32>::default());
             assert_eq!(
@@ -4158,7 +4356,10 @@ mod tests {
         assert_eq!(sz, 1);
     }
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     #[test]
     fn test_data_ptr_and_len_for_dictionary() {
         let mut dict = CategoricalArray::<u32>::default();
@@ -4291,7 +4492,10 @@ mod tests {
         }
     }
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     #[test]
     fn test_num_from_categorical_array() {
         let arr = StringArray::<u32>::from_slice(&["42", "hi", "999"]);
@@ -4489,7 +4693,10 @@ mod tests {
         assert!(array.try_str32_ref().is_err());
     }
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     #[test]
     fn test_try_cat32_ref_success() {
         let arr = CategoricalArray::<u32>::from_vec(vec!["a", "b", "a"], None);
@@ -4839,7 +5046,10 @@ mod macro_tests {
 
     // ===== categorical =====
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     #[test]
     fn arr_cat32_vec64_dense() {
         let v = vec64!["red", "green", "red"];
@@ -4854,7 +5064,10 @@ mod macro_tests {
         }
     }
 
-    #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+    #[cfg(any(
+        not(feature = "default_categorical_8"),
+        feature = "extended_categorical"
+    ))]
     #[test]
     fn arr_cat32_vec64_opt() {
         let v = vec64![Some("red"), None::<&str>, Some("blue")];
@@ -5036,7 +5249,10 @@ mod macro_tests {
 
     #[test]
     fn test_categorical_types() {
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         {
             let arr = arr_cat32!(vec64!["red", "green", "red"]);
             if let Array::TextArray(TextArray::Categorical32(a)) = arr {
@@ -5160,7 +5376,10 @@ mod macro_tests {
         }
 
         // Categorical
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         {
             let arr = arr_cat32!["x", "y", "x", "z"];
             if let Array::TextArray(TextArray::Categorical32(a)) = arr {
@@ -5209,7 +5428,10 @@ mod macro_tests {
             panic!("Wrong variant");
         }
 
-        #[cfg(any(not(feature = "default_categorical_8"), feature = "extended_categorical"))]
+        #[cfg(any(
+            not(feature = "default_categorical_8"),
+            feature = "extended_categorical"
+        ))]
         {
             let arr = arr_cat32_opt![Some("red"), None::<&str>, Some("blue")];
             if let Array::TextArray(TextArray::Categorical32(a)) = arr {

@@ -521,7 +521,9 @@ impl Bitmask {
     /// Byte-aligned sources copy whole bytes directly. Unaligned sources
     /// shift bytes to align before copying.
     pub fn extend_from_bitmask_range(&mut self, other: &Bitmask, offset: usize, len: usize) {
-        if len == 0 { return; }
+        if len == 0 {
+            return;
+        }
         let src_bytes = other.bits.as_slice();
         if offset & 7 == 0 {
             // Source is byte-aligned - pass the bytes starting at the offset
