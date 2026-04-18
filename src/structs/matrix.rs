@@ -121,6 +121,68 @@ impl Matrix {
         Matrix { n_rows, n_cols, stride, data, name }
     }
 
+    /// Constructs a Matrix from a slice of `FloatArray<f64>` columns. Each
+    /// column becomes one Matrix column; null masks are rejected so Matrix
+    /// stays dense.
+    ///
+    /// `impl AsRef<[FloatArray<f64>]>` accepts any contiguous layout at the
+    /// call-site: `&[FloatArray<f64>]`, `&Vec<FloatArray<f64>>`,
+    /// `[FloatArray<f64>; N]`, etc. 
+    ///
+    /// All columns must have the same length. Columns are copied into a
+    /// 64-byte-aligned column-major buffer with stride padding.
+    ///
+    /// For existing `Table` / `TableV` containers prefer `Matrix::try_from`.
+    /// This constructor targets direct construction from already-built column
+    /// arrays.
+    pub fn try_from_cols(
+        cols: impl AsRef<[FloatArray<f64>]>,
+        name: Option<String>,
+    ) -> Result<Self, MinarrowError> {
+        let columns = cols.as_ref();
+        if columns.is_empty() {
+            return Err(MinarrowError::ShapeError {
+                message: "Matrix::try_from_cols requires at least one column".into(),
+            });
+        }
+
+        let n_rows = columns[0].data.len();
+        for (i, col) in columns.iter().enumerate() {
+            if col.data.len() != n_rows {
+                return Err(MinarrowError::ColumnLengthMismatch {
+                    col: i,
+                    expected: n_rows,
+                    found: col.data.len(),
+                });
+            }
+            // `None` short-circuits without touching the mask. 
+            // A present-but-empty mask pays a single popcount.
+            if col.null_mask.as_ref().map_or(false, |m| m.has_nulls()) {
+                return Err(MinarrowError::NullError {
+                    message: Some(format!(
+                        "Matrix::try_from_cols: column {i} contains null values; Matrix requires dense data"
+                    )),
+                });
+            }
+        }
+
+        let n_cols = columns.len();
+        let stride = aligned_stride(n_rows);
+        let pad = stride - n_rows;
+        let mut data = Vec64::with_capacity(stride * n_cols);
+
+        // Each column is a guaranteed-dense slice, so
+        // extend_from_slice is a straight memcpy into the column-major buffer.
+        for col in columns {
+            let col_slice: &[f64] = col.data.as_slice();
+            data.extend_from_slice(col_slice);
+            if pad > 0 {
+                data.extend_from_slice(&[0.0; ALIGN_ELEMS][..pad]);
+            }
+        }
+        Ok(Matrix { n_rows, n_cols, stride, data, name })
+    }
+
     /// Returns the value at (row, col) (0-based). Panics if out of bounds.
     #[inline]
     pub fn get(&self, row: usize, col: usize) -> f64 {
@@ -209,6 +271,33 @@ impl Matrix {
     pub fn row(&self, row: usize) -> Vec<f64> {
         debug_assert!(row < self.n_rows, "Row out of bounds");
         (0..self.n_cols).map(|col| self.data[col * self.stride + row]).collect()
+    }
+
+    /// Transpose this matrix, returning a new Matrix with rows and columns swapped.
+    /// The result has stride-aligned columns for SIMD access.
+    pub fn transpose(&self) -> Self {
+        let mut dst = Matrix::new(self.n_cols, self.n_rows, self.name.clone());
+        for j in 0..self.n_cols {
+            for i in 0..self.n_rows {
+                dst.data[i * dst.stride + j] = self.data[j * self.stride + i];
+            }
+        }
+        dst
+    }
+
+    /// Extract rows by index into a new Matrix.
+    /// Column stride alignment is maintained in the result.
+    pub fn extract_rows(&self, indices: &[usize]) -> Self {
+        let n_new = indices.len();
+        let mut dst = Matrix::new(n_new, self.n_cols, self.name.clone());
+        for j in 0..self.n_cols {
+            let src_col = self.col(j);
+            let dst_col = dst.col_mut(j);
+            for (k, &idx) in indices.iter().enumerate() {
+                dst_col[k] = src_col[idx];
+            }
+        }
+        dst
     }
 
     /// Sets the matrix name.
