@@ -270,6 +270,21 @@ impl SharedBuffer {
         unsafe { (me.vtable.to_vec64)(&me.data, me.ptr, me.len) }
     }
 
+    /// Returns `true` when `a` and `b` view the same underlying allocation.
+    ///
+    /// This is an identity test, distinct from `PartialEq` which compares
+    /// byte content. Two `SharedBuffer`s produced by cloning a common origin
+    /// share both the base pointer and the byte length; any sub-slice created via
+    /// `.slice()` changes `ptr`, so it will no longer identity-match.
+    ///
+    /// Callers may use this to verify that multiple columns of a `TableV` refer
+    /// back to the same `SharedBuffer` before treating them as a contiguous
+    /// column-major allocation.
+    #[inline]
+    pub fn ptr_eq(a: &Self, b: &Self) -> bool {
+        std::ptr::eq(a.ptr, b.ptr) && a.len == b.len
+    }
+
     /// Returns `true` if this buffer is the unique owner of its underlying storage.
     ///
     /// ## Behaviour by backend:

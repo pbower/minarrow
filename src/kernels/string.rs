@@ -33,9 +33,11 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     Bitmask, BooleanArray, CategoricalArray, Integer, IntegerArray, MaskedArray, StringArray,
-    TextArrayV, Vec64,
+    Vec64,
     aliases::{CategoricalAVT, StringAVT},
 };
+#[cfg(feature = "views")]
+use crate::TextArrayV;
 #[cfg(feature = "regex")]
 use regex::Regex;
 
@@ -2028,6 +2030,7 @@ pub fn regex_replace_dict<T: Integer>(
 ///
 /// Returns the count matrix, row labels from `x`, column labels from `y`,
 /// and total number of valid pairs counted.
+#[cfg(feature = "views")]
 pub fn cross_tabulate(
     x: &TextArrayV,
     y: &TextArrayV,

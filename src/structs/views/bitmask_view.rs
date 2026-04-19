@@ -48,7 +48,9 @@ use crate::enums::shape_dim::ShapeDim;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
 use crate::traits::shape::Shape;
-use crate::{Array, ArrayV, Bitmask, BitmaskVT, BooleanArray};
+use crate::{Array, Bitmask, BitmaskVT, BooleanArray};
+#[cfg(feature = "views")]
+use crate::ArrayV;
 
 /// # BitmaskView
 ///
@@ -340,6 +342,7 @@ impl From<Array> for BitmaskV {
 
 /// Extract the boolean data from an ArrayV, preserving the view's offset and length.
 /// Panics if the underlying array is not a BooleanArray variant.
+#[cfg(feature = "views")]
 impl From<ArrayV> for BitmaskV {
     #[inline]
     fn from(av: ArrayV) -> Self {
