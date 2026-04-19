@@ -537,6 +537,42 @@ impl<T> Buffer<T> {
         let vec: Vec64<T> = self.as_ref().iter().cloned().collect();
         Buffer::from_vec64(vec)
     }
+
+    /// Convert the buffer into a SharedBuffer view with element-level offset and length.
+    ///
+    /// - `Owned(Vec64<T>)` is frozen in place via `SharedBuffer::from_vec64_typed`,
+    ///   yielding `(shared, 0, len)`.
+    /// - `Shared { owner, offset, len }` returns the underlying components unchanged.
+    ///
+    /// Returned offset and length are in elements of `T`. Used by containers that
+    /// need to split a backing buffer into per-column shared views (e.g. `Matrix::to_table`).
+    ///
+    /// # Safety
+    /// `T` must have no drop logic or interior invariants - the Owned branch calls
+    /// `SharedBuffer::from_vec64_typed`, which is `unsafe` for that reason.
+    pub unsafe fn into_shared_parts(self) -> (SharedBuffer, usize, usize) {
+        match self.storage {
+            Storage::Owned(vec) => {
+                let len = vec.len();
+                let shared = unsafe { SharedBuffer::from_vec64_typed(vec) };
+                (shared, 0, len)
+            }
+            Storage::Shared { owner, offset, len } => (owner, offset, len),
+        }
+    }
+
+    /// Borrow the underlying shared allocation if this buffer is a `Shared` view.
+    /// Returns `None` for owned buffers - use `into_shared_parts` to freeze them.
+    ///
+    /// Offset and length are in elements of `T`. Handy when you want to probe
+    /// whether multiple buffers share the same allocation without consuming them.
+    #[inline]
+    pub fn shared_parts(&self) -> Option<(&SharedBuffer, usize, usize)> {
+        match &self.storage {
+            Storage::Shared { owner, offset, len } => Some((owner, *offset, *len)),
+            Storage::Owned(_) => None,
+        }
+    }
 }
 
 impl<T: Clone> Buffer<T> {
