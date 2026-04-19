@@ -1667,6 +1667,7 @@ dependencies = [
  "cc",
  "criterion",
  "libc",
+ "log",
  "memchr",
  "num-traits",
  "phf 0.13.1",
@@ -3696,9 +3697,9 @@ dependencies = [
 
 [[package]]
 name = "vec64"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98adb8aed5f3be39cddb565bf782bcb5798a6b1318d9e1b256575a08ed14b983"
+checksum = "ab11c17e084a1c1852fadc336d5388a85ce66aed2a37fc07345e8d587688b23e"
 dependencies = [
  "libc",
 ]
