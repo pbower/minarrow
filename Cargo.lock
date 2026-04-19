@@ -1667,6 +1667,7 @@ dependencies = [
  "cc",
  "criterion",
  "libc",
+ "log",
  "memchr",
  "num-traits",
  "phf 0.13.1",

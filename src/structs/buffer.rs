@@ -82,6 +82,8 @@ use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut, RangeBounds};
 use std::{fmt, mem};
 
+use log::warn;
+
 use crate::Vec64;
 use crate::structs::shared_buffer::SharedBuffer;
 use crate::traits::print::MAX_PREVIEW;
@@ -172,7 +174,7 @@ impl<T> Buffer<T> {
         let correct_type_align = ptr_usize % align == 0;
 
         if needs_alignment {
-            eprintln!(
+            warn!(
                 "Buffer::from_shared: underlying SharedBuffer {:p} not 64-byte aligned, cloning to owned Vec64<T>.",
                 bytes.as_ptr()
             );
@@ -264,7 +266,7 @@ impl<T> Buffer<T> {
         }
 
         if needs_alignment {
-            eprintln!(
+            warn!(
                 "Buffer::from_shared_raw: pointer {ptr:p} is not 64-byte aligned, cloning to owned Vec64<T>."
             );
             // Defensive fallback: copy to a properly aligned Vec64<T>
