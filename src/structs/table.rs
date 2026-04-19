@@ -32,6 +32,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(feature = "cast_arrow")]
 use arrow::array::RecordBatch;
+use log::warn;
 #[cfg(feature = "cast_polars")]
 use polars::frame::DataFrame;
 #[cfg(feature = "cast_polars")]
@@ -441,8 +442,8 @@ impl Table {
             match self.cols.iter().find(|c| c.field.name == *name) {
                 Some(col) => results.push(func(col)),
                 None => {
-                    eprintln!(
-                        "Warning: Column '{}' not found in table '{}'",
+                    warn!(
+                        "Column '{}' not found in table '{}'",
                         name, self.name
                     );
                 }
@@ -462,8 +463,8 @@ impl Table {
             match self.cols.get(idx) {
                 Some(col) => results.push(func(col)),
                 None => {
-                    eprintln!(
-                        "Warning: Column index {} out of bounds in table '{}' (has {} columns)",
+                    warn!(
+                        "Column index {} out of bounds in table '{}' (has {} columns)",
                         idx,
                         self.name,
                         self.n_cols()
