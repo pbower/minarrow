@@ -52,6 +52,23 @@ use crate::{SharedBuffer, TableV};
 /// - It is dense - nulls can be represented through `f64::NAN`
 /// - However this is not always reliable, as a single *NaN* can affect vectorised
 /// calculations when integrating with various frameworks.
+///
+/// ### Layout trade-offs vs standard Arrow tables
+///
+/// Matrix is shaped for OLAP-style batch compute, designed to hand memory to
+/// LAPACK without repacking. For streaming or append-heavy workloads, stay in
+/// a Table and promote to Matrix only at the boundary where LAPACK access is
+/// needed (see [`TableV::try_as_matrix_zc`]).
+///
+/// | Operation | Matrix | Arrow Table |
+/// |---|---|---|
+/// | Cross-column scan at a shared row index (e.g. dot product across columns) | Strided access across the flat buffer; recovering spatial locality requires a transpose | Each column lives in its own allocation, so cross-column access spans distinct arenas |
+/// | Hand the buffer to BLAS/LAPACK expecting `(ptr, lda)` | Native - pass `(as_slice(), stride)` directly to `dgemm`, `dsyev`, and their peers | Requires a repack into a contiguous stride-aligned buffer before dispatch |
+/// | Grow the row count | Bounded by the pre-allocated stride budget; exceeding it triggers a full reallocation and re-layout of every column | Amortised O(1) per column via `Buffer::push` |
+/// | Drop or reorder columns | Metadata-only while callers track which columns are live; a physical reorder rebuilds the flat buffer | Metadata change on the `FieldArray` list |
+///
+/// Both layouts deliver fast per-column SIMD scans. They differ on row-append
+/// flexibility and on how cheaply the buffer can be handed to LAPACK.
 #[repr(C, align(64))]
 #[derive(Clone, PartialEq)]
 pub struct Matrix {
@@ -355,6 +372,31 @@ impl Matrix {
         self.stride as i32
     }
 
+    /// Borrow the matrix as a `(data, lda)` pair suitable for BLAS/LAPACK
+    /// routines. The leading dimension travels with the slice because the
+    /// two are meaningless apart - both describe the same stride-aligned
+    /// column-major layout.
+    ///
+    /// Packaging them together also avoids a borrow-checker conflict when
+    /// handing a matrix to a function that wants both values: reading
+    /// `self.stride` produces a Copy `i32`, so no outstanding borrow of the
+    /// matrix lingers once the tuple is returned.
+    #[inline]
+    pub fn as_strided(&self) -> (&[f64], i32) {
+        (self.data.as_slice(), self.stride as i32)
+    }
+
+    /// Mutable counterpart to [`as_strided`]. Returns `(data, lda)` where
+    /// `data` is a `&mut [f64]` view of the backing buffer (triggering
+    /// copy-on-write if the buffer is currently shared). The leading
+    /// dimension is read as a Copy value before the mutable borrow is
+    /// created, so the returned `i32` carries no borrow of `self`.
+    #[inline]
+    pub fn as_mut_strided(&mut self) -> (&mut [f64], i32) {
+        let lda = self.stride as i32;
+        (self.data.as_mut_slice(), lda)
+    }
+
     // ********************** Table conversion **********************
 
     /// Convert this Matrix into a Table with zero-copy column sharing.
@@ -417,17 +459,23 @@ impl Matrix {
 impl TableV {
     /// Attempt a zero-copy construction of a `Matrix` from this view.
     ///
-    /// Succeeds when every active column is a dense, null-free `FloatArray<f64>`
-    /// whose underlying `Buffer` is a `Shared` view into a common `SharedBuffer`,
-    /// laid out in column-major order at the natural 64-byte-aligned stride:
-    /// column `i` must start at `base + i * stride` elements, where
-    /// `stride = aligned_stride(n_rows)`.
+    /// Succeeds when the columns are already laid out in memory the way a
+    /// Matrix expects: every active column is a dense, null-free
+    /// `FloatArray<f64>` whose `Buffer` is a `Shared` view into one common
+    /// `SharedBuffer`, with column `i` starting at `base + i * stride` elements
+    /// (where `stride = aligned_stride(n_rows)`). When that holds, the Matrix
+    /// borrows the existing column-major stride-aligned allocation directly.
     ///
-    /// Tables produced by `Matrix::to_table` satisfy this by construction, so
-    /// round-tripping via TableV stays zero-copy. Any other layout (owned
-    /// buffers, mixed allocations, non-aligned column spacing, nulls, non-f64
-    /// columns) returns `Err` - callers that want a Matrix regardless should
-    /// fall back to `Matrix::try_from(&table)`, which copies.
+    /// This layout is currently supported via `SharedBuffer`-backed Table
+    /// construction: build a single 64-byte-aligned allocation, hand each
+    /// column a `Buffer::from_shared_column` view at the right offset, and
+    /// wrap those in `FieldArray`s. Tables produced that way can be fed to
+    /// BLAS/LAPACK statistics code without materialising a fresh Matrix.
+    ///
+    /// Any other layout (owned buffers, mixed allocations, non-aligned column
+    /// spacing, nulls, non-f64 columns) returns `Err` - callers that want a
+    /// Matrix regardless should fall back to `Matrix::try_from(&table)`, which
+    /// copies.
     ///
     /// The returned Matrix holds a refcount on the shared allocation; the
     /// source TableV and Table remain independently usable. Mutating the
