@@ -18,10 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Rust toolchain (nightly)
+      # Toolchain comes from rust-toolchain.toml (pinned nightly to work
+       # around the ethnum/polars-arrow transitive break on newer nightlies).
+      # `dtolnay/rust-toolchain@master` reads the file when `toolchain:` is
+      # omitted, and rustup honours it on the cargo invocations below.
+      - name: Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly
           components: clippy,rustfmt
 
       - uses: Swatinem/rust-cache@v2
@@ -29,6 +32,6 @@ jobs:
           cache-on-failure: true
           target-dir: /tmp/target
 
-      - run: cargo +nightly test --target-dir /tmp/target -- --quiet
-      - run: cargo +nightly test --no-default-features --target-dir /tmp/target -- --quiet
-      - run: cargo +nightly test --all-features --target-dir /tmp/target -- --quiet
+      - run: cargo test --target-dir /tmp/target -- --quiet
+      - run: cargo test --no-default-features --target-dir /tmp/target -- --quiet
+      - run: cargo test --all-features --target-dir /tmp/target -- --quiet
