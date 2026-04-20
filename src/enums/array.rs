@@ -1925,6 +1925,23 @@ impl Array {
         }
     }
 
+    /// Returns true when the array holds at least one null.
+    ///
+    /// Delegates straight to the variant's `has_nulls`, which itself resolves
+    /// to the inner array's `MaskedArray::has_nulls`. `Null` is treated as
+    /// empty and reports no nulls.
+    #[inline]
+    pub fn has_nulls(&self) -> bool {
+        match self {
+            Array::NumericArray(inner) => inner.has_nulls(),
+            Array::BooleanArray(arr) => arr.has_nulls(),
+            Array::TextArray(inner) => inner.has_nulls(),
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(inner) => inner.has_nulls(),
+            Array::Null => false,
+        }
+    }
+
     // ── Element-level operations ────────────────────────────────────
 
     /// Format the element at `idx` as a human-readable string.

@@ -168,6 +168,15 @@ pub trait MaskedArray {
         }
     }
 
+    /// Returns true when the array has at least one null.
+    ///
+    /// Fast path: absent mask short-circuits to `false` with no popcount.
+    /// A present mask defers to `Bitmask::has_nulls`, which only traverses the
+    /// bits needed to identify a cleared entry.
+    fn has_nulls(&self) -> bool {
+        self.null_mask().is_some_and(|m| m.has_nulls())
+    }
+
     /// Append a null value to the array, creating mask if needed
     #[inline]
     fn push_null(&mut self) {

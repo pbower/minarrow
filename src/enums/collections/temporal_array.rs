@@ -112,6 +112,19 @@ impl TemporalArray {
         }
     }
 
+    /// Returns true when the variant holds at least one null.
+    ///
+    /// Delegates to each inner array's `MaskedArray::has_nulls`; `Null` is
+    /// treated as empty (no elements means no nulls).
+    #[inline]
+    pub fn has_nulls(&self) -> bool {
+        match self {
+            TemporalArray::Datetime32(arr) => arr.has_nulls(),
+            TemporalArray::Datetime64(arr) => arr.has_nulls(),
+            TemporalArray::Null => false,
+        }
+    }
+
     /// Appends all values (and null mask if present) from `other` into `self`.
     ///
     /// Panics if the two arrays are of different variants or incompatible types.

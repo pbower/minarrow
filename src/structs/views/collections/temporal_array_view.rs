@@ -224,6 +224,16 @@ impl TemporalArrayV {
             })
     }
 
+    /// Returns true when the windowed view holds at least one null.
+    ///
+    /// Reads through `null_count`, so the cached value is trusted when set
+    /// and the full popcount is only paid on the first call that observes
+    /// this view.
+    #[inline]
+    pub fn has_nulls(&self) -> bool {
+        self.null_count() > 0
+    }
+
     /// Returns the null mask as a windowed `BitmaskView`.
     #[inline]
     pub fn null_mask_view(&self) -> Option<BitmaskV> {
