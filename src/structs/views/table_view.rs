@@ -801,6 +801,21 @@ impl RowSelection for TableV {
     }
 }
 
+impl std::ops::Index<&str> for TableV {
+    type Output = ArrayV;
+
+    /// Returns the `ArrayV` for the named column, or panics if the column is not found.
+    fn index(&self, name: &str) -> &ArrayV {
+        let active_idx = self
+            .col_name_index(name)
+            .unwrap_or_else(|| panic!("column '{}' not found in TableV", name));
+        let raw = self
+            .resolve_col_index(active_idx)
+            .unwrap_or_else(|| panic!("column index {} out of range", active_idx));
+        &self.cols[raw]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
