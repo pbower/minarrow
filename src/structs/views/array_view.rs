@@ -53,6 +53,9 @@ use crate::traits::print::MAX_PREVIEW;
 #[cfg(feature = "select")]
 use crate::traits::selection::{DataSelector, RowSelection};
 use crate::traits::shape::Shape;
+use crate::enums::collections::numeric_array::NumericArray;
+#[cfg(feature = "datetime")]
+use crate::enums::collections::temporal_array::TemporalArray;
 use crate::{Array, Bitmask, BitmaskV, FieldArray, MaskedArray, TextArray};
 
 /// Keeps a stride of gathered loads in flight so their memory latency
@@ -206,12 +209,488 @@ impl ArrayV {
     ///
     /// # Safety
     /// `i` must be less than the view's logical length. No bounds check is performed.
+    /// Exercise caution as an incorrect `i` can read into a separate window on the same array.
     #[inline]
     pub unsafe fn get_unchecked<T: MaskedArray + 'static>(
         &self,
         i: usize,
     ) -> Option<T::CopyType<'_>> {
         unsafe { self.array.inner::<T>().get_unchecked(self.offset + i) }
+    }
+
+    /// Returns the f64 value at logical index `i` within the window, or `None` if out of bounds, null or non-numeric.
+    #[inline]
+    pub fn get_f64(&self, i: usize) -> Option<f64> {
+        if i >= self.len {
+            return None;
+        }
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::Float64(a) => a.get(idx),
+                NumericArray::Float32(a) => a.get(idx).map(|v| v as f64),
+                NumericArray::Int32(a) => a.get(idx).map(|v| v as f64),
+                NumericArray::Int64(a) => a.get(idx).map(|v| v as f64),
+                NumericArray::UInt32(a) => a.get(idx).map(|v| v as f64),
+                NumericArray::UInt64(a) => a.get(idx).map(|v| v as f64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => a.get(idx).map(|v| v as f64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => a.get(idx).map(|v| v as f64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => a.get(idx).map(|v| v as f64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => a.get(idx).map(|v| v as f64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => a.get(idx).map(|v| v as f64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => a.get(idx).map(|v| v as f64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => a.get(idx).map(|v| v as f64),
+                NumericArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the f32 value at logical index `i` within the window, or `None` if out of bounds, null or non-numeric.
+    #[inline]
+    pub fn get_f32(&self, i: usize) -> Option<f32> {
+        if i >= self.len {
+            return None;
+        }
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::Float32(a) => a.get(idx),
+                NumericArray::Float64(a) => a.get(idx).map(|v| v as f32),
+                NumericArray::Int32(a) => a.get(idx).map(|v| v as f32),
+                NumericArray::Int64(a) => a.get(idx).map(|v| v as f32),
+                NumericArray::UInt32(a) => a.get(idx).map(|v| v as f32),
+                NumericArray::UInt64(a) => a.get(idx).map(|v| v as f32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => a.get(idx).map(|v| v as f32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => a.get(idx).map(|v| v as f32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => a.get(idx).map(|v| v as f32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => a.get(idx).map(|v| v as f32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => a.get(idx).map(|v| v as f32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => a.get(idx).map(|v| v as f32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => a.get(idx).map(|v| v as f32),
+                NumericArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the i64 value at logical index `i` within the window, or `None` if out of bounds, null or non-numeric.
+    #[inline]
+    pub fn get_i64(&self, i: usize) -> Option<i64> {
+        if i >= self.len {
+            return None;
+        }
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::Int64(a) => a.get(idx),
+                NumericArray::Int32(a) => a.get(idx).map(|v| v as i64),
+                NumericArray::UInt32(a) => a.get(idx).map(|v| v as i64),
+                NumericArray::UInt64(a) => a.get(idx).map(|v| v as i64),
+                NumericArray::Float64(a) => a.get(idx).map(|v| v as i64),
+                NumericArray::Float32(a) => a.get(idx).map(|v| v as i64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => a.get(idx).map(|v| v as i64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => a.get(idx).map(|v| v as i64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => a.get(idx).map(|v| v as i64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => a.get(idx).map(|v| v as i64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => a.get(idx).map(|v| v as i64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => a.get(idx).map(|v| v as i64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => a.get(idx).map(|v| v as i64),
+                NumericArray::Null => None,
+            },
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(t) => match t {
+                TemporalArray::Datetime64(a) => a.get(idx),
+                TemporalArray::Datetime32(a) => a.get(idx).map(|v| v as i64),
+                TemporalArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the i32 value at logical index `i` within the window, or `None` if out of bounds, null or non-numeric.
+    #[inline]
+    pub fn get_i32(&self, i: usize) -> Option<i32> {
+        if i >= self.len {
+            return None;
+        }
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::Int32(a) => a.get(idx),
+                NumericArray::Int64(a) => a.get(idx).map(|v| v as i32),
+                NumericArray::UInt32(a) => a.get(idx).map(|v| v as i32),
+                NumericArray::UInt64(a) => a.get(idx).map(|v| v as i32),
+                NumericArray::Float32(a) => a.get(idx).map(|v| v as i32),
+                NumericArray::Float64(a) => a.get(idx).map(|v| v as i32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => a.get(idx).map(|v| v as i32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => a.get(idx).map(|v| v as i32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => a.get(idx).map(|v| v as i32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => a.get(idx).map(|v| v as i32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => a.get(idx).map(|v| v as i32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => a.get(idx).map(|v| v as i32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => a.get(idx).map(|v| v as i32),
+                NumericArray::Null => None,
+            },
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(t) => match t {
+                TemporalArray::Datetime32(a) => a.get(idx),
+                TemporalArray::Datetime64(a) => a.get(idx).map(|v| v as i32),
+                TemporalArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the u64 value at logical index `i` within the window, or `None` if out of bounds, null or non-numeric.
+    #[inline]
+    pub fn get_u64(&self, i: usize) -> Option<u64> {
+        if i >= self.len {
+            return None;
+        }
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::UInt64(a) => a.get(idx),
+                NumericArray::UInt32(a) => a.get(idx).map(|v| v as u64),
+                NumericArray::Int32(a) => a.get(idx).map(|v| v as u64),
+                NumericArray::Int64(a) => a.get(idx).map(|v| v as u64),
+                NumericArray::Float32(a) => a.get(idx).map(|v| v as u64),
+                NumericArray::Float64(a) => a.get(idx).map(|v| v as u64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => a.get(idx).map(|v| v as u64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => a.get(idx).map(|v| v as u64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => a.get(idx).map(|v| v as u64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => a.get(idx).map(|v| v as u64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => a.get(idx).map(|v| v as u64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => a.get(idx).map(|v| v as u64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => a.get(idx).map(|v| v as u64),
+                NumericArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the u32 value at logical index `i` within the window, or `None` if out of bounds, null or non-numeric.
+    #[inline]
+    pub fn get_u32(&self, i: usize) -> Option<u32> {
+        if i >= self.len {
+            return None;
+        }
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::UInt32(a) => a.get(idx),
+                NumericArray::UInt64(a) => a.get(idx).map(|v| v as u32),
+                NumericArray::Int32(a) => a.get(idx).map(|v| v as u32),
+                NumericArray::Int64(a) => a.get(idx).map(|v| v as u32),
+                NumericArray::Float32(a) => a.get(idx).map(|v| v as u32),
+                NumericArray::Float64(a) => a.get(idx).map(|v| v as u32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => a.get(idx).map(|v| v as u32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => a.get(idx).map(|v| v as u32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => a.get(idx).map(|v| v as u32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => a.get(idx).map(|v| v as u32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => a.get(idx).map(|v| v as u32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => a.get(idx).map(|v| v as u32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => a.get(idx).map(|v| v as u32),
+                NumericArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the bool value at logical index `i` within the window, or `None` if out of bounds, null or non-boolean.
+    #[inline]
+    pub fn get_bool(&self, i: usize) -> Option<bool> {
+        if i >= self.len {
+            return None;
+        }
+        match &self.array {
+            Array::BooleanArray(a) => a.get(self.offset + i),
+            _ => None,
+        }
+    }
+
+    /// Returns the f64 value at logical index `i`, skipping the view bounds check.
+    ///
+    /// # Safety
+    /// The caller must guarantee `i < self.len()`.
+    /// Exercise caution as an incorrect `i` can read into a separate window on the same array.
+    #[inline]
+    pub unsafe fn get_f64_unchecked(&self, i: usize) -> Option<f64> {
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::Float64(a) => unsafe { a.get_unchecked(idx) },
+                NumericArray::Float32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                NumericArray::Int32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                NumericArray::Int64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                NumericArray::UInt32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                NumericArray::UInt64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f64),
+                NumericArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the f32 value at logical index `i`, skipping the view bounds check.
+    ///
+    /// # Safety
+    /// The caller must guarantee `i < self.len()`.
+    /// Exercise caution as an incorrect `i` can read into a separate window on the same array.
+    #[inline]
+    pub unsafe fn get_f32_unchecked(&self, i: usize) -> Option<f32> {
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::Float32(a) => unsafe { a.get_unchecked(idx) },
+                NumericArray::Float64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                NumericArray::Int32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                NumericArray::Int64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                NumericArray::UInt32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                NumericArray::UInt64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as f32),
+                NumericArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the i64 value at logical index `i`, skipping the view bounds check.
+    ///
+    /// # Safety
+    /// The caller must guarantee `i < self.len()`.
+    /// Exercise caution as an incorrect `i` can read into a separate window on the same array.
+    #[inline]
+    pub unsafe fn get_i64_unchecked(&self, i: usize) -> Option<i64> {
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::Int64(a) => unsafe { a.get_unchecked(idx) },
+                NumericArray::Int32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                NumericArray::UInt32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                NumericArray::UInt64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                NumericArray::Float64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                NumericArray::Float32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                NumericArray::Null => None,
+            },
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(t) => match t {
+                TemporalArray::Datetime64(a) => unsafe { a.get_unchecked(idx) },
+                TemporalArray::Datetime32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i64),
+                TemporalArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the i32 value at logical index `i`, skipping the view bounds check.
+    ///
+    /// # Safety
+    /// The caller must guarantee `i < self.len()`.
+    /// Exercise caution as an incorrect `i` can read into a separate window on the same array.
+    #[inline]
+    pub unsafe fn get_i32_unchecked(&self, i: usize) -> Option<i32> {
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::Int32(a) => unsafe { a.get_unchecked(idx) },
+                NumericArray::Int64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                NumericArray::UInt32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                NumericArray::UInt64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                NumericArray::Float32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                NumericArray::Float64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                NumericArray::Null => None,
+            },
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(t) => match t {
+                TemporalArray::Datetime32(a) => unsafe { a.get_unchecked(idx) },
+                TemporalArray::Datetime64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as i32),
+                TemporalArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the u64 value at logical index `i`, skipping the view bounds check.
+    ///
+    /// # Safety
+    /// The caller must guarantee `i < self.len()`.
+    /// Exercise caution as an incorrect `i` can read into a separate window on the same array.
+    #[inline]
+    pub unsafe fn get_u64_unchecked(&self, i: usize) -> Option<u64> {
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::UInt64(a) => unsafe { a.get_unchecked(idx) },
+                NumericArray::UInt32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                NumericArray::Int32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                NumericArray::Int64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                NumericArray::Float32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                NumericArray::Float64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u64),
+                NumericArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the u32 value at logical index `i`, skipping the view bounds check.
+    ///
+    /// # Safety
+    /// The caller must guarantee `i < self.len()`.
+    /// Exercise caution as an incorrect `i` can read into a separate window on the same array.
+    #[inline]
+    pub unsafe fn get_u32_unchecked(&self, i: usize) -> Option<u32> {
+        let idx = self.offset + i;
+        match &self.array {
+            Array::NumericArray(n) => match n {
+                NumericArray::UInt32(a) => unsafe { a.get_unchecked(idx) },
+                NumericArray::UInt64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                NumericArray::Int32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                NumericArray::Int64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                NumericArray::Float32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                NumericArray::Float64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::Int16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt8(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                #[cfg(feature = "extended_numeric_types")]
+                NumericArray::UInt16(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal32(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal64(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                #[cfg(feature = "decimal")]
+                NumericArray::Decimal128(a) => unsafe { a.get_unchecked(idx) }.map(|v| v as u32),
+                NumericArray::Null => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns the bool value at logical index `i`, skipping the view bounds check.
+    ///
+    /// # Safety
+    /// The caller must guarantee `i < self.len()`.
+    /// Exercise caution as an incorrect `i` can read into a separate window on the same array.
+    #[inline]
+    pub unsafe fn get_bool_unchecked(&self, i: usize) -> Option<bool> {
+        match &self.array {
+            Array::BooleanArray(a) => unsafe { a.get_unchecked(self.offset + i) },
+            _ => None,
+        }
     }
 
     /// Returns the string value at logical index `i` within the window, or `None` if out of bounds or null.
@@ -243,7 +722,8 @@ impl ArrayV {
     /// Returns the string value at logical index `i` within the window.
     ///
     /// # Safety
-    /// Skips bounds checks, but will still return `None` if null.
+    /// The caller must guarantee `i < self.len()`.
+    /// Exercise caution as an incorrect `i` can read into a separate window on the same array.
     #[inline]
     pub unsafe fn get_str_unchecked(&self, i: usize) -> Option<&str> {
         match &self.array {
