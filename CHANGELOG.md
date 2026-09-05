@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Typed, row-wise accessors (e.g., `.get_u64(i)`) on `ArrayView` including hot path variants that skip bounds checks. 
 * **Decimal array support** behind the `decimal` feature flag.
   * Added `DecimalArray<T>` for Decimal32, Decimal64, and Decimal128.
   * Supports configurable precision and scale.
