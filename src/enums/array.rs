@@ -4533,7 +4533,7 @@ macro_rules! arr_i64 {
 /// required and precedes the values, separated by `;`.
 ///
 /// ```ignore
-/// use minarrow::ffi::arrow_dtype::TimeUnit;
+/// use minarrow::{arr_dt32, vec64, TimeUnit};
 /// let a = arr_dt32![TimeUnit::Seconds; 1_768_521_600, 1_775_865_600];
 /// let b = arr_dt32![TimeUnit::Milliseconds; vec64![1, 2, 3]];
 /// ```
@@ -4567,7 +4567,7 @@ macro_rules! arr_dt32 {
 /// required and precedes the values, separated by `;`.
 ///
 /// ```ignore
-/// use minarrow::ffi::arrow_dtype::TimeUnit;
+/// use minarrow::{arr_dt64, vec64, TimeUnit};
 /// let a = arr_dt64![TimeUnit::Seconds; 1_768_521_600, 1_775_865_600];
 /// let b = arr_dt64![TimeUnit::Milliseconds; vec64![1, 2, 3]];
 /// ```

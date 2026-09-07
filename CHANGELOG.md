@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   * Ensures that a `Field`, when present, still guarantees that describes every chunk. Attaching a field to non-uniform chunks is rejected. Hence, it is not possible to create
   a `SuperTable` with mixed `SuperArray`s either, as that would be contractually incorrect. 
 * With the feature off, behaviour is unchanged. 
+* `fa_dt32!` and `fa_dt64!` macros for building a named `FieldArray` of datetimes.
 
 ### Fixed
 
