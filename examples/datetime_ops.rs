@@ -23,7 +23,7 @@
 #[cfg(feature = "datetime_ops")]
 fn main() {
     use minarrow::ffi::arrow_dtype::ArrowType;
-    use minarrow::{DatetimeArray, DatetimeOps, FieldArray, MaskedArray, Print, TimeUnit};
+    use minarrow::{DatetimeArray, DatetimeOps, MaskedArray, Print, TimeUnit, fa_dt64};
     use time::Duration;
 
     println!("  Minarrow Datetime Operations Example");
@@ -200,21 +200,15 @@ fn main() {
 
     // Example 1: Single FieldArray with timezone
     println!("\n1. FieldArray with Sydney timezone:");
-    let sydney_events = DatetimeArray::<i64>::from_slice(
-        &[
-            1_700_000_000, // 2023-11-14 22:13:20 UTC = 2023-11-15 09:13:20 AEDT
-            1_700_086_400, // 2023-11-15 22:13:20 UTC = 2023-11-16 09:13:20 AEDT
-            1_700_172_800, // 2023-11-16 22:13:20 UTC = 2023-11-17 09:13:20 AEDT
-        ],
-        Some(TimeUnit::Seconds),
-    );
-    let sydney_field_array = FieldArray::from_parts(
-        "event_time",
-        ArrowType::Timestamp(TimeUnit::Seconds, Some("Australia/Sydney".to_string())),
-        Some(false), // not nullable
-        None,        // no additional metadata
-        sydney_events.into(),
-    );
+
+    // Build the datetime column
+    let sydney_field_array = fa_dt64!("event_time", TimeUnit::Seconds;
+        1_700_000_000, // 2023-11-14 22:13:20 UTC = 2023-11-15 09:13:20 AEDT
+        1_700_086_400, // 2023-11-15 22:13:20 UTC = 2023-11-16 09:13:20 AEDT
+        1_700_172_800, // 2023-11-16 22:13:20 UTC = 2023-11-17 09:13:20 AEDT
+    )
+    .tz("Australia/Sydney")
+    .unwrap();
 
     println!("   Field name: {}", sydney_field_array.field.name);
     println!("   Field type: {:?}", sydney_field_array.field.dtype);
@@ -225,26 +219,14 @@ fn main() {
     println!("\n2. Multiple FieldArrays with different timezones:");
 
     // New York events (EST/EDT)
-    let ny_events =
-        DatetimeArray::<i64>::from_slice(&[1_700_000_000, 1_700_086_400], Some(TimeUnit::Seconds));
-    let ny_field_array = FieldArray::from_parts(
-        "ny_time",
-        ArrowType::Timestamp(TimeUnit::Seconds, Some("America/New_York".to_string())),
-        Some(false),
-        None,
-        ny_events.into(),
-    );
+    let ny_field_array = fa_dt64!("ny_time", TimeUnit::Seconds; 1_700_000_000, 1_700_086_400)
+        .tz("America/New_York")
+        .unwrap();
 
     // Tokyo events (JST)
-    let tokyo_events =
-        DatetimeArray::<i64>::from_slice(&[1_700_000_000, 1_700_086_400], Some(TimeUnit::Seconds));
-    let tokyo_field_array = FieldArray::from_parts(
-        "tokyo_time",
-        ArrowType::Timestamp(TimeUnit::Seconds, Some("Asia/Tokyo".to_string())),
-        Some(false),
-        None,
-        tokyo_events.into(),
-    );
+    let tokyo_field_array = fa_dt64!("tokyo_time", TimeUnit::Seconds; 1_700_000_000, 1_700_086_400)
+        .tz("Asia/Tokyo")
+        .unwrap();
 
     // Extract timezone from ArrowType for display
     let ny_tz = if let ArrowType::Timestamp(_, Some(tz)) = &ny_field_array.field.dtype {
@@ -269,14 +251,10 @@ fn main() {
 
     // Example 3: FieldArray with unusual offset
     println!("\n3. FieldArray with unusual timezone offset:");
-    let nepal_events = DatetimeArray::<i64>::from_slice(&[1_700_000_000], Some(TimeUnit::Seconds));
-    let nepal_field_array = FieldArray::from_parts(
-        "nepal_event",
-        ArrowType::Timestamp(TimeUnit::Seconds, Some("Asia/Kathmandu".to_string())),
-        Some(false),
-        None,
-        nepal_events.into(),
-    );
+
+    let nepal_field_array = fa_dt64!("nepal_event", TimeUnit::Seconds; 1_700_000_000i64)
+        .tz("Asia/Kathmandu")
+        .unwrap();
 
     println!("   Kathmandu uses +05:45 offset (Nepal Time):");
     nepal_field_array.print();

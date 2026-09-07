@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   * Ensures that a `Field`, when present, still guarantees that describes every chunk. Attaching a field to non-uniform chunks is rejected. Hence, it is not possible to create
   a `SuperTable` with mixed `SuperArray`s either, as that would be contractually incorrect. 
 * With the feature off, behaviour is unchanged. 
+* `fa_dt32!` and `fa_dt64!` macros for building a named `FieldArray` of datetimes.
+* `DatetimeArray::logical_arrow_type` and `Array::logical_arrow_type`, resolving a
+  datetime array's Arrow logical type from its time unit and backing integer width.
+  `Array::arrow_type` continues to report the physical `Date32`/`Date64`.
+  The Polars export path now shares this mapping instead of duplicating it.
+* `FieldArray::from_logical_arr`, matching `FieldArray::from_arr` but taking the
+  field type from `Array::logical_arrow_type`.
 
 ### Fixed
 

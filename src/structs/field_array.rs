@@ -168,6 +168,26 @@ impl FieldArray {
         FieldArray::new(field, array)
     }
 
+    /// Constructs a new `FieldArray` from a name and any supported typed array,
+    /// taking the field type from [`Array::logical_arrow_type`].
+    ///
+    /// This differs from [`FieldArray::from_arr`] only for datetimes, where the
+    /// time unit selects between `Timestamp`, `Time32`, `Date32` and `Date64`
+    /// instead of collapsing onto the physical width. A `Timestamp` field is
+    /// what [`FieldArray::tz`] and the Arrow and Polars bridges need, so this is
+    /// the entry point behind `fa_dt32!` and `fa_dt64!`.
+    pub fn from_logical_arr<N, A>(name: N, arr: A) -> Self
+    where
+        N: Into<String>,
+        A: Into<Array>,
+    {
+        let array: Array = arr.into();
+        let dtype = array.logical_arrow_type();
+        let nullable = array.is_nullable();
+        let field = Field::new(name, dtype, nullable, None);
+        FieldArray::new(field, array)
+    }
+
     /// Constructs a new `FieldArray` from raw field components and an `Array`.
     pub fn from_parts<T: Into<String>>(
         field_name: T,
@@ -733,6 +753,7 @@ impl RowSelection for FieldArray {
 //   fa_i32!("col", my_vec64)        // from a Vec64
 //   fa_i32!("col")                  // empty array
 //   fa_i32_opt!("col", Some(1), None, Some(3))  // nullable
+//   fa_dt64!("col", TimeUnit::Seconds; 1, 2)    // datetime, unit required
 // ============================================================
 
 // ======== numeric ========
@@ -869,6 +890,93 @@ macro_rules! fa_i64 {
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i64!())
     }};
+}
+
+// ======== Datetime (i32) ========
+
+/// Build a named `FieldArray` of i32-backed datetimes.
+///
+/// The time unit is required. It follows the column name and is separated
+/// from the values by `;`.
+///
+/// The `Field` takes the unit-aware logical type from
+/// [`DatetimeArray::logical_arrow_type`], so seconds and milliseconds give a
+/// `Time32` and days give a `Date32`. This is what the Arrow and Polars
+/// bridges export, and it differs from `FieldArray::from_arr` over the same
+/// array, which reports the physical `Date32` for every unit.
+///
+/// A single expression after the unit is read as the value buffer, matching
+/// `arr_dt32!`, so a one-element column goes through `vec64!`.
+///
+/// ```ignore
+/// use minarrow::{fa_dt32, vec64, TimeUnit};
+/// let a = fa_dt32!("day", TimeUnit::Days; 20_454, 20_455);
+/// let b = fa_dt32!("clock", TimeUnit::Milliseconds; vec64![1, 2, 3]);
+/// let c = fa_dt32!("day", TimeUnit::Days; vec64![20_454]);
+/// let d = fa_dt32!("day", TimeUnit::Days;);
+/// ```
+#[cfg(feature = "datetime")]
+#[macro_export]
+macro_rules! fa_dt32 {
+    ($name:expr, $unit:expr; @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_logical_arr($name, $crate::arr_dt32!($unit; $v))
+    };
+    ($name:expr, $unit:expr; $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_logical_arr($name, $crate::arr_dt32!($unit; $first, $($rest),+))
+    };
+    ($name:expr, $unit:expr; $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_logical_arr($name, $crate::arr_dt32!($unit; vec64![$v]))
+    }};
+    ($name:expr, $unit:expr;) => {
+        $crate::FieldArray::from_logical_arr($name, $crate::arr_dt32!($unit;))
+    };
+}
+
+// ======== Datetime (i64) ========
+
+/// Build a named `FieldArray` of i64-backed datetimes.
+///
+/// The time unit is required. It follows the column name and is separated
+/// from the values by `;`.
+///
+/// The `Field` takes the unit-aware logical type from
+/// [`DatetimeArray::logical_arrow_type`], so seconds, microseconds and
+/// nanoseconds give a `Timestamp` that [`FieldArray::tz`] accepts, while
+/// milliseconds and days give a `Date64`. This is what the Arrow and Polars
+/// bridges export, and it differs from `FieldArray::from_arr` over the same
+/// array, which reports the physical `Date64` for every unit.
+///
+/// A single expression after the unit is read as the value buffer, matching
+/// `arr_dt64!`, so a one-element column goes through `vec64!`.
+///
+/// ```ignore
+/// use minarrow::{fa_dt64, vec64, TimeUnit};
+/// let a = fa_dt64!("ts", TimeUnit::Seconds; 1_768_521_600, 1_775_865_600);
+/// let b = fa_dt64!("ts", TimeUnit::Milliseconds; vec64![1, 2, 3]);
+/// let c = fa_dt64!("ts", TimeUnit::Seconds; vec64![1_768_521_600]);
+/// let d = fa_dt64!("ts", TimeUnit::Seconds;);
+///
+/// // Timestamp columns accept a timezone for display.
+/// let sydney = fa_dt64!("ts", TimeUnit::Seconds; 1_768_521_600, 1_775_865_600)
+///     .tz("Australia/Sydney")?;
+/// ```
+#[cfg(feature = "datetime")]
+#[macro_export]
+macro_rules! fa_dt64 {
+    ($name:expr, $unit:expr; @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_logical_arr($name, $crate::arr_dt64!($unit; $v))
+    };
+    ($name:expr, $unit:expr; $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_logical_arr($name, $crate::arr_dt64!($unit; $first, $($rest),+))
+    };
+    ($name:expr, $unit:expr; $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_logical_arr($name, $crate::arr_dt64!($unit; vec64![$v]))
+    }};
+    ($name:expr, $unit:expr;) => {
+        $crate::FieldArray::from_logical_arr($name, $crate::arr_dt64!($unit;))
+    };
 }
 
 #[cfg(feature = "extended_numeric_types")]
@@ -1933,6 +2041,92 @@ mod fa_macro_tests {
         assert_eq!(fa.field.name, "big");
         assert_eq!(fa.field.dtype, ArrowType::Int64);
         assert_eq!(fa.len(), 2);
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_fa_dt32_literals() {
+        use crate::{TimeUnit, vec64};
+
+        let fa = fa_dt32!("day", TimeUnit::Days; 20_454, 20_455);
+        assert_eq!(fa.field.name, "day");
+        assert_eq!(fa.field.dtype, ArrowType::Date32);
+        assert_eq!(fa.len(), 2);
+        assert!(!fa.field.nullable);
+
+        // Sub-day units on an i32 array are a Time32.
+        let from_vec64 = fa_dt32!("clock", TimeUnit::Milliseconds; @vec64 vec64![1i32, 2, 3]);
+        assert_eq!(
+            from_vec64.field.dtype,
+            ArrowType::Time32(TimeUnit::Milliseconds)
+        );
+        assert_eq!(from_vec64.len(), 3);
+
+        let single = fa_dt32!("day", TimeUnit::Days; 20_454i32);
+        assert_eq!(single.field.dtype, ArrowType::Date32);
+        assert_eq!(single.len(), 1);
+
+        let empty = fa_dt32!("day", TimeUnit::Days;);
+        assert_eq!(empty.len(), 0);
+        assert_eq!(empty.field.dtype, ArrowType::Date32);
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_fa_dt64_literals() {
+        use crate::{Array, TemporalArray, TimeUnit, vec64};
+
+        let fa = fa_dt64!("ts", TimeUnit::Seconds; 1_768_521_600i64, 1_775_865_600);
+        assert_eq!(fa.field.name, "ts");
+        assert_eq!(fa.field.dtype, ArrowType::Timestamp(TimeUnit::Seconds, None));
+        assert_eq!(fa.len(), 2);
+
+        match &fa.array {
+            Array::TemporalArray(TemporalArray::Datetime64(a)) => {
+                assert_eq!(a.time_unit, TimeUnit::Seconds)
+            }
+            other => panic!("expected Datetime64, got {other:?}"),
+        }
+
+        // Arrow defines Date64 as milliseconds since the epoch.
+        let from_vec64 = fa_dt64!("ts", TimeUnit::Milliseconds; @vec64 vec64![1i64, 2, 3]);
+        assert_eq!(from_vec64.field.dtype, ArrowType::Date64);
+        assert_eq!(from_vec64.len(), 3);
+
+        let single = fa_dt64!("ts", TimeUnit::Seconds; 1_768_521_600i64);
+        assert_eq!(
+            single.field.dtype,
+            ArrowType::Timestamp(TimeUnit::Seconds, None)
+        );
+        assert_eq!(single.len(), 1);
+
+        let empty = fa_dt64!("ts", TimeUnit::Seconds;);
+        assert_eq!(empty.len(), 0);
+    }
+
+    /// A Timestamp field accepts a timezone, which is the reason the macros
+    /// report the logical type rather than the physical width.
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_fa_dt64_accepts_timezone() {
+        use crate::{FieldArray, TimeUnit, arr_dt64, vec64};
+
+        let sydney = fa_dt64!("event_time", TimeUnit::Seconds; 1_700_000_000i64, 1_700_086_400)
+            .tz("Australia/Sydney")
+            .unwrap();
+
+        assert_eq!(
+            sydney.field.dtype,
+            ArrowType::Timestamp(TimeUnit::Seconds, Some("Australia/Sydney".to_string()))
+        );
+
+        // from_arr reports the physical width, which has no timezone slot.
+        let physical = FieldArray::from_arr(
+            "event_time",
+            arr_dt64!(TimeUnit::Seconds; vec64![1_700_000_000i64]),
+        );
+        assert_eq!(physical.field.dtype, ArrowType::Date64);
+        assert!(physical.tz("Australia/Sydney").is_err());
     }
 
     #[test]

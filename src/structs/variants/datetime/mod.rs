@@ -63,6 +63,8 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use crate::Buffer;
 use crate::enums::shape_dim::ShapeDim;
 use crate::enums::time_units::TimeUnit;
+#[cfg(feature = "datetime")]
+use crate::ffi::arrow_dtype::ArrowType;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::masked_array::MaskedArray;
 use crate::traits::shape::Shape;
@@ -248,6 +250,41 @@ impl<T: Integer> DatetimeArray<T> {
     #[inline]
     pub fn from_vec(data: Vec<T>, null_mask: Option<Bitmask>, time_unit: Option<TimeUnit>) -> Self {
         Self::from_vec64(data.into(), null_mask, time_unit)
+    }
+
+    /// Returns the Arrow logical type this array represents, resolved from the
+    /// backing integer width together with the array's time unit.
+    ///
+    /// One physical variant covers several Arrow logical types, so the time unit
+    /// selects between them. An i64 array in seconds, microseconds or nanoseconds
+    /// is a `Timestamp`, while milliseconds and days map onto `Date64`, which
+    /// Arrow defines as milliseconds since the epoch. An i32 array in seconds or
+    /// milliseconds is a `Time32`, and days map onto `Date32`.
+    ///
+    /// The returned `Timestamp` carries no timezone, since the array stores UTC.
+    /// Attach one with [`DatetimeArray::tz`] or `FieldArray::tz`.
+    ///
+    /// This differs from `Array::arrow_type`, which reports the physical
+    /// `Date32`/`Date64` width and ignores the time unit. Use this method when
+    /// building a `Field` that has to survive an Arrow or Polars round trip.
+    #[cfg(feature = "datetime")]
+    pub fn logical_arrow_type(&self) -> ArrowType {
+        use std::any::TypeId;
+
+        if TypeId::of::<T>() == TypeId::of::<i32>() {
+            match self.time_unit {
+                TimeUnit::Seconds => ArrowType::Time32(TimeUnit::Seconds),
+                TimeUnit::Milliseconds => ArrowType::Time32(TimeUnit::Milliseconds),
+                _ => ArrowType::Date32,
+            }
+        } else {
+            match self.time_unit {
+                TimeUnit::Seconds => ArrowType::Timestamp(TimeUnit::Seconds, None),
+                TimeUnit::Microseconds => ArrowType::Timestamp(TimeUnit::Microseconds, None),
+                TimeUnit::Nanoseconds => ArrowType::Timestamp(TimeUnit::Nanoseconds, None),
+                _ => ArrowType::Date64,
+            }
+        }
     }
 }
 

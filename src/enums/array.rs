@@ -2081,6 +2081,25 @@ impl Array {
         }
     }
 
+    /// Returns the Arrow logical type this array represents.
+    ///
+    /// Temporal arrays resolve through [`DatetimeArray::logical_arrow_type`], so
+    /// the time unit selects between `Timestamp`, `Time32`, `Date32` and `Date64`
+    /// rather than collapsing onto the physical width. Every other variant has a
+    /// single logical type and matches [`Array::arrow_type`].
+    ///
+    /// Use this when building a `Field` for Arrow or Polars interchange, where a
+    /// second-resolution timestamp has to arrive as a timestamp.
+    pub fn logical_arrow_type(&self) -> ArrowType {
+        match self {
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(TemporalArray::Datetime32(a)) => a.logical_arrow_type(),
+            #[cfg(feature = "datetime")]
+            Array::TemporalArray(TemporalArray::Datetime64(a)) => a.logical_arrow_type(),
+            _ => self.arrow_type(),
+        }
+    }
+
     /// Column nullability
     pub fn is_nullable(&self) -> bool {
         match self {
@@ -4049,33 +4068,21 @@ impl Array {
     /// Fallible variant of [`Array::to_polars`].
     #[cfg(feature = "cast_polars")]
     pub fn try_to_polars(&self, name: &str) -> Result<polars_core::prelude::Series, MinarrowError> {
-        // Map physical Datetime variants to a sensible Arrow logical type for
-        // export; specific Timestamp/Time/Duration/Interval semantics need a
-        // FieldArray with an explicit Field.
+        // Datetime variants export under their unit-aware logical type; the
+        // remaining Time/Duration/Interval semantics need a FieldArray with an
+        // explicit Field.
         #[cfg(feature = "datetime")]
-        use crate::{TemporalArray, TimeUnit, ffi::arrow_dtype::ArrowType};
+        use crate::TemporalArray;
 
         let field = match self {
             #[cfg(feature = "datetime")]
-            Array::TemporalArray(TemporalArray::Datetime32(a)) => {
-                let ty = match a.time_unit {
-                    TimeUnit::Days => ArrowType::Date32,
-                    TimeUnit::Seconds => ArrowType::Time32(TimeUnit::Seconds),
-                    TimeUnit::Milliseconds => ArrowType::Time32(TimeUnit::Milliseconds),
-                    _ => ArrowType::Date32,
-                };
-                Field::new(name.to_string(), ty, a.is_nullable(), None)
-            }
-            #[cfg(feature = "datetime")]
-            Array::TemporalArray(TemporalArray::Datetime64(a)) => {
-                let ty = match a.time_unit {
-                    TimeUnit::Milliseconds => ArrowType::Date64,
-                    TimeUnit::Seconds => ArrowType::Timestamp(TimeUnit::Seconds, None),
-                    TimeUnit::Microseconds => ArrowType::Timestamp(TimeUnit::Microseconds, None),
-                    TimeUnit::Nanoseconds => ArrowType::Timestamp(TimeUnit::Nanoseconds, None),
-                    TimeUnit::Days => ArrowType::Date64,
-                };
-                Field::new(name.to_string(), ty, a.is_nullable(), None)
+            Array::TemporalArray(TemporalArray::Datetime32(_) | TemporalArray::Datetime64(_)) => {
+                Field::new(
+                    name.to_string(),
+                    self.logical_arrow_type(),
+                    self.is_nullable(),
+                    None,
+                )
             }
             _ => Field::from_array(name.to_string(), self, None),
         };
@@ -4533,7 +4540,7 @@ macro_rules! arr_i64 {
 /// required and precedes the values, separated by `;`.
 ///
 /// ```ignore
-/// use minarrow::ffi::arrow_dtype::TimeUnit;
+/// use minarrow::{arr_dt32, vec64, TimeUnit};
 /// let a = arr_dt32![TimeUnit::Seconds; 1_768_521_600, 1_775_865_600];
 /// let b = arr_dt32![TimeUnit::Milliseconds; vec64![1, 2, 3]];
 /// ```
@@ -4567,7 +4574,7 @@ macro_rules! arr_dt32 {
 /// required and precedes the values, separated by `;`.
 ///
 /// ```ignore
-/// use minarrow::ffi::arrow_dtype::TimeUnit;
+/// use minarrow::{arr_dt64, vec64, TimeUnit};
 /// let a = arr_dt64![TimeUnit::Seconds; 1_768_521_600, 1_775_865_600];
 /// let b = arr_dt64![TimeUnit::Milliseconds; vec64![1, 2, 3]];
 /// ```
