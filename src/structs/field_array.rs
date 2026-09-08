@@ -733,6 +733,7 @@ impl RowSelection for FieldArray {
 //   fa_i32!("col", my_vec64)        // from a Vec64
 //   fa_i32!("col")                  // empty array
 //   fa_i32_opt!("col", Some(1), None, Some(3))  // nullable
+//   fa_dt64!("col", TimeUnit::Seconds; 1, 2)    // datetime, unit required
 // ============================================================
 
 // ======== numeric ========
@@ -869,6 +870,70 @@ macro_rules! fa_i64 {
         use $crate::vec64;
         $crate::FieldArray::from_arr($name, $crate::arr_i64!())
     }};
+}
+
+// ======== Datetime (i32) ========
+
+/// Build a named `FieldArray` of i32-backed datetimes.
+///
+/// The time unit is required. It follows the column name and is separated
+/// from the values by `;`.
+///
+/// ```ignore
+/// use minarrow::{fa_dt32, vec64, TimeUnit};
+/// let a = fa_dt32!("day", TimeUnit::Days; 20_454, 20_455);
+/// let b = fa_dt32!("day", TimeUnit::Days; 20_454);
+/// let c = fa_dt32!("clock", TimeUnit::Milliseconds; @vec64 vec64![1, 2, 3]);
+/// let d = fa_dt32!("day", TimeUnit::Days;);
+/// ```
+#[cfg(feature = "datetime")]
+#[macro_export]
+macro_rules! fa_dt32 {
+    ($name:expr, $unit:expr; @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_dt32!($unit; $v))
+    };
+    ($name:expr, $unit:expr; $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_dt32!($unit; $first, $($rest),+))
+    };
+    ($name:expr, $unit:expr; $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_dt32!($unit; vec64![$v]))
+    }};
+    ($name:expr, $unit:expr;) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_dt32!($unit;))
+    };
+}
+
+// ======== Datetime (i64) ========
+
+/// Build a named `FieldArray` of i64-backed datetimes.
+///
+/// The time unit is required. It follows the column name and is separated
+/// from the values by `;`.
+///
+/// ```ignore
+/// use minarrow::{fa_dt64, vec64, TimeUnit};
+/// let a = fa_dt64!("ts", TimeUnit::Seconds; 1_768_521_600, 1_775_865_600);
+/// let b = fa_dt64!("ts", TimeUnit::Seconds; 1_768_521_600);
+/// let c = fa_dt64!("ts", TimeUnit::Milliseconds; @vec64 vec64![1, 2, 3]);
+/// let d = fa_dt64!("ts", TimeUnit::Seconds;);
+/// ```
+#[cfg(feature = "datetime")]
+#[macro_export]
+macro_rules! fa_dt64 {
+    ($name:expr, $unit:expr; @vec64 $v:expr $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_dt64!($unit; $v))
+    };
+    ($name:expr, $unit:expr; $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_dt64!($unit; $first, $($rest),+))
+    };
+    ($name:expr, $unit:expr; $v:expr $(,)?) => {{
+        use $crate::vec64;
+        $crate::FieldArray::from_arr($name, $crate::arr_dt64!($unit; vec64![$v]))
+    }};
+    ($name:expr, $unit:expr;) => {
+        $crate::FieldArray::from_arr($name, $crate::arr_dt64!($unit;))
+    };
 }
 
 #[cfg(feature = "extended_numeric_types")]
@@ -1933,6 +1998,59 @@ mod fa_macro_tests {
         assert_eq!(fa.field.name, "big");
         assert_eq!(fa.field.dtype, ArrowType::Int64);
         assert_eq!(fa.len(), 2);
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_fa_dt32_literals() {
+        use crate::{TimeUnit, vec64};
+
+        let fa = fa_dt32!("day", TimeUnit::Days; 20_454, 20_455);
+        assert_eq!(fa.field.name, "day");
+        assert_eq!(fa.field.dtype, ArrowType::Date32);
+        assert_eq!(fa.len(), 2);
+        assert!(!fa.field.nullable);
+
+        let from_vec64 = fa_dt32!("clock", TimeUnit::Milliseconds; @vec64 vec64![1i32, 2, 3]);
+        assert_eq!(from_vec64.field.dtype, ArrowType::Date32);
+        assert_eq!(from_vec64.len(), 3);
+
+        let single = fa_dt32!("day", TimeUnit::Days; 20_454i32);
+        assert_eq!(single.field.dtype, ArrowType::Date32);
+        assert_eq!(single.len(), 1);
+
+        let empty = fa_dt32!("day", TimeUnit::Days;);
+        assert_eq!(empty.len(), 0);
+        assert_eq!(empty.field.dtype, ArrowType::Date32);
+    }
+
+    #[cfg(feature = "datetime")]
+    #[test]
+    fn test_fa_dt64_literals() {
+        use crate::{Array, TemporalArray, TimeUnit, vec64};
+
+        let fa = fa_dt64!("ts", TimeUnit::Seconds; 1_768_521_600i64, 1_775_865_600);
+        assert_eq!(fa.field.name, "ts");
+        assert_eq!(fa.field.dtype, ArrowType::Date64);
+        assert_eq!(fa.len(), 2);
+
+        match &fa.array {
+            Array::TemporalArray(TemporalArray::Datetime64(a)) => {
+                assert_eq!(a.time_unit, TimeUnit::Seconds)
+            }
+            other => panic!("expected Datetime64, got {other:?}"),
+        }
+
+        let from_vec64 = fa_dt64!("ts", TimeUnit::Milliseconds; @vec64 vec64![1i64, 2, 3]);
+        assert_eq!(from_vec64.field.dtype, ArrowType::Date64);
+        assert_eq!(from_vec64.len(), 3);
+
+        let single = fa_dt64!("ts", TimeUnit::Seconds; 1_768_521_600i64);
+        assert_eq!(single.field.dtype, ArrowType::Date64);
+        assert_eq!(single.len(), 1);
+
+        let empty = fa_dt64!("ts", TimeUnit::Seconds;);
+        assert_eq!(empty.len(), 0);
     }
 
     #[test]
