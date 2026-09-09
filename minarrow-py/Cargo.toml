@@ -19,10 +19,9 @@ name = "minarrow_py"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# The core crate's default feature set includes `large_string`, which would keep that
-# feature on regardless of what this crate requests. The defaults are therefore listed
-# here without `large_string`, so that the `large_string` feature below decides it.
-# `scalar_type` is included because element access returns a `Scalar` in every build.
+# Minarrow's default features without `large_string`, which this crate's own
+# `large_string` feature controls.
+# `scalar_type` is required by element access.
 minarrow = { version = "0.18", path = "..", default-features = false, features = [
     "views",
     "chunked",

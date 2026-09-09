@@ -140,31 +140,15 @@ impl From<PyCategoricalIndexType> for CategoricalIndexType {
     }
 }
 
-// `PyArrowType` carries data on some of its variants, so pyo3 compiles it through the
-// complex-enum path, and that path drops `#[cfg]` attributes written on a variant.
-// In `pyo3-macros-backend` 0.29, `impl_complex_enum` (`src/pyclass.rs:1254-1262`) emits
-// one `IntoPyObject` arm per variant with no attributes carried across, and the
-// per-variant class items (`src/pyclass.rs:1302-1330`) are generated for every variant
-// in the same way. The simple-enum path applies `get_cfg_attributes` at lines 1036,
-// 1076 and 1135, so only data-carrying enums are affected. A `#[cfg]` on a variant
-// therefore removes it from the enum while the generated code still names it, and the
-// build fails with `no variant named ...`.
-//
-// The macros below settle the variant list before `#[pyclass]` reads it. Each gate is a
-// pair of `macro_rules!` definitions, one under `#[cfg(feature = ...)]` and one under its
-// negation, which append their group to the list and pass it to the next gate. The enum
-// and both conversions come out of the finished list, so a build without a feature has
-// no trace of the gated variants in the enum, in the conversions, or on the Python
-// surface. Feature gating is therefore expressed by which gate definition compiles,
-// rather than by attributes on the variants.
+// pyo3's complex-enum codegen does not honour `#[cfg]` on variants
+// (`pyo3-macros-backend` 0.29, `src/pyclass.rs:1254-1262` and `1302-1330`), so the
+// variant list is assembled by the feature-gated macros below before `#[pyclass]` reads
+// it. Declaration order is the unconditional variants followed by the gated groups, so it
+// does not match `ArrowType` and nothing relies on it.
 
-/// Generates `PyArrowType` and its conversions to and from `minarrow::ArrowType` from an
-/// ordered variant list.
-///
-/// A value-less entry is written `Name()` and mirrors a unit variant of `ArrowType`. A
-/// parameterised entry is written `Name { field: Type, .. }` and mirrors a tuple variant
-/// of `ArrowType` whose members are in the same order as the named fields, with each
-/// member converted through `Into`.
+/// Declares `PyArrowType` and its conversions to and from `minarrow::ArrowType` from the
+/// variant list. `Name()` mirrors a unit `ArrowType` variant. `Name { field: Type, .. }`
+/// mirrors a tuple `ArrowType` variant with members in field order.
 macro_rules! define_py_arrow_type {
     ([$($variants:tt)*]) => {
         define_py_arrow_type!(@build [$($variants)*] [] [] []);
@@ -224,16 +208,13 @@ macro_rules! define_py_arrow_type {
     };
 }
 
-/// Appends the numeric variants. The 8 and 16-bit widths are present only under
-/// `extended_numeric_types`, matching the gates on `minarrow::ArrowType`.
+/// Appends the 8 and 16-bit numeric variants when `extended_numeric_types` is enabled.
 #[cfg(feature = "extended_numeric_types")]
 macro_rules! py_arrow_type_numeric {
     ([$($acc:tt)*]) => {
         py_arrow_type_datetime!([
             $($acc)*
-            Int8(), Int16(), Int32(), Int64(),
-            UInt8(), UInt16(), UInt32(), UInt64(),
-            Float32(), Float64(),
+            Int8(), Int16(), UInt8(), UInt16(),
         ]);
     };
 }
@@ -241,16 +222,11 @@ macro_rules! py_arrow_type_numeric {
 #[cfg(not(feature = "extended_numeric_types"))]
 macro_rules! py_arrow_type_numeric {
     ([$($acc:tt)*]) => {
-        py_arrow_type_datetime!([
-            $($acc)*
-            Int32(), Int64(),
-            UInt32(), UInt64(),
-            Float32(), Float64(),
-        ]);
+        py_arrow_type_datetime!([$($acc)*]);
     };
 }
 
-/// Appends the temporal variants under `datetime`, then `String`.
+/// Appends the temporal variants when `datetime` is enabled.
 #[cfg(feature = "datetime")]
 macro_rules! py_arrow_type_datetime {
     ([$($acc:tt)*]) => {
@@ -263,7 +239,6 @@ macro_rules! py_arrow_type_datetime {
             Duration64 { unit: PyTimeUnit },
             Timestamp { unit: PyTimeUnit, tz: Option<String> },
             Interval { unit: PyIntervalUnit },
-            String(),
         ]);
     };
 }
@@ -271,21 +246,17 @@ macro_rules! py_arrow_type_datetime {
 #[cfg(not(feature = "datetime"))]
 macro_rules! py_arrow_type_datetime {
     ([$($acc:tt)*]) => {
-        py_arrow_type_large_string!([
-            $($acc)*
-            String(),
-        ]);
+        py_arrow_type_large_string!([$($acc)*]);
     };
 }
 
-/// Appends `LargeString` under `large_string`, then `Utf8View`.
+/// Appends `LargeString` when `large_string` is enabled.
 #[cfg(feature = "large_string")]
 macro_rules! py_arrow_type_large_string {
     ([$($acc:tt)*]) => {
         py_arrow_type_decimal!([
             $($acc)*
             LargeString(),
-            Utf8View(),
         ]);
     };
 }
@@ -293,15 +264,11 @@ macro_rules! py_arrow_type_large_string {
 #[cfg(not(feature = "large_string"))]
 macro_rules! py_arrow_type_large_string {
     ([$($acc:tt)*]) => {
-        py_arrow_type_decimal!([
-            $($acc)*
-            Utf8View(),
-        ]);
+        py_arrow_type_decimal!([$($acc)*]);
     };
 }
 
-/// Appends the decimal variants under `decimal`, then `Dictionary`, and closes the chain
-/// by passing the finished list to `define_py_arrow_type!`.
+/// Appends the decimal variants when `decimal` is enabled.
 #[cfg(feature = "decimal")]
 macro_rules! py_arrow_type_decimal {
     ([$($acc:tt)*]) => {
@@ -310,7 +277,6 @@ macro_rules! py_arrow_type_decimal {
             Decimal32 { precision: u8, scale: i8 },
             Decimal64 { precision: u8, scale: i8 },
             Decimal128 { precision: u8, scale: i8 },
-            Dictionary { index: PyCategoricalIndexType },
         ]);
     };
 }
@@ -318,14 +284,23 @@ macro_rules! py_arrow_type_decimal {
 #[cfg(not(feature = "decimal"))]
 macro_rules! py_arrow_type_decimal {
     ([$($acc:tt)*]) => {
-        define_py_arrow_type!([
-            $($acc)*
-            Dictionary { index: PyCategoricalIndexType },
-        ]);
+        define_py_arrow_type!([$($acc)*]);
     };
 }
 
-py_arrow_type_numeric!([Null(), Boolean(),]);
+py_arrow_type_numeric!([
+    Null(),
+    Boolean(),
+    Int32(),
+    Int64(),
+    UInt32(),
+    UInt64(),
+    Float32(),
+    Float64(),
+    String(),
+    Utf8View(),
+    Dictionary { index: PyCategoricalIndexType },
+]);
 
 #[pymethods]
 impl PyArrowType {
