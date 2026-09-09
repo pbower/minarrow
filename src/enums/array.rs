@@ -2814,9 +2814,6 @@ impl Array {
     ///
     /// All scalars must be the same type. The type is inferred from the first
     /// non-Null element. If all elements are Null, returns `Array::Null`.
-    ///
-    /// Decimal scalars carry precision and scale, so a decimal array built
-    /// here has the full column type of the scalars it came from.
     #[cfg(feature = "scalar_type")]
     pub fn from_scalars(scalars: &[crate::Scalar]) -> Array {
         use crate::Scalar;
