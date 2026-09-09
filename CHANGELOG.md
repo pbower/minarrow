@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # Minarrow Rust
 
-## 0.18.0 (Unreleased)
+## 0.18.0 - 2026-09-09
 
 ### Added
 
@@ -134,7 +134,7 @@ overflow wraps consistently with add/subtract/multiply.
 
 # Minarrow-py / Minarrow-pyo3
 
-## 0.18.0 (Unreleased)
+## 0.18.0 - 2026-09-09
 
 ### Added
 - Decimal array support in both packages:
