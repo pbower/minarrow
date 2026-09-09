@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a `SuperTable` with mixed `SuperArray`s either, as that would be contractually incorrect. 
 * With the feature off, behaviour is unchanged. 
 * `fa_dt32!` and `fa_dt64!` macros for building a named `FieldArray` of datetimes.
+* KernelError::Overflow(String) enum error type.
 
 ### Fixed
 
@@ -47,6 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 * Updated the `vec64` dependency for compatibility with the nightly allocator API.
+
+### Breaking changes:
+
+* `Matrix::data` is no longer a public field. It is now `Arc<Buffer<f64>>` internally,
+  with access through `Matrix::as_slice` and `Matrix::as_mut_slice`.
+* `KernelError::Overflow` is a new variant, so exhaustive matches on `KernelError`
+  require an arm for it.
+* With the `decimal` feature enabled, `NumericArray`, `Scalar` and `ArrowType` each
+  gain `Decimal32`, `Decimal64` and `Decimal128` variants, requiring new match arms.
+* With the `matrix` and `views` features enabled, `Value` gains a `MatrixView` variant,
+  requiring a new match arm.
+* `TryFrom<Value>` for `Array`, `Table` and `SuperTable` rejects a `VecValue` holding
+  more than one `Value` variant, returning `MinarrowError::TypeError`. Collections such
+  as `Array` alongside `FieldArray` previously converted element-wise and concatenated.
+  Uniform collections are unaffected.
 
 ## 0.17.0 - 2026-08-15
 
