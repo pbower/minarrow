@@ -193,10 +193,12 @@ pub fn scalar_arithmetic(
         #[cfg(feature = "large_string")]
         (Scalar::String64(l), Scalar::String32(r), Add) => Scalar::String64(format!("{}{}", l, r)),
 
-        // Decimal scalar operations at matching width and scale. Result
-        // precision follows the array kernels: add and subtract widen the
-        // larger operand precision by one digit, multiply sums the operand
-        // precisions, and both are capped at the width maximum.
+        // Decimal scalar operations at matching width and scale.
+        //
+        // ## Behaviour
+        // - add and subtract widen the larger operand precision by one digit
+        // - multiply sums the operand precisions
+        // - both are capped at the width maximum.
         #[cfg(feature = "decimal")]
         (Scalar::Decimal32(l, lp, ls), Scalar::Decimal32(r, rp, rs), Add) if ls == rs => {
             Scalar::Decimal32(l.checked_add(r).ok_or_else(|| MinarrowError::KernelError(
