@@ -19,9 +19,8 @@ name = "minarrow_py"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# Minarrow's default features without `large_string`, which this crate's own
-# `large_string` feature controls.
 # `scalar_type` is required by element access.
+# Note this crate's `large_string` feature controls that rather than Minarrow's default.
 minarrow = { version = "0.18", path = "..", default-features = false, features = [
     "views",
     "chunked",
