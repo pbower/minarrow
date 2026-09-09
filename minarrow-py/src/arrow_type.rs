@@ -140,12 +140,6 @@ impl From<PyCategoricalIndexType> for CategoricalIndexType {
     }
 }
 
-// pyo3's complex-enum codegen does not honour `#[cfg]` on variants
-// (`pyo3-macros-backend` 0.29, `src/pyclass.rs:1254-1262` and `1302-1330`), so the
-// variant list is assembled by the feature-gated macros below before `#[pyclass]` reads
-// it. Declaration order is the unconditional variants followed by the gated groups, so it
-// does not match `ArrowType` and nothing relies on it.
-
 /// Declares `PyArrowType` and its conversions to and from `minarrow::ArrowType` from the
 /// variant list. `Name()` mirrors a unit `ArrowType` variant. `Name { field: Type, .. }`
 /// mirrors a tuple `ArrowType` variant with members in field order.
