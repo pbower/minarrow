@@ -1764,8 +1764,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // Decimal columns rebuilt from scalars carry the full column type, so
-    // they concatenate onto the typed column they came from.
+    // Decimal columns rebuilt from scalars carry the full column type
 
     #[cfg(all(feature = "decimal", feature = "scalar_type"))]
     #[test]
