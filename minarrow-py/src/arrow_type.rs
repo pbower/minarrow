@@ -140,58 +140,192 @@ impl From<PyCategoricalIndexType> for CategoricalIndexType {
     }
 }
 
-/// The Arrow logical type. A 1:1 mirror of `minarrow::ArrowType`, including its
-/// feature gates. Construct it for a `Field`, or read it from `Array.arrow_type`.
-/// pyo3 makes each variant callable, so a non-parametric type is built with a
-/// call: `ArrowType.Int64()`.
-#[pyclass(from_py_object, eq, name = "ArrowType", module = "minarrow")]
-#[derive(Clone, PartialEq)]
-pub enum PyArrowType {
-    Null(),
-    Boolean(),
-    // The extended-width numeric variants are present in every build so the Python
-    // `ArrowType` surface stays stable. A build without `extended_numeric_types`
-    // upcasts them to their 32-bit form when converting into the core `ArrowType`.
-    // These cannot be `cfg`-gated because pyo3's enum codegen references every
-    // variant unconditionally.
-    Int8(),
-    Int16(),
-    Int32(),
-    Int64(),
-    UInt8(),
-    UInt16(),
-    UInt32(),
-    UInt64(),
-    Float32(),
-    Float64(),
-    #[cfg(feature = "datetime")]
-    Date32(),
-    #[cfg(feature = "datetime")]
-    Date64(),
-    #[cfg(feature = "datetime")]
-    Time32 { unit: PyTimeUnit },
-    #[cfg(feature = "datetime")]
-    Time64 { unit: PyTimeUnit },
-    #[cfg(feature = "datetime")]
-    Duration32 { unit: PyTimeUnit },
-    #[cfg(feature = "datetime")]
-    Duration64 { unit: PyTimeUnit },
-    #[cfg(feature = "datetime")]
-    Timestamp { unit: PyTimeUnit, tz: Option<String> },
-    #[cfg(feature = "datetime")]
-    Interval { unit: PyIntervalUnit },
-    #[cfg(feature = "decimal")]
-    Decimal32 { precision: u8, scale: i8 },
-    #[cfg(feature = "decimal")]
-    Decimal64 { precision: u8, scale: i8 },
-    #[cfg(feature = "decimal")]
-    Decimal128 { precision: u8, scale: i8 },
-    String(),
-    #[cfg(feature = "large_string")]
-    LargeString(),
-    Utf8View(),
-    Dictionary { index: PyCategoricalIndexType },
+// `PyArrowType` carries data on some of its variants, so pyo3 compiles it through the
+// complex-enum path, and that path drops `#[cfg]` attributes written on a variant.
+// In `pyo3-macros-backend` 0.29, `impl_complex_enum` (`src/pyclass.rs:1254-1262`) emits
+// one `IntoPyObject` arm per variant with no attributes carried across, and the
+// per-variant class items (`src/pyclass.rs:1302-1330`) are generated for every variant
+// in the same way. The simple-enum path applies `get_cfg_attributes` at lines 1036,
+// 1076 and 1135, so only data-carrying enums are affected. A `#[cfg]` on a variant
+// therefore removes it from the enum while the generated code still names it, and the
+// build fails with `no variant named ...`.
+//
+// The macros below settle the variant list before `#[pyclass]` reads it. Each gate is a
+// pair of `macro_rules!` definitions, one under `#[cfg(feature = ...)]` and one under its
+// negation, which append their group to the list and pass it to the next gate. The enum
+// and both conversions come out of the finished list, so a build without a feature has
+// no trace of the gated variants in the enum, in the conversions, or on the Python
+// surface. Feature gating is therefore expressed by which gate definition compiles,
+// rather than by attributes on the variants.
+
+/// Generates `PyArrowType` and its conversions to and from `minarrow::ArrowType` from an
+/// ordered variant list.
+///
+/// A value-less entry is written `Name()` and mirrors a unit variant of `ArrowType`. A
+/// parameterised entry is written `Name { field: Type, .. }` and mirrors a tuple variant
+/// of `ArrowType` whose members are in the same order as the named fields, with each
+/// member converted through `Into`.
+macro_rules! define_py_arrow_type {
+    ([$($variants:tt)*]) => {
+        define_py_arrow_type!(@build [$($variants)*] [] [] []);
+    };
+
+    (@build [] [$($variant:tt)*] [$($into_py:tt)*] [$($from_py:tt)*]) => {
+        /// The Arrow logical type. A 1:1 mirror of `minarrow::ArrowType`, including its
+        /// feature gates. Construct it for a `Field`, or read it from `Array.arrow_type`.
+        /// pyo3 makes each variant callable, so a non-parametric type is built with a
+        /// call: `ArrowType.Int64()`.
+        #[pyclass(from_py_object, eq, name = "ArrowType", module = "minarrow")]
+        #[derive(Clone, PartialEq)]
+        pub enum PyArrowType {
+            $($variant)*
+        }
+
+        // Every field is converted through `Into`, including the ones whose Python and
+        // core types are the same.
+        #[allow(clippy::useless_conversion)]
+        impl From<ArrowType> for PyArrowType {
+            fn from(dtype: ArrowType) -> Self {
+                match dtype {
+                    $($into_py)*
+                }
+            }
+        }
+
+        #[allow(clippy::useless_conversion)]
+        impl From<PyArrowType> for ArrowType {
+            fn from(dtype: PyArrowType) -> Self {
+                match dtype {
+                    $($from_py)*
+                }
+            }
+        }
+    };
+
+    (@build [$name:ident (), $($rest:tt)*] [$($variant:tt)*] [$($into_py:tt)*] [$($from_py:tt)*]) => {
+        define_py_arrow_type!(
+            @build [$($rest)*]
+            [$($variant)* $name(),]
+            [$($into_py)* ArrowType::$name => PyArrowType::$name(),]
+            [$($from_py)* PyArrowType::$name() => ArrowType::$name,]
+        );
+    };
+
+    (@build
+        [$name:ident { $($field:ident : $ty:ty),+ }, $($rest:tt)*]
+        [$($variant:tt)*] [$($into_py:tt)*] [$($from_py:tt)*]
+    ) => {
+        define_py_arrow_type!(
+            @build [$($rest)*]
+            [$($variant)* $name { $($field: $ty),+ },]
+            [$($into_py)* ArrowType::$name($($field),+) => PyArrowType::$name { $($field: $field.into()),+ },]
+            [$($from_py)* PyArrowType::$name { $($field),+ } => ArrowType::$name($($field.into()),+),]
+        );
+    };
 }
+
+/// Appends the numeric variants. The 8 and 16-bit widths are present only under
+/// `extended_numeric_types`, matching the gates on `minarrow::ArrowType`.
+#[cfg(feature = "extended_numeric_types")]
+macro_rules! py_arrow_type_numeric {
+    ([$($acc:tt)*]) => {
+        py_arrow_type_datetime!([
+            $($acc)*
+            Int8(), Int16(), Int32(), Int64(),
+            UInt8(), UInt16(), UInt32(), UInt64(),
+            Float32(), Float64(),
+        ]);
+    };
+}
+
+#[cfg(not(feature = "extended_numeric_types"))]
+macro_rules! py_arrow_type_numeric {
+    ([$($acc:tt)*]) => {
+        py_arrow_type_datetime!([
+            $($acc)*
+            Int32(), Int64(),
+            UInt32(), UInt64(),
+            Float32(), Float64(),
+        ]);
+    };
+}
+
+/// Appends the temporal variants under `datetime`, then `String`.
+#[cfg(feature = "datetime")]
+macro_rules! py_arrow_type_datetime {
+    ([$($acc:tt)*]) => {
+        py_arrow_type_large_string!([
+            $($acc)*
+            Date32(), Date64(),
+            Time32 { unit: PyTimeUnit },
+            Time64 { unit: PyTimeUnit },
+            Duration32 { unit: PyTimeUnit },
+            Duration64 { unit: PyTimeUnit },
+            Timestamp { unit: PyTimeUnit, tz: Option<String> },
+            Interval { unit: PyIntervalUnit },
+            String(),
+        ]);
+    };
+}
+
+#[cfg(not(feature = "datetime"))]
+macro_rules! py_arrow_type_datetime {
+    ([$($acc:tt)*]) => {
+        py_arrow_type_large_string!([
+            $($acc)*
+            String(),
+        ]);
+    };
+}
+
+/// Appends `LargeString` under `large_string`, then `Utf8View`.
+#[cfg(feature = "large_string")]
+macro_rules! py_arrow_type_large_string {
+    ([$($acc:tt)*]) => {
+        py_arrow_type_decimal!([
+            $($acc)*
+            LargeString(),
+            Utf8View(),
+        ]);
+    };
+}
+
+#[cfg(not(feature = "large_string"))]
+macro_rules! py_arrow_type_large_string {
+    ([$($acc:tt)*]) => {
+        py_arrow_type_decimal!([
+            $($acc)*
+            Utf8View(),
+        ]);
+    };
+}
+
+/// Appends the decimal variants under `decimal`, then `Dictionary`, and closes the chain
+/// by passing the finished list to `define_py_arrow_type!`.
+#[cfg(feature = "decimal")]
+macro_rules! py_arrow_type_decimal {
+    ([$($acc:tt)*]) => {
+        define_py_arrow_type!([
+            $($acc)*
+            Decimal32 { precision: u8, scale: i8 },
+            Decimal64 { precision: u8, scale: i8 },
+            Decimal128 { precision: u8, scale: i8 },
+            Dictionary { index: PyCategoricalIndexType },
+        ]);
+    };
+}
+
+#[cfg(not(feature = "decimal"))]
+macro_rules! py_arrow_type_decimal {
+    ([$($acc:tt)*]) => {
+        define_py_arrow_type!([
+            $($acc)*
+            Dictionary { index: PyCategoricalIndexType },
+        ]);
+    };
+}
+
+py_arrow_type_numeric!([Null(), Boolean(),]);
 
 #[pymethods]
 impl PyArrowType {
@@ -201,113 +335,5 @@ impl PyArrowType {
 
     fn __str__(&self) -> String {
         format!("{}", ArrowType::from(self.clone()))
-    }
-}
-
-impl From<ArrowType> for PyArrowType {
-    fn from(dtype: ArrowType) -> Self {
-        match dtype {
-            ArrowType::Null => PyArrowType::Null(),
-            ArrowType::Boolean => PyArrowType::Boolean(),
-            #[cfg(feature = "extended_numeric_types")]
-            ArrowType::Int8 => PyArrowType::Int8(),
-            #[cfg(feature = "extended_numeric_types")]
-            ArrowType::Int16 => PyArrowType::Int16(),
-            ArrowType::Int32 => PyArrowType::Int32(),
-            ArrowType::Int64 => PyArrowType::Int64(),
-            #[cfg(feature = "extended_numeric_types")]
-            ArrowType::UInt8 => PyArrowType::UInt8(),
-            #[cfg(feature = "extended_numeric_types")]
-            ArrowType::UInt16 => PyArrowType::UInt16(),
-            ArrowType::UInt32 => PyArrowType::UInt32(),
-            ArrowType::UInt64 => PyArrowType::UInt64(),
-            ArrowType::Float32 => PyArrowType::Float32(),
-            ArrowType::Float64 => PyArrowType::Float64(),
-            #[cfg(feature = "datetime")]
-            ArrowType::Date32 => PyArrowType::Date32(),
-            #[cfg(feature = "datetime")]
-            ArrowType::Date64 => PyArrowType::Date64(),
-            #[cfg(feature = "datetime")]
-            ArrowType::Time32(unit) => PyArrowType::Time32 { unit: unit.into() },
-            #[cfg(feature = "datetime")]
-            ArrowType::Time64(unit) => PyArrowType::Time64 { unit: unit.into() },
-            #[cfg(feature = "datetime")]
-            ArrowType::Duration32(unit) => PyArrowType::Duration32 { unit: unit.into() },
-            #[cfg(feature = "datetime")]
-            ArrowType::Duration64(unit) => PyArrowType::Duration64 { unit: unit.into() },
-            #[cfg(feature = "datetime")]
-            ArrowType::Timestamp(unit, tz) => PyArrowType::Timestamp { unit: unit.into(), tz },
-            #[cfg(feature = "datetime")]
-            ArrowType::Interval(unit) => PyArrowType::Interval { unit: unit.into() },
-            #[cfg(feature = "decimal")]
-            ArrowType::Decimal32(p, s) => PyArrowType::Decimal32 { precision: p, scale: s },
-            #[cfg(feature = "decimal")]
-            ArrowType::Decimal64(p, s) => PyArrowType::Decimal64 { precision: p, scale: s },
-            #[cfg(feature = "decimal")]
-            ArrowType::Decimal128(p, s) => PyArrowType::Decimal128 { precision: p, scale: s },
-            ArrowType::String => PyArrowType::String(),
-            #[cfg(feature = "large_string")]
-            ArrowType::LargeString => PyArrowType::LargeString(),
-            ArrowType::Utf8View => PyArrowType::Utf8View(),
-            ArrowType::Dictionary(index) => PyArrowType::Dictionary { index: index.into() },
-        }
-    }
-}
-
-impl From<PyArrowType> for ArrowType {
-    fn from(dtype: PyArrowType) -> Self {
-        match dtype {
-            PyArrowType::Null() => ArrowType::Null,
-            PyArrowType::Boolean() => ArrowType::Boolean,
-            #[cfg(feature = "extended_numeric_types")]
-            PyArrowType::Int8() => ArrowType::Int8,
-            #[cfg(not(feature = "extended_numeric_types"))]
-            PyArrowType::Int8() => ArrowType::Int32,
-            #[cfg(feature = "extended_numeric_types")]
-            PyArrowType::Int16() => ArrowType::Int16,
-            #[cfg(not(feature = "extended_numeric_types"))]
-            PyArrowType::Int16() => ArrowType::Int32,
-            PyArrowType::Int32() => ArrowType::Int32,
-            PyArrowType::Int64() => ArrowType::Int64,
-            #[cfg(feature = "extended_numeric_types")]
-            PyArrowType::UInt8() => ArrowType::UInt8,
-            #[cfg(not(feature = "extended_numeric_types"))]
-            PyArrowType::UInt8() => ArrowType::UInt32,
-            #[cfg(feature = "extended_numeric_types")]
-            PyArrowType::UInt16() => ArrowType::UInt16,
-            #[cfg(not(feature = "extended_numeric_types"))]
-            PyArrowType::UInt16() => ArrowType::UInt32,
-            PyArrowType::UInt32() => ArrowType::UInt32,
-            PyArrowType::UInt64() => ArrowType::UInt64,
-            PyArrowType::Float32() => ArrowType::Float32,
-            PyArrowType::Float64() => ArrowType::Float64,
-            #[cfg(feature = "datetime")]
-            PyArrowType::Date32() => ArrowType::Date32,
-            #[cfg(feature = "datetime")]
-            PyArrowType::Date64() => ArrowType::Date64,
-            #[cfg(feature = "datetime")]
-            PyArrowType::Time32 { unit } => ArrowType::Time32(unit.into()),
-            #[cfg(feature = "datetime")]
-            PyArrowType::Time64 { unit } => ArrowType::Time64(unit.into()),
-            #[cfg(feature = "datetime")]
-            PyArrowType::Duration32 { unit } => ArrowType::Duration32(unit.into()),
-            #[cfg(feature = "datetime")]
-            PyArrowType::Duration64 { unit } => ArrowType::Duration64(unit.into()),
-            #[cfg(feature = "datetime")]
-            PyArrowType::Timestamp { unit, tz } => ArrowType::Timestamp(unit.into(), tz),
-            #[cfg(feature = "datetime")]
-            PyArrowType::Interval { unit } => ArrowType::Interval(unit.into()),
-            #[cfg(feature = "decimal")]
-            PyArrowType::Decimal32 { precision, scale } => ArrowType::Decimal32(precision, scale),
-            #[cfg(feature = "decimal")]
-            PyArrowType::Decimal64 { precision, scale } => ArrowType::Decimal64(precision, scale),
-            #[cfg(feature = "decimal")]
-            PyArrowType::Decimal128 { precision, scale } => ArrowType::Decimal128(precision, scale),
-            PyArrowType::String() => ArrowType::String,
-            #[cfg(feature = "large_string")]
-            PyArrowType::LargeString() => ArrowType::LargeString,
-            PyArrowType::Utf8View() => ArrowType::Utf8View,
-            PyArrowType::Dictionary { index } => ArrowType::Dictionary(index.into()),
-        }
     }
 }

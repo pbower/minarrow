@@ -19,7 +19,18 @@ name = "minarrow_py"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-minarrow = { version = "0.18", path = ".." }
+# The core crate's default feature set includes `large_string`, which would keep that
+# feature on regardless of what this crate requests. The defaults are therefore listed
+# here without `large_string`, so that the `large_string` feature below decides it.
+# `scalar_type` is included because element access returns a `Scalar` in every build.
+minarrow = { version = "0.18", path = "..", default-features = false, features = [
+    "views",
+    "chunked",
+    "simd",
+    "select",
+    "log",
+    "scalar_type",
+] }
 minarrow-pyo3 = { version = "0.18", path = "../pyo3", optional = true, default-features = false }
 pyo3 = { version = "0.29", features = ["abi3-py39"] }
 thiserror = "2"
@@ -27,7 +38,7 @@ thiserror = "2"
 [features]
 default = ["datetime", "large_string", "matrix", "scalar_type", "value_type", "cube", "arrow_interop", "ndarray", "decimal"]
 extension-module = ["pyo3/extension-module"]
-arrow_interop = ["dep:minarrow-pyo3", "minarrow-pyo3/datetime"]
+arrow_interop = ["dep:minarrow-pyo3"]
 simd = ["minarrow/simd"]
 # N-dimensional tensor with DLPack capsule interchange. The capsule glue
 # lives in minarrow-pyo3's ffi::dlpack, alongside the Arrow capsule glue.
@@ -48,7 +59,7 @@ ndarray = [
 # it should not be combined with `extension-module`.
 embed = ["arrow_interop", "scalar_type", "value_type", "simd"]
 decimal = ["minarrow/decimal", "minarrow-pyo3?/decimal"]
-datetime = ["minarrow/datetime"]
+datetime = ["minarrow/datetime", "minarrow-pyo3?/datetime"]
 extended_numeric_types = ["minarrow/extended_numeric_types", "minarrow-pyo3?/extended_numeric_types"]
 large_string = ["minarrow/large_string"]
 scalar_type = ["minarrow/scalar_type"]
