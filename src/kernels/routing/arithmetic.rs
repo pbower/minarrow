@@ -29,7 +29,7 @@ use crate::kernels::arithmetic::{
     string_ops::apply_str_str,
 };
 #[cfg(feature = "decimal")]
-use crate::kernels::arithmetic::decimal::{decimal_binary, integer_to_decimal};
+use crate::kernels::arithmetic::decimal::{decimal_binary, integer_to_decimal, max_precision};
 
 use crate::enums::{error::KernelError, operators::ArithmeticOperator};
 
@@ -193,75 +193,78 @@ pub fn scalar_arithmetic(
         #[cfg(feature = "large_string")]
         (Scalar::String64(l), Scalar::String32(r), Add) => Scalar::String64(format!("{}{}", l, r)),
 
-        // Decimal scalar operations at matching width and scale
+        // Decimal scalar operations at matching width and scale. Result
+        // precision follows the array kernels: add and subtract widen the
+        // larger operand precision by one digit, multiply sums the operand
+        // precisions, and both are capped at the width maximum.
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal32(l, ls), Scalar::Decimal32(r, rs), Add) if ls == rs => {
+        (Scalar::Decimal32(l, lp, ls), Scalar::Decimal32(r, rp, rs), Add) if ls == rs => {
             Scalar::Decimal32(l.checked_add(r).ok_or_else(|| MinarrowError::KernelError(
                 Some("Decimal32 overflow in addition".to_string()),
-            ))?, ls)
+            ))?, (lp.max(rp) + 1).min(max_precision::<i32>()), ls)
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal32(l, ls), Scalar::Decimal32(r, rs), Subtract) if ls == rs => {
+        (Scalar::Decimal32(l, lp, ls), Scalar::Decimal32(r, rp, rs), Subtract) if ls == rs => {
             Scalar::Decimal32(l.checked_sub(r).ok_or_else(|| MinarrowError::KernelError(
                 Some("Decimal32 overflow in subtraction".to_string()),
-            ))?, ls)
+            ))?, (lp.max(rp) + 1).min(max_precision::<i32>()), ls)
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal32(l, ls), Scalar::Decimal32(r, _rs), Multiply) => {
+        (Scalar::Decimal32(l, lp, ls), Scalar::Decimal32(r, rp, rs), Multiply) => {
             Scalar::Decimal32(l.checked_mul(r).ok_or_else(|| MinarrowError::KernelError(
                 Some("Decimal32 overflow in multiplication".to_string()),
-            ))?, ls + _rs)
+            ))?, lp.saturating_add(rp).min(max_precision::<i32>()), ls + rs)
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal64(l, ls), Scalar::Decimal64(r, rs), Add) if ls == rs => {
+        (Scalar::Decimal64(l, lp, ls), Scalar::Decimal64(r, rp, rs), Add) if ls == rs => {
             Scalar::Decimal64(l.checked_add(r).ok_or_else(|| MinarrowError::KernelError(
                 Some("Decimal64 overflow in addition".to_string()),
-            ))?, ls)
+            ))?, (lp.max(rp) + 1).min(max_precision::<i64>()), ls)
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal64(l, ls), Scalar::Decimal64(r, rs), Subtract) if ls == rs => {
+        (Scalar::Decimal64(l, lp, ls), Scalar::Decimal64(r, rp, rs), Subtract) if ls == rs => {
             Scalar::Decimal64(l.checked_sub(r).ok_or_else(|| MinarrowError::KernelError(
                 Some("Decimal64 overflow in subtraction".to_string()),
-            ))?, ls)
+            ))?, (lp.max(rp) + 1).min(max_precision::<i64>()), ls)
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal64(l, ls), Scalar::Decimal64(r, _rs), Multiply) => {
+        (Scalar::Decimal64(l, lp, ls), Scalar::Decimal64(r, rp, rs), Multiply) => {
             Scalar::Decimal64(l.checked_mul(r).ok_or_else(|| MinarrowError::KernelError(
                 Some("Decimal64 overflow in multiplication".to_string()),
-            ))?, ls + _rs)
+            ))?, lp.saturating_add(rp).min(max_precision::<i64>()), ls + rs)
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal128(l, ls), Scalar::Decimal128(r, rs), Add) if ls == rs => {
+        (Scalar::Decimal128(l, lp, ls), Scalar::Decimal128(r, rp, rs), Add) if ls == rs => {
             Scalar::Decimal128(l.checked_add(r).ok_or_else(|| MinarrowError::KernelError(
                 Some("Decimal128 overflow in addition".to_string()),
-            ))?, ls)
+            ))?, (lp.max(rp) + 1).min(max_precision::<i128>()), ls)
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal128(l, ls), Scalar::Decimal128(r, rs), Subtract) if ls == rs => {
+        (Scalar::Decimal128(l, lp, ls), Scalar::Decimal128(r, rp, rs), Subtract) if ls == rs => {
             Scalar::Decimal128(l.checked_sub(r).ok_or_else(|| MinarrowError::KernelError(
                 Some("Decimal128 overflow in subtraction".to_string()),
-            ))?, ls)
+            ))?, (lp.max(rp) + 1).min(max_precision::<i128>()), ls)
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal128(l, ls), Scalar::Decimal128(r, _rs), Multiply) => {
+        (Scalar::Decimal128(l, lp, ls), Scalar::Decimal128(r, rp, rs), Multiply) => {
             Scalar::Decimal128(l.checked_mul(r).ok_or_else(|| MinarrowError::KernelError(
                 Some("Decimal128 overflow in multiplication".to_string()),
-            ))?, ls + _rs)
+            ))?, lp.saturating_add(rp).min(max_precision::<i128>()), ls + rs)
         }
 
         // Decimal + Float -> Float64 scalar promotion
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal32(l, s), Scalar::Float64(r), op) | (Scalar::Float64(r), Scalar::Decimal32(l, s), op) => {
+        (Scalar::Decimal32(l, _, s), Scalar::Float64(r), op) | (Scalar::Float64(r), Scalar::Decimal32(l, _, s), op) => {
             let l_f64 = l as f64 / 10f64.powi(s as i32);
             return scalar_arithmetic(Scalar::Float64(l_f64), Scalar::Float64(r), op);
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal64(l, s), Scalar::Float64(r), op) | (Scalar::Float64(r), Scalar::Decimal64(l, s), op) => {
+        (Scalar::Decimal64(l, _, s), Scalar::Float64(r), op) | (Scalar::Float64(r), Scalar::Decimal64(l, _, s), op) => {
             let l_f64 = l as f64 / 10f64.powi(s as i32);
             return scalar_arithmetic(Scalar::Float64(l_f64), Scalar::Float64(r), op);
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal128(l, s), Scalar::Float64(r), op) | (Scalar::Float64(r), Scalar::Decimal128(l, s), op) => {
+        (Scalar::Decimal128(l, _, s), Scalar::Float64(r), op) | (Scalar::Float64(r), Scalar::Decimal128(l, _, s), op) => {
             use num_traits::ToPrimitive;
             let l_f64 = l.to_f64().unwrap() / 10f64.powi(s as i32);
             return scalar_arithmetic(Scalar::Float64(l_f64), Scalar::Float64(r), op);

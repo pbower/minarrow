@@ -1438,16 +1438,16 @@ impl From<Scalar> for Array {
             #[cfg(feature = "datetime")]
             Interval => Array::from_int32(IntegerArray::from_slice(&[0i32])),
             #[cfg(feature = "decimal")]
-            Decimal32(v, s) => Array::from_decimal32(
-                crate::DecimalArray::from_slice(&[v], 0, s),
+            Decimal32(v, p, s) => Array::from_decimal32(
+                crate::DecimalArray::from_slice(&[v], p, s),
             ),
             #[cfg(feature = "decimal")]
-            Decimal64(v, s) => Array::from_decimal64(
-                crate::DecimalArray::from_slice(&[v], 0, s),
+            Decimal64(v, p, s) => Array::from_decimal64(
+                crate::DecimalArray::from_slice(&[v], p, s),
             ),
             #[cfg(feature = "decimal")]
-            Decimal128(v, s) => Array::from_decimal128(
-                crate::DecimalArray::from_slice(&[v], 0, s),
+            Decimal128(v, p, s) => Array::from_decimal128(
+                crate::DecimalArray::from_slice(&[v], p, s),
             ),
         }
     }

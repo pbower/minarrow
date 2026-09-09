@@ -103,13 +103,15 @@ pub enum Scalar {
     // Floats
     Float32(f32),
     Float64(f64),
-    // Decimals - unscaled integer value + scale
+    // Decimals - unscaled integer value, precision, scale. The scalar carries
+    // both components of its `ArrowType` so it round-trips to its column type
+    // without loss.
     #[cfg(feature = "decimal")]
-    Decimal32(i32, i8),
+    Decimal32(i32, u8, i8),
     #[cfg(feature = "decimal")]
-    Decimal64(i64, i8),
+    Decimal64(i64, u8, i8),
     #[cfg(feature = "decimal")]
-    Decimal128(i128, i8),
+    Decimal128(i128, u8, i8),
     // String strings
     String32(String),
     #[cfg(feature = "large_string")]
@@ -143,11 +145,11 @@ impl Display for Scalar {
             Scalar::Float32(v) => Display::fmt(v, f),
             Scalar::Float64(v) => Display::fmt(v, f),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, scale) => write!(f, "{}", format_decimal_scalar(*v as i128, *scale)),
+            Scalar::Decimal32(v, _, scale) => write!(f, "{}", format_decimal_scalar(*v as i128, *scale)),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, scale) => write!(f, "{}", format_decimal_scalar(*v as i128, *scale)),
+            Scalar::Decimal64(v, _, scale) => write!(f, "{}", format_decimal_scalar(*v as i128, *scale)),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, scale) => write!(f, "{}", format_decimal_scalar(*v, *scale)),
+            Scalar::Decimal128(v, _, scale) => write!(f, "{}", format_decimal_scalar(*v, *scale)),
             Scalar::String32(v) => f.write_str(v),
             #[cfg(feature = "large_string")]
             Scalar::String64(v) => f.write_str(v),
@@ -186,11 +188,11 @@ impl Scalar {
             Scalar::Float32(v) => *v != 0.0,
             Scalar::Float64(v) => *v != 0.0,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => *v != 0,
+            Scalar::Decimal32(v, _, _) => *v != 0,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => *v != 0,
+            Scalar::Decimal64(v, _, _) => *v != 0,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => *v != 0,
+            Scalar::Decimal128(v, _, _) => *v != 0,
             Scalar::Null => panic!("Cannot convert Null to bool"),
             Scalar::String32(s) => {
                 let s = s.trim();
@@ -257,11 +259,11 @@ impl Scalar {
             Scalar::Float32(v) => i8::try_from(*v as i32).expect("f32 out of range for i8"),
             Scalar::Float64(v) => i8::try_from(*v as i32).expect("f64 out of range for i8"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => i8::try_from(*v).expect("Decimal32 out of range for i8"),
+            Scalar::Decimal32(v, _, _) => i8::try_from(*v).expect("Decimal32 out of range for i8"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => i8::try_from(*v).expect("Decimal64 out of range for i8"),
+            Scalar::Decimal64(v, _, _) => i8::try_from(*v).expect("Decimal64 out of range for i8"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => i8::try_from(*v).expect("Decimal128 out of range for i8"),
+            Scalar::Decimal128(v, _, _) => i8::try_from(*v).expect("Decimal128 out of range for i8"),
             Scalar::Null => panic!("Cannot convert Null to i8"),
             Scalar::String32(s) => s.parse::<i8>().expect("Cannot parse string as i8"),
             #[cfg(feature = "large_string")]
@@ -301,11 +303,11 @@ impl Scalar {
             Scalar::Float32(v) => i16::try_from(*v as i32).expect("f32 out of range for i16"),
             Scalar::Float64(v) => i16::try_from(*v as i32).expect("f64 out of range for i16"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => i16::try_from(*v).expect("Decimal32 out of range for i16"),
+            Scalar::Decimal32(v, _, _) => i16::try_from(*v).expect("Decimal32 out of range for i16"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => i16::try_from(*v).expect("Decimal64 out of range for i16"),
+            Scalar::Decimal64(v, _, _) => i16::try_from(*v).expect("Decimal64 out of range for i16"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => i16::try_from(*v).expect("Decimal128 out of range for i16"),
+            Scalar::Decimal128(v, _, _) => i16::try_from(*v).expect("Decimal128 out of range for i16"),
             Scalar::Null => panic!("Cannot convert Null to i16"),
             Scalar::String32(s) => s.parse::<i16>().expect("Cannot parse string as i16"),
             #[cfg(feature = "large_string")]
@@ -348,11 +350,11 @@ impl Scalar {
             Scalar::Float32(v) => *v as i32,
             Scalar::Float64(v) => *v as i32,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => *v,
+            Scalar::Decimal32(v, _, _) => *v,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => i32::try_from(*v).expect("Decimal64 out of range for i32"),
+            Scalar::Decimal64(v, _, _) => i32::try_from(*v).expect("Decimal64 out of range for i32"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => i32::try_from(*v).expect("Decimal128 out of range for i32"),
+            Scalar::Decimal128(v, _, _) => i32::try_from(*v).expect("Decimal128 out of range for i32"),
             Scalar::Null => panic!("Cannot convert Null to i32"),
             Scalar::String32(s) => s.parse::<i32>().expect("Cannot parse string as i32"),
             #[cfg(feature = "large_string")]
@@ -401,11 +403,11 @@ impl Scalar {
             Scalar::Float32(v) => *v as i64,
             Scalar::Float64(v) => *v as i64,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => *v as i64,
+            Scalar::Decimal32(v, _, _) => *v as i64,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => *v,
+            Scalar::Decimal64(v, _, _) => *v,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => i64::try_from(*v).expect("Decimal128 out of range for i64"),
+            Scalar::Decimal128(v, _, _) => i64::try_from(*v).expect("Decimal128 out of range for i64"),
             Scalar::Null => panic!("Cannot convert Null to i64"),
             Scalar::String32(s) => s.parse::<i64>().expect("Cannot parse string as i64"),
             #[cfg(feature = "large_string")]
@@ -448,11 +450,11 @@ impl Scalar {
             Scalar::Float32(v) => u8::try_from(*v as i32).expect("f32 out of range for u8"),
             Scalar::Float64(v) => u8::try_from(*v as i32).expect("f64 out of range for u8"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => u8::try_from(*v).expect("Decimal32 out of range for u8"),
+            Scalar::Decimal32(v, _, _) => u8::try_from(*v).expect("Decimal32 out of range for u8"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => u8::try_from(*v).expect("Decimal64 out of range for u8"),
+            Scalar::Decimal64(v, _, _) => u8::try_from(*v).expect("Decimal64 out of range for u8"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => u8::try_from(*v).expect("Decimal128 out of range for u8"),
+            Scalar::Decimal128(v, _, _) => u8::try_from(*v).expect("Decimal128 out of range for u8"),
             Scalar::Null => panic!("Cannot convert Null to u8"),
             Scalar::String32(s) => s.parse::<u8>().expect("Cannot parse string as u8"),
             #[cfg(feature = "large_string")]
@@ -495,11 +497,11 @@ impl Scalar {
             Scalar::Float32(v) => u16::try_from(*v as i32).expect("f32 out of range for u16"),
             Scalar::Float64(v) => u16::try_from(*v as i32).expect("f64 out of range for u16"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => u16::try_from(*v).expect("Decimal32 out of range for u16"),
+            Scalar::Decimal32(v, _, _) => u16::try_from(*v).expect("Decimal32 out of range for u16"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => u16::try_from(*v).expect("Decimal64 out of range for u16"),
+            Scalar::Decimal64(v, _, _) => u16::try_from(*v).expect("Decimal64 out of range for u16"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => u16::try_from(*v).expect("Decimal128 out of range for u16"),
+            Scalar::Decimal128(v, _, _) => u16::try_from(*v).expect("Decimal128 out of range for u16"),
             Scalar::Null => panic!("Cannot convert Null to u16"),
             Scalar::String32(s) => s.parse::<u16>().expect("Cannot parse string as u16"),
             #[cfg(feature = "large_string")]
@@ -542,11 +544,11 @@ impl Scalar {
             Scalar::Float32(v) => *v as u32,
             Scalar::Float64(v) => *v as u32,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => u32::try_from(*v).expect("Decimal32 out of range for u32"),
+            Scalar::Decimal32(v, _, _) => u32::try_from(*v).expect("Decimal32 out of range for u32"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => u32::try_from(*v).expect("Decimal64 out of range for u32"),
+            Scalar::Decimal64(v, _, _) => u32::try_from(*v).expect("Decimal64 out of range for u32"),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => u32::try_from(*v).expect("Decimal128 out of range for u32"),
+            Scalar::Decimal128(v, _, _) => u32::try_from(*v).expect("Decimal128 out of range for u32"),
             Scalar::Null => panic!("Cannot convert Null to u32"),
             Scalar::String32(s) => s.parse::<u32>().expect("Cannot parse string as u32"),
             #[cfg(feature = "large_string")]
@@ -625,15 +627,15 @@ impl Scalar {
                 }
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => {
+            Scalar::Decimal32(v, _, _) => {
                 if *v >= 0 { *v as u64 } else { panic!("Decimal32 out of range for u64") }
             },
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => {
+            Scalar::Decimal64(v, _, _) => {
                 if *v >= 0 { *v as u64 } else { panic!("Decimal64 out of range for u64") }
             },
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => u64::try_from(*v).expect("Decimal128 out of range for u64"),
+            Scalar::Decimal128(v, _, _) => u64::try_from(*v).expect("Decimal128 out of range for u64"),
             Scalar::Null => panic!("Cannot convert Null to u64"),
             Scalar::String32(s) => s.parse::<u64>().expect("Cannot parse string as u64"),
             #[cfg(feature = "large_string")]
@@ -676,11 +678,11 @@ impl Scalar {
             Scalar::Float32(v) => *v,
             Scalar::Float64(v) => *v as f32,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, s) => *v as f32 / 10f32.powi(*s as i32),
+            Scalar::Decimal32(v, _, s) => *v as f32 / 10f32.powi(*s as i32),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, s) => *v as f32 / 10f32.powi(*s as i32),
+            Scalar::Decimal64(v, _, s) => *v as f32 / 10f32.powi(*s as i32),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, s) => *v as f32 / 10f32.powi(*s as i32),
+            Scalar::Decimal128(v, _, s) => *v as f32 / 10f32.powi(*s as i32),
             Scalar::Boolean(v) => {
                 if *v {
                     1.0
@@ -723,11 +725,11 @@ impl Scalar {
             Scalar::Float32(v) => *v as f64,
             Scalar::Float64(v) => *v,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, s) => *v as f64 / 10f64.powi(*s as i32),
+            Scalar::Decimal32(v, _, s) => *v as f64 / 10f64.powi(*s as i32),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, s) => *v as f64 / 10f64.powi(*s as i32),
+            Scalar::Decimal64(v, _, s) => *v as f64 / 10f64.powi(*s as i32),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, s) => *v as f64 / 10f64.powi(*s as i32),
+            Scalar::Decimal128(v, _, s) => *v as f64 / 10f64.powi(*s as i32),
             Scalar::Boolean(v) => {
                 if *v {
                     1.0
@@ -774,11 +776,11 @@ impl Scalar {
             Scalar::Float32(v) => v.to_string(),
             Scalar::Float64(v) => v.to_string(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, s) => format_decimal_scalar(*v as i128, *s),
+            Scalar::Decimal32(v, _, s) => format_decimal_scalar(*v as i128, *s),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, s) => format_decimal_scalar(*v as i128, *s),
+            Scalar::Decimal64(v, _, s) => format_decimal_scalar(*v as i128, *s),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, s) => format_decimal_scalar(*v, *s),
+            Scalar::Decimal128(v, _, s) => format_decimal_scalar(*v, *s),
             Scalar::Null => panic!("Cannot convert Null to String"),
             #[cfg(feature = "datetime")]
             Scalar::Datetime32(v) => v.to_string(),
@@ -849,7 +851,7 @@ impl Scalar {
                 }
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(_, _) | Scalar::Decimal64(_, _) | Scalar::Decimal128(_, _) => panic!("Cannot convert Decimal to dt32"),
+            Scalar::Decimal32(_, _, _) | Scalar::Decimal64(_, _, _) | Scalar::Decimal128(_, _, _) => panic!("Cannot convert Decimal to dt32"),
             Scalar::String32(s) => s.parse::<u32>().expect("Cannot parse string as dt32"),
             #[cfg(feature = "large_string")]
             Scalar::String64(s) => s.parse::<u32>().expect("Cannot parse string as dt32"),
@@ -938,7 +940,7 @@ impl Scalar {
                 }
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(_, _) | Scalar::Decimal64(_, _) | Scalar::Decimal128(_, _) => panic!("Cannot convert Decimal to dt64"),
+            Scalar::Decimal32(_, _, _) | Scalar::Decimal64(_, _, _) | Scalar::Decimal128(_, _, _) => panic!("Cannot convert Decimal to dt64"),
             Scalar::String32(s) => s.parse::<u64>().expect("Cannot parse string as dt64"),
             #[cfg(feature = "large_string")]
             Scalar::String64(s) => s.parse::<u64>().expect("Cannot parse string as dt64"),
@@ -979,11 +981,11 @@ impl Scalar {
             Scalar::Float32(v) => Some(*v != 0.0),
             Scalar::Float64(v) => Some(*v != 0.0),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => Some(*v != 0),
+            Scalar::Decimal32(v, _, _) => Some(*v != 0),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => Some(*v != 0),
+            Scalar::Decimal64(v, _, _) => Some(*v != 0),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => Some(*v != 0),
+            Scalar::Decimal128(v, _, _) => Some(*v != 0),
             Scalar::Null => None,
             Scalar::String32(s) => {
                 let s = s.trim();
@@ -1047,11 +1049,11 @@ impl Scalar {
             Scalar::Float32(v) => i8::try_from(*v as i32).ok(),
             Scalar::Float64(v) => i8::try_from(*v as i32).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => i8::try_from(*v).ok(),
+            Scalar::Decimal32(v, _, _) => i8::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => i8::try_from(*v).ok(),
+            Scalar::Decimal64(v, _, _) => i8::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => i8::try_from(*v).ok(),
+            Scalar::Decimal128(v, _, _) => i8::try_from(*v).ok(),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<i8>().ok(),
             #[cfg(feature = "large_string")]
@@ -1082,11 +1084,11 @@ impl Scalar {
             Scalar::Float32(v) => i16::try_from(*v as i32).ok(),
             Scalar::Float64(v) => i16::try_from(*v as i32).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => i16::try_from(*v).ok(),
+            Scalar::Decimal32(v, _, _) => i16::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => i16::try_from(*v).ok(),
+            Scalar::Decimal64(v, _, _) => i16::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => i16::try_from(*v).ok(),
+            Scalar::Decimal128(v, _, _) => i16::try_from(*v).ok(),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<i16>().ok(),
             #[cfg(feature = "large_string")]
@@ -1120,11 +1122,11 @@ impl Scalar {
             Scalar::Float32(v) => Some(*v as i32),
             Scalar::Float64(v) => Some(*v as i32),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => Some(*v),
+            Scalar::Decimal32(v, _, _) => Some(*v),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => i32::try_from(*v).ok(),
+            Scalar::Decimal64(v, _, _) => i32::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => i32::try_from(*v).ok(),
+            Scalar::Decimal128(v, _, _) => i32::try_from(*v).ok(),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<i32>().ok(),
             #[cfg(feature = "large_string")]
@@ -1164,11 +1166,11 @@ impl Scalar {
             Scalar::Float32(v) => Some(*v as i64),
             Scalar::Float64(v) => Some(*v as i64),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => Some(*v as i64),
+            Scalar::Decimal32(v, _, _) => Some(*v as i64),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => Some(*v),
+            Scalar::Decimal64(v, _, _) => Some(*v),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => i64::try_from(*v).ok(),
+            Scalar::Decimal128(v, _, _) => i64::try_from(*v).ok(),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<i64>().ok(),
             #[cfg(feature = "large_string")]
@@ -1202,11 +1204,11 @@ impl Scalar {
             Scalar::Float32(v) => u8::try_from(*v as i32).ok(),
             Scalar::Float64(v) => u8::try_from(*v as i32).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => u8::try_from(*v).ok(),
+            Scalar::Decimal32(v, _, _) => u8::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => u8::try_from(*v).ok(),
+            Scalar::Decimal64(v, _, _) => u8::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => u8::try_from(*v).ok(),
+            Scalar::Decimal128(v, _, _) => u8::try_from(*v).ok(),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<u8>().ok(),
             #[cfg(feature = "large_string")]
@@ -1240,11 +1242,11 @@ impl Scalar {
             Scalar::Float32(v) => u16::try_from(*v as i32).ok(),
             Scalar::Float64(v) => u16::try_from(*v as i32).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => u16::try_from(*v).ok(),
+            Scalar::Decimal32(v, _, _) => u16::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => u16::try_from(*v).ok(),
+            Scalar::Decimal64(v, _, _) => u16::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => u16::try_from(*v).ok(),
+            Scalar::Decimal128(v, _, _) => u16::try_from(*v).ok(),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<u16>().ok(),
             #[cfg(feature = "large_string")]
@@ -1278,11 +1280,11 @@ impl Scalar {
             Scalar::Float32(v) => Some(*v as u32),
             Scalar::Float64(v) => Some(*v as u32),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => u32::try_from(*v).ok(),
+            Scalar::Decimal32(v, _, _) => u32::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => u32::try_from(*v).ok(),
+            Scalar::Decimal64(v, _, _) => u32::try_from(*v).ok(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => u32::try_from(*v).ok(),
+            Scalar::Decimal128(v, _, _) => u32::try_from(*v).ok(),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<u32>().ok(),
             #[cfg(feature = "large_string")]
@@ -1352,11 +1354,11 @@ impl Scalar {
                 }
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, _) => if *v >= 0 { Some(*v as u64) } else { None },
+            Scalar::Decimal32(v, _, _) => if *v >= 0 { Some(*v as u64) } else { None },
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, _) => if *v >= 0 { Some(*v as u64) } else { None },
+            Scalar::Decimal64(v, _, _) => if *v >= 0 { Some(*v as u64) } else { None },
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, _) => u64::try_from(*v).ok(),
+            Scalar::Decimal128(v, _, _) => u64::try_from(*v).ok(),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<u64>().ok(),
             #[cfg(feature = "large_string")]
@@ -1402,11 +1404,11 @@ impl Scalar {
             Scalar::Float32(v) => Some(*v),
             Scalar::Float64(v) => Some(*v as f32),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, s) => Some(*v as f32 / 10f32.powi(*s as i32)),
+            Scalar::Decimal32(v, _, s) => Some(*v as f32 / 10f32.powi(*s as i32)),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, s) => Some(*v as f32 / 10f32.powi(*s as i32)),
+            Scalar::Decimal64(v, _, s) => Some(*v as f32 / 10f32.powi(*s as i32)),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, s) => Some(*v as f32 / 10f32.powi(*s as i32)),
+            Scalar::Decimal128(v, _, s) => Some(*v as f32 / 10f32.powi(*s as i32)),
             Scalar::Boolean(v) => Some(if *v { 1.0 } else { 0.0 }),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<f32>().ok(),
@@ -1440,11 +1442,11 @@ impl Scalar {
             Scalar::Float32(v) => Some(*v as f64),
             Scalar::Float64(v) => Some(*v),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, s) => Some(*v as f64 / 10f64.powi(*s as i32)),
+            Scalar::Decimal32(v, _, s) => Some(*v as f64 / 10f64.powi(*s as i32)),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, s) => Some(*v as f64 / 10f64.powi(*s as i32)),
+            Scalar::Decimal64(v, _, s) => Some(*v as f64 / 10f64.powi(*s as i32)),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, s) => Some(*v as f64 / 10f64.powi(*s as i32)),
+            Scalar::Decimal128(v, _, s) => Some(*v as f64 / 10f64.powi(*s as i32)),
             Scalar::Boolean(v) => Some(if *v { 1.0 } else { 0.0 }),
             Scalar::Null => None,
             Scalar::String32(s) => s.parse::<f64>().ok(),
@@ -1482,11 +1484,11 @@ impl Scalar {
             Scalar::Float32(v) => Some(v.to_string()),
             Scalar::Float64(v) => Some(v.to_string()),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, s) => Some(format_decimal_scalar(*v as i128, *s)),
+            Scalar::Decimal32(v, _, s) => Some(format_decimal_scalar(*v as i128, *s)),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, s) => Some(format_decimal_scalar(*v as i128, *s)),
+            Scalar::Decimal64(v, _, s) => Some(format_decimal_scalar(*v as i128, *s)),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, s) => Some(format_decimal_scalar(*v, *s)),
+            Scalar::Decimal128(v, _, s) => Some(format_decimal_scalar(*v, *s)),
             Scalar::Null => None,
             #[cfg(feature = "datetime")]
             Scalar::Datetime32(v) => Some(v.to_string()),
@@ -1548,7 +1550,7 @@ impl Scalar {
                 }
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(_, _) | Scalar::Decimal64(_, _) | Scalar::Decimal128(_, _) => None,
+            Scalar::Decimal32(_, _, _) | Scalar::Decimal64(_, _, _) | Scalar::Decimal128(_, _, _) => None,
             Scalar::String32(s) => s.parse::<u32>().ok(),
             #[cfg(feature = "large_string")]
             Scalar::String64(s) => s.parse::<u32>().ok(),
@@ -1628,7 +1630,7 @@ impl Scalar {
                 }
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(_, _) | Scalar::Decimal64(_, _) | Scalar::Decimal128(_, _) => None,
+            Scalar::Decimal32(_, _, _) | Scalar::Decimal64(_, _, _) | Scalar::Decimal128(_, _, _) => None,
             Scalar::String32(s) => s.parse::<u64>().ok(),
             #[cfg(feature = "large_string")]
             Scalar::String64(s) => s.parse::<u64>().ok(),
@@ -1677,11 +1679,11 @@ impl Scalar {
             Scalar::Float32(_) => ArrowType::Float32,
             Scalar::Float64(_) => ArrowType::Float64,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(_, s) => ArrowType::Decimal32(0, *s),
+            Scalar::Decimal32(_, p, s) => ArrowType::Decimal32(*p, *s),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(_, s) => ArrowType::Decimal64(0, *s),
+            Scalar::Decimal64(_, p, s) => ArrowType::Decimal64(*p, *s),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(_, s) => ArrowType::Decimal128(0, *s),
+            Scalar::Decimal128(_, p, s) => ArrowType::Decimal128(*p, *s),
             Scalar::String32(_) => ArrowType::String,
             #[cfg(feature = "large_string")]
             Scalar::String64(_) => ArrowType::LargeString,
@@ -1772,24 +1774,24 @@ impl Scalar {
                 Array::from_float64(arr)
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, s) => {
-                let mut arr = crate::DecimalArray::<i32>::with_capacity(len, false, 0, s);
+            Scalar::Decimal32(v, p, s) => {
+                let mut arr = crate::DecimalArray::<i32>::with_capacity(len, false, p, s);
                 for _ in 0..len {
                     arr.push(v);
                 }
                 Array::NumericArray(crate::NumericArray::Decimal32(std::sync::Arc::new(arr)))
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, s) => {
-                let mut arr = crate::DecimalArray::<i64>::with_capacity(len, false, 0, s);
+            Scalar::Decimal64(v, p, s) => {
+                let mut arr = crate::DecimalArray::<i64>::with_capacity(len, false, p, s);
                 for _ in 0..len {
                     arr.push(v);
                 }
                 Array::NumericArray(crate::NumericArray::Decimal64(std::sync::Arc::new(arr)))
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, s) => {
-                let mut arr = crate::DecimalArray::<i128>::with_capacity(len, false, 0, s);
+            Scalar::Decimal128(v, p, s) => {
+                let mut arr = crate::DecimalArray::<i128>::with_capacity(len, false, p, s);
                 for _ in 0..len {
                     arr.push(v);
                 }
@@ -1873,11 +1875,13 @@ impl PartialEq for Scalar {
             (Float32(a), Float32(b)) => if a.is_nan() { b.is_nan() } else { a == b },
             (Float64(a), Float64(b)) => if a.is_nan() { b.is_nan() } else { a == b },
             #[cfg(feature = "decimal")]
-            (Decimal32(a, sa), Decimal32(b, sb)) => a == b && sa == sb,
+            // Decimal equality covers value, precision and scale, matching
+            // `ArrowType` equality for the column type.
+            (Decimal32(a, pa, sa), Decimal32(b, pb, sb)) => a == b && pa == pb && sa == sb,
             #[cfg(feature = "decimal")]
-            (Decimal64(a, sa), Decimal64(b, sb)) => a == b && sa == sb,
+            (Decimal64(a, pa, sa), Decimal64(b, pb, sb)) => a == b && pa == pb && sa == sb,
             #[cfg(feature = "decimal")]
-            (Decimal128(a, sa), Decimal128(b, sb)) => a == b && sa == sb,
+            (Decimal128(a, pa, sa), Decimal128(b, pb, sb)) => a == b && pa == pb && sa == sb,
             (String32(a), String32(b)) => a == b,
             #[cfg(feature = "large_string")]
             (String64(a), String64(b)) => a == b,
@@ -1927,11 +1931,11 @@ impl std::hash::Hash for Scalar {
                 bits.hash(state);
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(v, s) => { v.hash(state); s.hash(state); }
+            Scalar::Decimal32(v, p, s) => { v.hash(state); p.hash(state); s.hash(state); }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(v, s) => { v.hash(state); s.hash(state); }
+            Scalar::Decimal64(v, p, s) => { v.hash(state); p.hash(state); s.hash(state); }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(v, s) => { v.hash(state); s.hash(state); }
+            Scalar::Decimal128(v, p, s) => { v.hash(state); p.hash(state); s.hash(state); }
             Scalar::String32(v) => v.hash(state),
             #[cfg(feature = "large_string")]
             Scalar::String64(v) => v.hash(state),
@@ -2052,17 +2056,17 @@ impl Add for Scalar {
 
             // Decimal promotes to f64
             #[cfg(feature = "decimal")]
-            (Decimal32(a, s), b) => Float64(a as f64 / 10f64.powi(s as i32) + b.f64()),
+            (Decimal32(a, _, s), b) => Float64(a as f64 / 10f64.powi(s as i32) + b.f64()),
             #[cfg(feature = "decimal")]
-            (a, Decimal32(b, s)) => Float64(a.f64() + b as f64 / 10f64.powi(s as i32)),
+            (a, Decimal32(b, _, s)) => Float64(a.f64() + b as f64 / 10f64.powi(s as i32)),
             #[cfg(feature = "decimal")]
-            (Decimal64(a, s), b) => Float64(a as f64 / 10f64.powi(s as i32) + b.f64()),
+            (Decimal64(a, _, s), b) => Float64(a as f64 / 10f64.powi(s as i32) + b.f64()),
             #[cfg(feature = "decimal")]
-            (a, Decimal64(b, s)) => Float64(a.f64() + b as f64 / 10f64.powi(s as i32)),
+            (a, Decimal64(b, _, s)) => Float64(a.f64() + b as f64 / 10f64.powi(s as i32)),
             #[cfg(feature = "decimal")]
-            (Decimal128(a, s), b) => Float64(a as f64 / 10f64.powi(s as i32) + b.f64()),
+            (Decimal128(a, _, s), b) => Float64(a as f64 / 10f64.powi(s as i32) + b.f64()),
             #[cfg(feature = "decimal")]
-            (a, Decimal128(b, s)) => Float64(a.f64() + b as f64 / 10f64.powi(s as i32)),
+            (a, Decimal128(b, _, s)) => Float64(a.f64() + b as f64 / 10f64.powi(s as i32)),
 
             // Float promotion
             (Float64(a), b) => Float64(a + b.f64()),
@@ -2148,17 +2152,17 @@ impl Sub for Scalar {
             (Null, _) | (_, Null) => Null,
 
             #[cfg(feature = "decimal")]
-            (Decimal32(a, s), b) => Float64(a as f64 / 10f64.powi(s as i32) - b.f64()),
+            (Decimal32(a, _, s), b) => Float64(a as f64 / 10f64.powi(s as i32) - b.f64()),
             #[cfg(feature = "decimal")]
-            (a, Decimal32(b, s)) => Float64(a.f64() - b as f64 / 10f64.powi(s as i32)),
+            (a, Decimal32(b, _, s)) => Float64(a.f64() - b as f64 / 10f64.powi(s as i32)),
             #[cfg(feature = "decimal")]
-            (Decimal64(a, s), b) => Float64(a as f64 / 10f64.powi(s as i32) - b.f64()),
+            (Decimal64(a, _, s), b) => Float64(a as f64 / 10f64.powi(s as i32) - b.f64()),
             #[cfg(feature = "decimal")]
-            (a, Decimal64(b, s)) => Float64(a.f64() - b as f64 / 10f64.powi(s as i32)),
+            (a, Decimal64(b, _, s)) => Float64(a.f64() - b as f64 / 10f64.powi(s as i32)),
             #[cfg(feature = "decimal")]
-            (Decimal128(a, s), b) => Float64(a as f64 / 10f64.powi(s as i32) - b.f64()),
+            (Decimal128(a, _, s), b) => Float64(a as f64 / 10f64.powi(s as i32) - b.f64()),
             #[cfg(feature = "decimal")]
-            (a, Decimal128(b, s)) => Float64(a.f64() - b as f64 / 10f64.powi(s as i32)),
+            (a, Decimal128(b, _, s)) => Float64(a.f64() - b as f64 / 10f64.powi(s as i32)),
 
             (Float64(a), b) => Float64(a - b.f64()),
             (a, Float64(b)) => Float64(a.f64() - b),
@@ -2232,17 +2236,17 @@ impl Mul for Scalar {
             (Null, _) | (_, Null) => Null,
 
             #[cfg(feature = "decimal")]
-            (Decimal32(a, s), b) => Float64(a as f64 / 10f64.powi(s as i32) * b.f64()),
+            (Decimal32(a, _, s), b) => Float64(a as f64 / 10f64.powi(s as i32) * b.f64()),
             #[cfg(feature = "decimal")]
-            (a, Decimal32(b, s)) => Float64(a.f64() * (b as f64 / 10f64.powi(s as i32))),
+            (a, Decimal32(b, _, s)) => Float64(a.f64() * (b as f64 / 10f64.powi(s as i32))),
             #[cfg(feature = "decimal")]
-            (Decimal64(a, s), b) => Float64(a as f64 / 10f64.powi(s as i32) * b.f64()),
+            (Decimal64(a, _, s), b) => Float64(a as f64 / 10f64.powi(s as i32) * b.f64()),
             #[cfg(feature = "decimal")]
-            (a, Decimal64(b, s)) => Float64(a.f64() * (b as f64 / 10f64.powi(s as i32))),
+            (a, Decimal64(b, _, s)) => Float64(a.f64() * (b as f64 / 10f64.powi(s as i32))),
             #[cfg(feature = "decimal")]
-            (Decimal128(a, s), b) => Float64(a as f64 / 10f64.powi(s as i32) * b.f64()),
+            (Decimal128(a, _, s), b) => Float64(a as f64 / 10f64.powi(s as i32) * b.f64()),
             #[cfg(feature = "decimal")]
-            (a, Decimal128(b, s)) => Float64(a.f64() * (b as f64 / 10f64.powi(s as i32))),
+            (a, Decimal128(b, _, s)) => Float64(a.f64() * (b as f64 / 10f64.powi(s as i32))),
 
             (Float64(a), b) => Float64(a * b.f64()),
             (a, Float64(b)) => Float64(a.f64() * b),
@@ -2343,17 +2347,17 @@ impl Pow<Scalar> for Scalar {
             (Null, _) | (_, Null) => Null,
 
             #[cfg(feature = "decimal")]
-            (Decimal32(a, s), b) => Float64((a as f64 / 10f64.powi(s as i32)).powf(b.f64())),
+            (Decimal32(a, _, s), b) => Float64((a as f64 / 10f64.powi(s as i32)).powf(b.f64())),
             #[cfg(feature = "decimal")]
-            (a, Decimal32(b, s)) => Float64(a.f64().powf(b as f64 / 10f64.powi(s as i32))),
+            (a, Decimal32(b, _, s)) => Float64(a.f64().powf(b as f64 / 10f64.powi(s as i32))),
             #[cfg(feature = "decimal")]
-            (Decimal64(a, s), b) => Float64((a as f64 / 10f64.powi(s as i32)).powf(b.f64())),
+            (Decimal64(a, _, s), b) => Float64((a as f64 / 10f64.powi(s as i32)).powf(b.f64())),
             #[cfg(feature = "decimal")]
-            (a, Decimal64(b, s)) => Float64(a.f64().powf(b as f64 / 10f64.powi(s as i32))),
+            (a, Decimal64(b, _, s)) => Float64(a.f64().powf(b as f64 / 10f64.powi(s as i32))),
             #[cfg(feature = "decimal")]
-            (Decimal128(a, s), b) => Float64((a as f64 / 10f64.powi(s as i32)).powf(b.f64())),
+            (Decimal128(a, _, s), b) => Float64((a as f64 / 10f64.powi(s as i32)).powf(b.f64())),
             #[cfg(feature = "decimal")]
-            (a, Decimal128(b, s)) => Float64(a.f64().powf(b as f64 / 10f64.powi(s as i32))),
+            (a, Decimal128(b, _, s)) => Float64(a.f64().powf(b as f64 / 10f64.powi(s as i32))),
 
             #[cfg(feature = "datetime")]
             (Interval, _) => panic!("Cannot exponentiate Interval"),
@@ -2528,6 +2532,28 @@ mod tests {
                 ArrowType::Interval(IntervalUnit::MonthDaysNs)
             );
         }
+
+        // Decimal scalars carry precision and scale, so the reported type is
+        // the exact column type.
+        #[cfg(feature = "decimal")]
+        {
+            assert_eq!(Scalar::Decimal32(1, 9, 2).arrow_type(), ArrowType::Decimal32(9, 2));
+            assert_eq!(Scalar::Decimal64(1, 18, 4).arrow_type(), ArrowType::Decimal64(18, 4));
+            assert_eq!(
+                Scalar::Decimal128(1, 38, 10).arrow_type(),
+                ArrowType::Decimal128(38, 10)
+            );
+        }
+    }
+
+    #[cfg(feature = "decimal")]
+    #[test]
+    fn decimal_equality_covers_value_precision_and_scale() {
+        let a = Scalar::Decimal64(10050, 18, 4);
+        assert_eq!(a, Scalar::Decimal64(10050, 18, 4));
+        assert_ne!(a, Scalar::Decimal64(10050, 12, 4));
+        assert_ne!(a, Scalar::Decimal64(10050, 18, 2));
+        assert_ne!(a, Scalar::Decimal64(10051, 18, 4));
     }
 
     #[test]

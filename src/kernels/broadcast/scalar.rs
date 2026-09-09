@@ -203,16 +203,16 @@ pub fn broadcast_scalar_to_array(
             Array::from_datetime_i64(DatetimeArray::from_slice(&[*val], None))
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal32(val, s) => {
-            Array::from_decimal32(crate::DecimalArray::from_slice(&[*val], 0, *s))
+        Scalar::Decimal32(val, p, s) => {
+            Array::from_decimal32(crate::DecimalArray::from_slice(&[*val], *p, *s))
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal64(val, s) => {
-            Array::from_decimal64(crate::DecimalArray::from_slice(&[*val], 0, *s))
+        Scalar::Decimal64(val, p, s) => {
+            Array::from_decimal64(crate::DecimalArray::from_slice(&[*val], *p, *s))
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal128(val, s) => {
-            Array::from_decimal128(crate::DecimalArray::from_slice(&[*val], 0, *s))
+        Scalar::Decimal128(val, p, s) => {
+            Array::from_decimal128(crate::DecimalArray::from_slice(&[*val], *p, *s))
         }
         Scalar::Null => Array::Null,
         #[cfg(feature = "datetime")]
@@ -647,9 +647,9 @@ pub fn broadcast_scalar_to_text_arrayview(
             });
         }
         #[cfg(feature = "decimal")]
-        (Scalar::Decimal32(_, _), _)
-        | (Scalar::Decimal64(_, _), _)
-        | (Scalar::Decimal128(_, _), _) => {
+        (Scalar::Decimal32(_, _, _), _)
+        | (Scalar::Decimal64(_, _, _), _)
+        | (Scalar::Decimal128(_, _, _), _) => {
             return Err(MinarrowError::NotImplemented {
                 feature: "Decimal scalar with TextArrayView".to_string(),
             });
@@ -763,9 +763,9 @@ pub fn broadcast_text_arrayview_to_scalar(
             });
         }
         #[cfg(feature = "decimal")]
-        (_, Scalar::Decimal32(_, _))
-        | (_, Scalar::Decimal64(_, _))
-        | (_, Scalar::Decimal128(_, _)) => {
+        (_, Scalar::Decimal32(_, _, _))
+        | (_, Scalar::Decimal64(_, _, _))
+        | (_, Scalar::Decimal128(_, _, _)) => {
             return Err(MinarrowError::NotImplemented {
                 feature: "Decimal scalar with TextArrayView".to_string(),
             });
@@ -822,16 +822,16 @@ pub fn broadcast_scalar_to_fieldarray(
             Array::from_datetime_i64(DatetimeArray::from_slice(&[*val], None))
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal32(val, s) => {
-            Array::from_decimal32(crate::DecimalArray::from_slice(&[*val], 0, *s))
+        Scalar::Decimal32(val, p, s) => {
+            Array::from_decimal32(crate::DecimalArray::from_slice(&[*val], *p, *s))
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal64(val, s) => {
-            Array::from_decimal64(crate::DecimalArray::from_slice(&[*val], 0, *s))
+        Scalar::Decimal64(val, p, s) => {
+            Array::from_decimal64(crate::DecimalArray::from_slice(&[*val], *p, *s))
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal128(val, s) => {
-            Array::from_decimal128(crate::DecimalArray::from_slice(&[*val], 0, *s))
+        Scalar::Decimal128(val, p, s) => {
+            Array::from_decimal128(crate::DecimalArray::from_slice(&[*val], *p, *s))
         }
         Scalar::Null => Array::Null,
         #[cfg(feature = "datetime")]
@@ -879,16 +879,16 @@ pub fn broadcast_fieldarray_to_scalar(
             Array::from_datetime_i64(DatetimeArray::from_slice(&[*val], None))
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal32(val, s) => {
-            Array::from_decimal32(crate::DecimalArray::from_slice(&[*val], 0, *s))
+        Scalar::Decimal32(val, p, s) => {
+            Array::from_decimal32(crate::DecimalArray::from_slice(&[*val], *p, *s))
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal64(val, s) => {
-            Array::from_decimal64(crate::DecimalArray::from_slice(&[*val], 0, *s))
+        Scalar::Decimal64(val, p, s) => {
+            Array::from_decimal64(crate::DecimalArray::from_slice(&[*val], *p, *s))
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal128(val, s) => {
-            Array::from_decimal128(crate::DecimalArray::from_slice(&[*val], 0, *s))
+        Scalar::Decimal128(val, p, s) => {
+            Array::from_decimal128(crate::DecimalArray::from_slice(&[*val], *p, *s))
         }
         Scalar::Null => Array::Null,
         #[cfg(feature = "datetime")]
@@ -947,7 +947,7 @@ pub fn broadcast_scalar_to_temporal_arrayview(
             });
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal32(_, _) | Scalar::Decimal64(_, _) | Scalar::Decimal128(_, _) => {
+        Scalar::Decimal32(_, _, _) | Scalar::Decimal64(_, _, _) | Scalar::Decimal128(_, _, _) => {
             return Err(MinarrowError::NotImplemented {
                 feature: "Decimal scalar with TemporalArrayView".to_string(),
             });
@@ -1005,7 +1005,7 @@ pub fn broadcast_temporal_arrayview_to_scalar(
             });
         }
         #[cfg(feature = "decimal")]
-        Scalar::Decimal32(_, _) | Scalar::Decimal64(_, _) | Scalar::Decimal128(_, _) => {
+        Scalar::Decimal32(_, _, _) | Scalar::Decimal64(_, _, _) | Scalar::Decimal128(_, _, _) => {
             return Err(MinarrowError::NotImplemented {
                 feature: "Decimal scalar with TemporalArrayView".to_string(),
             });

@@ -2535,11 +2535,11 @@ impl Array {
                 NumericArray::Float32(a) => Some(Scalar::Float32(a.data[idx])),
                 NumericArray::Float64(a) => Some(Scalar::Float64(a.data[idx])),
                 #[cfg(feature = "decimal")]
-                NumericArray::Decimal32(a) => Some(Scalar::Decimal32(a.data[idx], a.scale)),
+                NumericArray::Decimal32(a) => Some(Scalar::Decimal32(a.data[idx], a.precision, a.scale)),
                 #[cfg(feature = "decimal")]
-                NumericArray::Decimal64(a) => Some(Scalar::Decimal64(a.data[idx], a.scale)),
+                NumericArray::Decimal64(a) => Some(Scalar::Decimal64(a.data[idx], a.precision, a.scale)),
                 #[cfg(feature = "decimal")]
-                NumericArray::Decimal128(a) => Some(Scalar::Decimal128(a.data[idx], a.scale)),
+                NumericArray::Decimal128(a) => Some(Scalar::Decimal128(a.data[idx], a.precision, a.scale)),
                 NumericArray::Null => Some(Scalar::Null),
             },
             Array::TextArray(text) => match text {
@@ -2814,6 +2814,9 @@ impl Array {
     ///
     /// All scalars must be the same type. The type is inferred from the first
     /// non-Null element. If all elements are Null, returns `Array::Null`.
+    ///
+    /// Decimal scalars carry precision and scale, so a decimal array built
+    /// here has the full column type of the scalars it came from.
     #[cfg(feature = "scalar_type")]
     pub fn from_scalars(scalars: &[crate::Scalar]) -> Array {
         use crate::Scalar;
@@ -3139,13 +3142,14 @@ impl Array {
                 ))
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(_, scale) => {
+            Scalar::Decimal32(_, precision, scale) => {
+                let precision = *precision;
                 let scale = *scale;
                 let mut data = Vec64::<i32>::with_capacity(scalars.len());
                 let mut mask = Bitmask::new_set_all(scalars.len(), true);
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
-                        Scalar::Decimal32(v, _) => data.push(*v),
+                        Scalar::Decimal32(v, _, _) => data.push(*v),
                         Scalar::Null => {
                             data.push(0);
                             mask.set(i, false);
@@ -3157,18 +3161,19 @@ impl Array {
                 Array::from_decimal32(crate::DecimalArray::new(
                     data,
                     if has_nulls { Some(mask) } else { None },
-                    0,
+                    precision,
                     scale,
                 ))
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(_, scale) => {
+            Scalar::Decimal64(_, precision, scale) => {
+                let precision = *precision;
                 let scale = *scale;
                 let mut data = Vec64::<i64>::with_capacity(scalars.len());
                 let mut mask = Bitmask::new_set_all(scalars.len(), true);
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
-                        Scalar::Decimal64(v, _) => data.push(*v),
+                        Scalar::Decimal64(v, _, _) => data.push(*v),
                         Scalar::Null => {
                             data.push(0);
                             mask.set(i, false);
@@ -3180,18 +3185,19 @@ impl Array {
                 Array::from_decimal64(crate::DecimalArray::new(
                     data,
                     if has_nulls { Some(mask) } else { None },
-                    0,
+                    precision,
                     scale,
                 ))
             }
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(_, scale) => {
+            Scalar::Decimal128(_, precision, scale) => {
+                let precision = *precision;
                 let scale = *scale;
                 let mut data = Vec64::<i128>::with_capacity(scalars.len());
                 let mut mask = Bitmask::new_set_all(scalars.len(), true);
                 for (i, s) in scalars.iter().enumerate() {
                     match s {
-                        Scalar::Decimal128(v, _) => data.push(*v),
+                        Scalar::Decimal128(v, _, _) => data.push(*v),
                         Scalar::Null => {
                             data.push(0);
                             mask.set(i, false);
@@ -3203,7 +3209,7 @@ impl Array {
                 Array::from_decimal128(crate::DecimalArray::new(
                     data,
                     if has_nulls { Some(mask) } else { None },
-                    0,
+                    precision,
                     scale,
                 ))
             }
@@ -7393,8 +7399,9 @@ mod arr_macro_extensions_tests {
             let arr = Array::from_decimal32(d);
             let s = arr.get_scalar(0).unwrap();
             match s {
-                crate::Scalar::Decimal32(v, scale) => {
+                crate::Scalar::Decimal32(v, precision, scale) => {
                     assert_eq!(v, 12345);
+                    assert_eq!(precision, 9);
                     assert_eq!(scale, 2);
                 }
                 _ => panic!("expected Scalar::Decimal32"),
@@ -7404,21 +7411,21 @@ mod arr_macro_extensions_tests {
         #[cfg(feature = "scalar_type")]
         #[test]
         fn scalar_decimal_display() {
-            let s = crate::Scalar::Decimal64(12345, 2);
+            let s = crate::Scalar::Decimal64(12345, 18, 2);
             assert_eq!(format!("{}", s), "123.45");
         }
 
         #[cfg(feature = "scalar_type")]
         #[test]
         fn scalar_decimal_zero_scale() {
-            let s = crate::Scalar::Decimal128(42, 0);
+            let s = crate::Scalar::Decimal128(42, 38, 0);
             assert_eq!(format!("{}", s), "42");
         }
 
         #[cfg(feature = "scalar_type")]
         #[test]
         fn scalar_decimal_negative_scale() {
-            let s = crate::Scalar::Decimal32(5, -2);
+            let s = crate::Scalar::Decimal32(5, 9, -2);
             assert_eq!(format!("{}", s), "500");
         }
 

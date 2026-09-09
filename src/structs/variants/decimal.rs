@@ -57,6 +57,7 @@
 
 use std::fmt::{Display, Formatter};
 
+use crate::enums::error::MinarrowError;
 use crate::enums::shape_dim::ShapeDim;
 use crate::traits::concatenate::Concatenate;
 use crate::traits::print::MAX_PREVIEW;
@@ -749,16 +750,18 @@ impl<T: Integer> Shape for DecimalArray<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Concatenate - validates matching scale
+// Concatenate - validates matching scale and precision
 // ---------------------------------------------------------------------------
 
 impl<T: Integer> Concatenate for DecimalArray<T> {
-    fn concat(
-        mut self,
-        other: Self,
-    ) -> core::result::Result<Self, crate::enums::error::MinarrowError> {
+    /// Concatenates two decimal arrays of the same precision and scale.
+    ///
+    /// Precision is a column constraint, so a difference in either component
+    /// returns `IncompatibleTypeError` rather than widening to the larger
+    /// precision.
+    fn concat(mut self, other: Self) -> core::result::Result<Self, MinarrowError> {
         if self.scale != other.scale {
-            return Err(crate::enums::error::MinarrowError::IncompatibleTypeError {
+            return Err(MinarrowError::IncompatibleTypeError {
                 from: "DecimalArray",
                 to: "DecimalArray",
                 message: Some(format!(
@@ -767,8 +770,16 @@ impl<T: Integer> Concatenate for DecimalArray<T> {
                 )),
             });
         }
-        // Take the wider precision to accommodate both operands
-        self.precision = self.precision.max(other.precision);
+        if self.precision != other.precision {
+            return Err(MinarrowError::IncompatibleTypeError {
+                from: "DecimalArray",
+                to: "DecimalArray",
+                message: Some(format!(
+                    "precision mismatch: {} vs {}",
+                    self.precision, other.precision
+                )),
+            });
+        }
         self.append_array(&other);
         Ok(self)
     }
@@ -1750,11 +1761,17 @@ mod tests {
     }
 
     #[test]
-    fn test_concat_takes_max_precision() {
+    fn test_concat_mismatched_precision_errors() {
         let arr1 = DecimalArray::<i64>::from_slice(&[100], 8, 2);
         let arr2 = DecimalArray::<i64>::from_slice(&[200], 12, 2);
-        let result = arr1.concat(arr2).unwrap();
-        assert_eq!(result.precision, 12);
+        let err = arr1.clone().concat(arr2.clone()).unwrap_err();
+        assert!(
+            format!("{}", err).contains("precision mismatch"),
+            "Expected precision mismatch error, got: {}",
+            err
+        );
+        // The mismatch is symmetric: the wider precision first is also an error.
+        assert!(arr2.concat(arr1).is_err());
     }
 
     #[test]

@@ -923,11 +923,11 @@ impl ByteSize for Scalar {
             #[cfg(feature = "datetime")]
             Scalar::Interval => 0,
             #[cfg(feature = "decimal")]
-            Scalar::Decimal32(_, _) => size_of::<i32>(),
+            Scalar::Decimal32(_, _, _) => size_of::<i32>(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal64(_, _) => size_of::<i64>(),
+            Scalar::Decimal64(_, _, _) => size_of::<i64>(),
             #[cfg(feature = "decimal")]
-            Scalar::Decimal128(_, _) => size_of::<i128>(),
+            Scalar::Decimal128(_, _, _) => size_of::<i128>(),
         }
     }
 }
