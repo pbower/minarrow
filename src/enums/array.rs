@@ -4807,16 +4807,6 @@ macro_rules! arr_f64 {
 #[cfg(feature = "decimal")]
 #[macro_export]
 macro_rules! arr_dec32 {
-    ($v:expr, $p:expr, $s:expr ; $mask:expr) => {
-        $crate::Array::from_decimal32(
-            $crate::DecimalArray::<i32>::from_vec64($v.into(), Some($mask), $p, $s)
-        )
-    };
-    ($v:expr, $p:expr, $s:expr) => {
-        $crate::Array::from_decimal32(
-            $crate::DecimalArray::<i32>::from_vec64($v.into(), None, $p, $s)
-        )
-    };
     (&[ $($x:expr),+ $(,)? ], $p:expr, $s:expr ; $mask:expr) => {{
         use $crate::vec64;
         let temp_vec = vec64![$($x),+];
@@ -4829,21 +4819,21 @@ macro_rules! arr_dec32 {
             $crate::DecimalArray::<i32>::from_slice(&[$($x),+], $p, $s)
         )
     }};
+    ($v:expr, $p:expr, $s:expr ; $mask:expr) => {
+        $crate::Array::from_decimal32(
+            $crate::DecimalArray::<i32>::from_vec64($v.into(), Some($mask), $p, $s)
+        )
+    };
+    ($v:expr, $p:expr, $s:expr) => {
+        $crate::Array::from_decimal32(
+            $crate::DecimalArray::<i32>::from_vec64($v.into(), None, $p, $s)
+        )
+    };
 }
 
 #[cfg(feature = "decimal")]
 #[macro_export]
 macro_rules! arr_dec64 {
-    ($v:expr, $p:expr, $s:expr ; $mask:expr) => {
-        $crate::Array::from_decimal64(
-            $crate::DecimalArray::<i64>::from_vec64($v.into(), Some($mask), $p, $s)
-        )
-    };
-    ($v:expr, $p:expr, $s:expr) => {
-        $crate::Array::from_decimal64(
-            $crate::DecimalArray::<i64>::from_vec64($v.into(), None, $p, $s)
-        )
-    };
     (&[ $($x:expr),+ $(,)? ], $p:expr, $s:expr ; $mask:expr) => {{
         use $crate::vec64;
         let temp_vec = vec64![$($x),+];
@@ -4856,21 +4846,21 @@ macro_rules! arr_dec64 {
             $crate::DecimalArray::<i64>::from_slice(&[$($x),+], $p, $s)
         )
     }};
+    ($v:expr, $p:expr, $s:expr ; $mask:expr) => {
+        $crate::Array::from_decimal64(
+            $crate::DecimalArray::<i64>::from_vec64($v.into(), Some($mask), $p, $s)
+        )
+    };
+    ($v:expr, $p:expr, $s:expr) => {
+        $crate::Array::from_decimal64(
+            $crate::DecimalArray::<i64>::from_vec64($v.into(), None, $p, $s)
+        )
+    };
 }
 
 #[cfg(feature = "decimal")]
 #[macro_export]
 macro_rules! arr_dec128 {
-    ($v:expr, $p:expr, $s:expr ; $mask:expr) => {
-        $crate::Array::from_decimal128(
-            $crate::DecimalArray::<i128>::from_vec64($v.into(), Some($mask), $p, $s)
-        )
-    };
-    ($v:expr, $p:expr, $s:expr) => {
-        $crate::Array::from_decimal128(
-            $crate::DecimalArray::<i128>::from_vec64($v.into(), None, $p, $s)
-        )
-    };
     (&[ $($x:expr),+ $(,)? ], $p:expr, $s:expr ; $mask:expr) => {{
         use $crate::vec64;
         let temp_vec = vec64![$($x),+];
@@ -4883,6 +4873,16 @@ macro_rules! arr_dec128 {
             $crate::DecimalArray::<i128>::from_slice(&[$($x),+], $p, $s)
         )
     }};
+    ($v:expr, $p:expr, $s:expr ; $mask:expr) => {
+        $crate::Array::from_decimal128(
+            $crate::DecimalArray::<i128>::from_vec64($v.into(), Some($mask), $p, $s)
+        )
+    };
+    ($v:expr, $p:expr, $s:expr) => {
+        $crate::Array::from_decimal128(
+            $crate::DecimalArray::<i128>::from_vec64($v.into(), None, $p, $s)
+        )
+    };
 }
 
 // ======== Boolean ========

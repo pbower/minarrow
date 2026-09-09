@@ -1034,9 +1034,7 @@ impl Bitmask {
     #[inline]
     pub fn fill(&mut self, value: bool) {
         let fill = if value { 0xFF } else { 0 };
-        for b in &mut self.bits {
-            *b = fill;
-        }
+        self.bits.as_mut_slice().fill(fill);
         self.mask_trailing_bits();
     }
 
@@ -1264,6 +1262,23 @@ mod tests {
         assert!(!whole.get(127));
         assert!(whole.get(1));
         assert!(whole.get(64 + 1));
+    }
+
+    #[test]
+    fn unsafe_mut_window_fill_does_not_panic() {
+        // `fill` on an `UnsafeMut` window must write through to the backing
+        // allocation rather than panicking, which is what SIMD arithmetic
+        // kernels rely on when they set an output null mask to all-valid.
+        let mut backing = Vec64::<u8>::with_capacity(8);
+        backing.resize(8, 0);
+        let base = backing.as_mut_ptr();
+
+        let mut window = unsafe { Bitmask::from_unsafe_mut(base, 64) };
+        window.fill(true);
+        assert!((0..64).all(|i| window.get(i)));
+
+        window.fill(false);
+        assert!((0..64).all(|i| !window.get(i)));
     }
 
     #[test]
