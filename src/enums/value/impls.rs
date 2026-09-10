@@ -615,11 +615,11 @@ fn scalar_variant_name(scalar: &crate::Scalar) -> &'static str {
         #[cfg(feature = "datetime")]
         Interval => "Interval",
         #[cfg(feature = "decimal")]
-        Decimal32(_, _) => "Decimal32",
+        Decimal32(_, _, _) => "Decimal32",
         #[cfg(feature = "decimal")]
-        Decimal64(_, _) => "Decimal64",
+        Decimal64(_, _, _) => "Decimal64",
         #[cfg(feature = "decimal")]
-        Decimal128(_, _) => "Decimal128",
+        Decimal128(_, _, _) => "Decimal128",
     }
 }
 

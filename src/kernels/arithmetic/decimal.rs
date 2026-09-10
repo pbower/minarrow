@@ -26,7 +26,7 @@ use crate::traits::type_unions::Integer;
 use crate::{Bitmask, DecimalArray, MaskedArray, Vec64};
 
 /// Maximum precision per backing integer width.
-fn max_precision<T: Integer + 'static>() -> u8 {
+pub(crate) fn max_precision<T: Integer + 'static>() -> u8 {
     use std::any::TypeId;
     let tid = TypeId::of::<T>();
     if tid == TypeId::of::<i32>() {

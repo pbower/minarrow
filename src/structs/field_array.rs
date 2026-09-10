@@ -1946,6 +1946,55 @@ mod concat_tests {
         }
     }
 
+    #[cfg(all(feature = "decimal", feature = "scalar_type"))]
+    #[test]
+    fn test_field_array_concat_decimal_rebuilt_from_scalars() {
+        use crate::{DecimalArray, Scalar};
+
+        let typed = FieldArray::from_arr(
+            "price",
+            Array::from_decimal64(DecimalArray::<i64>::from_slice(&[10050, 20075], 18, 4)),
+        );
+        let rebuilt = FieldArray::from_arr(
+            "price",
+            Array::from_scalars(&[Scalar::Decimal64(30010, 18, 4)]),
+        );
+        assert_eq!(rebuilt.field.dtype, ArrowType::Decimal64(18, 4));
+
+        let result = typed.concat(rebuilt).unwrap();
+        assert_eq!(result.len(), 3);
+        assert_eq!(result.field.dtype, ArrowType::Decimal64(18, 4));
+        match &result.array {
+            Array::NumericArray(NumericArray::Decimal64(arr)) => {
+                assert_eq!(arr.precision, 18);
+                assert_eq!(arr.get(2), Some(30010));
+            }
+            other => panic!("Expected Decimal64 array, got {:?}", other),
+        }
+    }
+
+    #[cfg(feature = "decimal")]
+    #[test]
+    fn test_field_array_concat_differing_decimal_precision_is_a_mismatch() {
+        use crate::DecimalArray;
+
+        let fa1 = FieldArray::from_arr(
+            "price",
+            Array::from_decimal64(DecimalArray::<i64>::from_slice(&[10050], 18, 4)),
+        );
+        let fa2 = FieldArray::from_arr(
+            "price",
+            Array::from_decimal64(DecimalArray::<i64>::from_slice(&[20075], 12, 4)),
+        );
+
+        let result = fa1.concat(fa2);
+        if let Err(MinarrowError::IncompatibleTypeError { message, .. }) = result {
+            assert!(message.unwrap().contains("dtype mismatch"));
+        } else {
+            panic!("Expected IncompatibleTypeError");
+        }
+    }
+
     #[test]
     fn test_field_array_concat_nullable_mismatch() {
         let arr1 = IntegerArray::<i32>::from_slice(&[1, 2]);

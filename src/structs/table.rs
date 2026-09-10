@@ -1764,6 +1764,137 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // Decimal columns rebuilt from scalars carry the full column type
+
+    #[cfg(all(feature = "decimal", feature = "scalar_type"))]
+    #[test]
+    fn test_table_concat_decimal_column_rebuilt_from_scalars() {
+        use crate::ffi::arrow_dtype::ArrowType;
+        use crate::{DecimalArray, MaskedArray, Scalar};
+
+        let mut target = Table::new_empty();
+        target.add_col(fa_i64!("id", 1, 2));
+        target.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_decimal64(DecimalArray::<i64>::from_slice(&[10050, 20075], 18, 4)),
+        ));
+
+        let mut added = Table::new_empty();
+        added.add_col(fa_i64!("id", 3));
+        added.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_scalars(&[Scalar::Decimal64(30010, 18, 4)]),
+        ));
+        assert_eq!(added.cols[1].field.dtype, ArrowType::Decimal64(18, 4));
+
+        let combined = target.concat(added).unwrap();
+        assert_eq!(combined.n_rows(), 3);
+        assert_eq!(combined.cols[1].field.dtype, ArrowType::Decimal64(18, 4));
+        match &combined.cols[1].array {
+            Array::NumericArray(NumericArray::Decimal64(arr)) => {
+                assert_eq!(arr.precision, 18);
+                assert_eq!(arr.scale, 4);
+                assert_eq!(arr.get(2), Some(30010));
+            }
+            other => panic!("Expected Decimal64 array, got {:?}", other),
+        }
+    }
+
+    #[cfg(all(feature = "decimal", feature = "scalar_type"))]
+    #[test]
+    fn test_table_concat_scalar_rebuilt_decimal_column_first_operand() {
+        use crate::ffi::arrow_dtype::ArrowType;
+        use crate::{DecimalArray, Scalar};
+
+        let mut rebuilt = Table::new_empty();
+        rebuilt.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_scalars(&[Scalar::Decimal64(30010, 18, 4)]),
+        ));
+
+        let mut typed = Table::new_empty();
+        typed.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_decimal64(DecimalArray::<i64>::from_slice(&[10050], 18, 4)),
+        ));
+
+        let combined = rebuilt.concat(typed).unwrap();
+        assert_eq!(combined.n_rows(), 2);
+        assert_eq!(combined.cols[0].field.dtype, ArrowType::Decimal64(18, 4));
+        match &combined.cols[0].array {
+            Array::NumericArray(NumericArray::Decimal64(arr)) => assert_eq!(arr.precision, 18),
+            other => panic!("Expected Decimal64 array, got {:?}", other),
+        }
+    }
+
+    #[cfg(feature = "decimal")]
+    #[test]
+    fn test_table_concat_differing_decimal_precision_is_a_type_mismatch() {
+        use crate::DecimalArray;
+
+        let mut t1 = Table::new_empty();
+        t1.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_decimal64(DecimalArray::<i64>::from_slice(&[10050], 18, 4)),
+        ));
+
+        let mut t2 = Table::new_empty();
+        t2.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_decimal64(DecimalArray::<i64>::from_slice(&[20075], 12, 4)),
+        ));
+
+        let err = t1.concat(t2).unwrap_err();
+        assert!(
+            format!("{}", err).contains("type mismatch"),
+            "Expected type mismatch error, got: {}",
+            err
+        );
+    }
+
+    #[cfg(all(feature = "decimal", feature = "scalar_type"))]
+    #[test]
+    fn test_table_insert_rows_decimal_rows_rebuilt_from_scalars() {
+        use crate::ffi::arrow_dtype::ArrowType;
+        use crate::{DecimalArray, Scalar};
+
+        let mut typed = Table::new_empty();
+        typed.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_decimal64(DecimalArray::<i64>::from_slice(&[10050], 18, 4)),
+        ));
+
+        let mut rebuilt = Table::new_empty();
+        rebuilt.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_scalars(&[Scalar::Decimal64(20075, 18, 4)]),
+        ));
+
+        typed.insert_rows(1, &rebuilt).unwrap();
+        assert_eq!(typed.n_rows(), 2);
+        assert_eq!(typed.cols[0].field.dtype, ArrowType::Decimal64(18, 4));
+    }
+
+    #[cfg(all(feature = "decimal", feature = "scalar_type"))]
+    #[test]
+    fn test_table_insert_rows_decimal_precision_mismatch_is_a_type_mismatch() {
+        use crate::{DecimalArray, Scalar};
+
+        let mut typed = Table::new_empty();
+        typed.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_decimal64(DecimalArray::<i64>::from_slice(&[10050], 18, 4)),
+        ));
+
+        let mut narrower = Table::new_empty();
+        narrower.add_col(FieldArray::from_arr(
+            "price",
+            Array::from_scalars(&[Scalar::Decimal64(20075, 12, 4)]),
+        ));
+
+        assert!(typed.insert_rows(1, &narrower).is_err());
+    }
+
     #[cfg(feature = "chunked")]
     #[test]
     fn test_table_split_basic() {
