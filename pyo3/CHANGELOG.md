@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-09-10
+- Bumped `minarrow` dependency from 0.18.0 to 0.18.1.
+
 ## [0.18.0] - 2026-09-09
 - Bumped `minarrow` dependency from 0.17.0 to 0.18.0.
 
