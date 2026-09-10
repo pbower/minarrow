@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # Minarrow Rust
 
+## 0.18.1 - 2026-09-10 HotFix
+- This is a hot-fix release, as Decimal required a small change to ensure that precision is correctly self-describing on `Scalar`.
+- It additionally includes:
+   1. A CI feature flag adjustment for minarrow-py
+   2. A minor adjustment to avoid `Bitmask::fill` panicking on an `UnsafeMut` window edge case.
+
 ## 0.18.0 - 2026-09-09
 
 ### Added
